@@ -64,6 +64,9 @@ namespace OGF {
          *  and the edges of the mesh as constraints.
          */
         void constrained_delaunay_2d();
+
+
+        void debug_ze_case();
     } ;
 }
 
