@@ -626,15 +626,73 @@ namespace {
                 }
             }
 
-            // if(ok) {
-                commit();
-            //}
+            commit();
             clear();
         }
 
     protected:
 
+        bool same_point(index_t i, index_t j) const {
+            const vec3& p1 = vertex_[i].point;
+            const vec3& p2 = vertex_[j].point;            
+            return (p1[0] == p2[0]) &&
+                   (p1[1] == p2[1]) &&
+                   (p1[2] == p2[2]) ;
+        }
+
+        bool vertex_on_edge(index_t i, index_t j, index_t k) const {
+            if(orient2d(i,j,k) != ZERO) {
+                return false;
+            }
+
+            Sign o = PCK::dot_3d(
+                vertex_[i].point.data(),
+                vertex_[j].point.data(),
+                vertex_[k].point.data()
+            );
+
+            return (int(o) <= 0);
+        }
+        
+        bool check_constraints() const {
+            bool result = true;
+            // Test duplicated vertices
+            for(index_t i=0; i<vertex_.size(); ++i) {
+                for(index_t j=i+1; j<vertex_.size(); ++j) {
+                    if(same_point(i,j)) {
+                        result = false;
+                        std::cerr << "Houston, we got a problem" << std::endl;
+                        std::cerr << "Same point !" << std::endl;
+                        vertex_[i].debug_show();
+                        vertex_[j].debug_show();                        
+                    }
+                }
+            }
+            // Test vertices on constrained edges
+            for(index_t i=0; i<vertex_.size(); ++i) {
+                for(std::pair<index_t,index_t> E: edges_) {
+                    if(
+                        i != E.first && i != E.second && 
+                        vertex_on_edge(i, E.first, E.second)
+                    ) {
+                        result = false;
+                        std::cerr << "Houston, we got a problem" << std::endl;
+                        std::cerr << "Point on edge !" << std::endl;
+                        std::cerr << "   Point:" << std::endl;
+                        vertex_[i].debug_show();
+                        std::cerr << "   Edge:" << std::endl;
+                        vertex_[E.first].debug_show();
+                        vertex_[E.second].debug_show();
+                    }
+                }
+            }
+            return result;
+        }
+        
         void commit() {
+
+            bool OK = check_constraints();
+            
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(vertex_[i].is_existing_vertex()) {
@@ -665,10 +723,15 @@ namespace {
                     constraints.edges.create_edge(E.first, E.second);
                 }
 
-                mesh_save(
-                    constraints,
-                    "constraints_" + String::to_string(f1_) + ".geogram"
-                );
+                if(!OK) {
+                    std::cerr << "==============================>>>>"
+                              << "There were errors, saving constraints..."
+                              << std::endl;
+                    mesh_save(
+                        constraints,
+                        "constraints_" + String::to_string(f1_) + ".geogram"
+                    );
+                }
                 
                 Delaunay_var del = Delaunay::create(2, "triangle");
                 del->set_constraints(&constraints);
@@ -739,11 +802,11 @@ namespace {
             }
         }
 
-        Sign orient2d(index_t v1, index_t v2, index_t v3) {
+        Sign orient2d(index_t v1, index_t v2, index_t v3) const {
             return PCK::orient_2d(project(v1), project(v2), project(v3));
         }
         
-        vec2 project(index_t v) {
+        vec2 project(index_t v) const {
             const vec3& p = vertex_[v].point;
             return vec2(p[u_], p[v_]);
         }
@@ -1044,6 +1107,11 @@ namespace OGF {
         mesh_grob()->update();
     }
 
+    void MeshGrobExperimentCommands::sort_facets() {
+        MeshFacetsAABB AABB(*mesh_grob()); // This sorts the facets
+        mesh_grob()->update();
+    }
+    
     void MeshGrobExperimentCommands::constrained_delaunay_2d() {
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);

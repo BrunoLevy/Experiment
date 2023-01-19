@@ -60,6 +60,11 @@ namespace OGF {
         void intersect_surface(bool check_neighboring_triangles = false);
 
         /**
+         * Sort facets with AABB.
+         */
+        void sort_facets();
+        
+        /**
          * Computes a constrained Delaunay triangulation using the vertices
          *  and the edges of the mesh as constraints.
          */
