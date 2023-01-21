@@ -57,7 +57,11 @@ namespace OGF {
         /**
           * Computes and remeshes intersection in a surface mesh.
           */
-        void intersect_surface(bool check_neighboring_triangles = false);
+        void intersect_surface(
+            bool merge_vertices_and_facets = true,
+            bool check_neighboring_triangles = true,
+            bool post_connect_facets=true
+        );
 
         /**
          * Sort facets with AABB.
@@ -71,7 +75,10 @@ namespace OGF {
         void constrained_delaunay_2d();
 
 
-        void debug_ze_case();
+        /**
+         * \brief Snap all point coordinates to 32-bit.
+         */
+        void floatify();
     } ;
 }
 
