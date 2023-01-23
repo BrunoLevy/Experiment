@@ -52,7 +52,14 @@ namespace GEO {
         
             coord_index_t u = coord_index_t((axis + 1)%3);
             coord_index_t v = coord_index_t((axis + 2)%3);
-            
+
+             // Seems that it does not return 
+             // always the same values depending
+             // on permutations of p0, p1, p2
+             // ... need to investigate.
+             // uses operator-, operator+, operator* and that's all
+
+            /*
             rational_nt a11 = p1[u] - p0[u];
             rational_nt a12 = p1[v] - p0[v];
             
@@ -63,8 +70,62 @@ namespace GEO {
                 a11,a12,
                 a21,a22
             );
+            */
+
+            const expansion_nt& x0n = p0[u].num();
+            const expansion_nt& x0d = p0[u].denom();
+            const expansion_nt& y0n = p0[v].num();
+            const expansion_nt& y0d = p0[v].denom();
             
-            return Delta.sign();
+            const expansion_nt& x1n = p1[u].num();
+            const expansion_nt& x1d = p1[u].denom();
+            const expansion_nt& y1n = p1[v].num();
+            const expansion_nt& y1d = p1[v].denom();
+
+            const expansion_nt& x2n = p2[u].num();
+            const expansion_nt& x2d = p2[u].denom();
+            const expansion_nt& y2n = p2[v].num();
+            const expansion_nt& y2d = p2[v].denom();
+
+
+            // Coefficients of the matrix
+            
+            expansion_nt a11n = x1n*x0d - x0n*x1d;
+            expansion_nt a11d = x0d*x1d;
+
+            expansion_nt a12n = y1n*y0d - y0n*y1d;
+            expansion_nt a12d = y0d*y1d;
+
+            expansion_nt a21n = x2n*x0d - x0n*x2d;
+            expansion_nt a21d = x0d*x2d;
+
+            expansion_nt a22n = y2n*y0d - y0n*y2d;
+            expansion_nt a22d = y0d*y2d;
+
+            // Determinant
+
+            expansion_nt a11a22n = a11n*a22n;
+            expansion_nt a11a22d = a11d*a22d;
+
+            expansion_nt a21a12n = a21n*a12n;
+            expansion_nt a21a12d = a21d*a12d;
+
+            expansion_nt Dn = a21a12d * a11a22n - a11a22d * a21a12n;
+            expansion_nt Dd = a11a22d * a21a12d;
+
+            geo_assert(Dd.sign() != ZERO);
+            return Sign(Dn.sign() * Dd.sign());
+            
+            /*
+            // Alternative formula
+            rational_nt Delta = det3x3(
+                p0[u], p0[v], rational_nt(1.0),                
+                p1[u], p1[v], rational_nt(1.0),
+                p2[u], p2[v], rational_nt(1.0)                
+            );
+            */
+            
+            // return Delta.sign();
         }
 
 

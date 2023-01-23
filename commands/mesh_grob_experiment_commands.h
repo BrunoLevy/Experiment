@@ -60,7 +60,8 @@ namespace OGF {
         void intersect_surface(
             bool merge_vertices_and_facets = true,
             bool check_neighboring_triangles = true,
-            bool post_connect_facets=true
+            bool post_connect_facets=true,
+            bool order_facets=true
         );
 
         /**
