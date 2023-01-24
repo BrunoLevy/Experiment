@@ -77,7 +77,6 @@ namespace {
                 mesh_vertex_index = NO_INDEX;
             }
 
-
             Vertex(Mesh& M, index_t f, index_t lv) {
                 mesh = &M;
                 index_t v = M.facets.vertex(f,lv);
@@ -163,11 +162,6 @@ namespace {
                 print(out);
                 return out.str();
             }
-
-            bool has_tt_sym() const {
-                return tt_sym.f2 != index_t(-1);
-            }
-            
             
         protected:
 
@@ -230,9 +224,7 @@ namespace {
                 geo_assert_not_reached;
             }
 
-
-            template <class T>
-            vecng<3,T> get_point() {
+            template <class T> vecng<3,T> get_point() {
                 if(is_existing_vertex()) {
                     return convert_vec3_generic<T>(
                         vec3(mesh->vertices.point_ptr(sym.indices[0]))
@@ -245,7 +237,7 @@ namespace {
                     // edge /\ facet isect) and 2D edge /\ edge isect (
                     // then develop special code). 
                     
-                    geo_debug_assert(has_tt_sym());
+                    geo_debug_assert(tt_sym.f2 != index_t(-1));
                     
                     // The three vertices of f1, with the intersected
                     // edges as (p1,p2)
@@ -291,6 +283,8 @@ namespace {
                         q2 = vec3(mesh->vertices.point_ptr(v2));
                     }
 
+                    // If [q1,q2] is in the supporting plane of (p1,p2,p3),
+                    // compute intersection in 2D.
                     if(
                         PCK::orient_3d(p1,p2,p3,q1) == ZERO &&
                         PCK::orient_3d(p1,p2,p3,q2) == ZERO
@@ -324,9 +318,8 @@ namespace {
             }
 
             void init_geometry() {
-                point       = get_point<double>();
+                // point    = get_point<double>();
                 point_exact = get_point<rational_nt>();
-                // TODO:
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
                 point.z = point_exact.z.estimate();                
@@ -351,7 +344,7 @@ namespace {
 
         public:
             Mesh* mesh;
-            vec3 point;
+            vec3  point;
             vec3Q point_exact;
 
             // Symbolic information, global indices in mesh
@@ -373,18 +366,11 @@ namespace {
 
         void begin_facet(index_t f) {
             f1_ = f;
-            index_t v[3] = {
-                mesh_.facets.vertex(f,0),
-                mesh_.facets.vertex(f,1),
-                mesh_.facets.vertex(f,2)
-            };
             for(index_t lv=0; lv<3; ++lv) {
                 add_vertex(Vertex(mesh_, f, lv));
             }
             f1_normal_axis_ = ::GEO::Geom::triangle_normal_axis(
-                vec3(mesh_.vertices.point_ptr(v[0])),
-                vec3(mesh_.vertices.point_ptr(v[1])),
-                vec3(mesh_.vertices.point_ptr(v[2]))                
+                vertex_[0].point, vertex_[1].point, vertex_[2].point
             );
             u_ = coord_index_t((f1_normal_axis_ + 1) % 3);
             v_ = coord_index_t((f1_normal_axis_ + 2) % 3);
@@ -514,10 +500,13 @@ namespace {
         void commit() {
 
             bool OK_exact   = check_constraints(true);
-            bool OK_inexact = check_constraints();
+            bool OK_inexact = true; // check_constraints(false);
             
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
+
+
+                /*
                 if(vertex_[i].is_existing_vertex()) {
                     vertex_[i].mesh_vertex_index = vertex_[i].sym.indices[0];
                 } else {
@@ -531,6 +520,24 @@ namespace {
                         v_table_[vertex_[i].sym] = v;
                     }
                 }
+                */
+
+                if(vertex_[i].is_existing_vertex()) {
+                    vertex_[i].mesh_vertex_index = vertex_[i].sym.indices[0];
+                } else {
+                    auto it = g_v_table_.find(vertex_[i].point_exact);
+                    if(it != g_v_table_.end()) {
+                        vertex_[i].mesh_vertex_index = it->second;
+                    } else {
+                        vec3 p = vertex_[i].point;
+                        index_t v = mesh_.vertices.create_vertex(p.data());
+                        vertex_[i].mesh_vertex_index = v;
+                        g_v_table_[vertex_[i].point_exact] = v;
+                    }
+                }                
+                
+                
+                
             }
 
             if(true) {
@@ -554,6 +561,9 @@ namespace {
                         constraints,
                         "constraints_" + String::to_string(f1_) + ".geogram"
                     );
+                    if(!OK_exact) {
+                        abort();
+                    }
                     return;
                     // abort();
                 }
@@ -671,7 +681,6 @@ namespace {
                     o1 = Sign(o1*f1_orient_);
                     o2 = Sign(o2*f1_orient_);
                     o3 = Sign(o3*f1_orient_);                    
-                    
                     if(o1 == NEGATIVE || o2 == NEGATIVE || o3 == NEGATIVE) {
                         result = false;
                         log_err(exact);
@@ -682,128 +691,9 @@ namespace {
                         std::cerr << "   " <<vertex_[v].to_string()<<std::endl;
                         get_constraints(debug_constraints, false);
                         debug_vertex_show[v] = true;
-
-                        const Vertex& V = vertex_[v];
-                        
-                        // Try to understand what's going on 
-                        if(
-                            (on_macro_edge[v] != -1) &&
-                            (region_dim(V.tt_sym.R1) == 1) &&
-                            (region_dim(V.tt_sym.R2) == 2)
-                          ) {
-                            index_t e = index_t(V.tt_sym.R1);
-                            index_t w1 = mesh_.facets.vertex(
-                                V.tt_sym.f1, (e+1)%3
-                            );
-                            index_t w2 = mesh_.facets.vertex(
-                                V.tt_sym.f1, (e+2)%3
-                            );
-                            // index_t w3 = mesh_.facets.vertex(
-                            //    V.tt_sym.f1, e
-                            //);
-                            index_t v1 = mesh_.facets.vertex(V.tt_sym.f2, 0);
-                            index_t v2 = mesh_.facets.vertex(V.tt_sym.f2, 1);
-                            index_t v3 = mesh_.facets.vertex(V.tt_sym.f2, 2);
-
-                            vec3 q1(mesh_.vertices.point_ptr(w1));
-                            vec3 q2(mesh_.vertices.point_ptr(w2));
-                            // vec3 q3(mesh_.vertices.point_ptr(w3));
-
-                            vec3 p1(mesh_.vertices.point_ptr(v1));
-                            vec3 p2(mesh_.vertices.point_ptr(v2));
-                            vec3 p3(mesh_.vertices.point_ptr(v3));
-
-                            vec3Q P1 = convert_vec3_generic<rational_nt>(vertex_[0].point);
-                            vec3Q P2 = convert_vec3_generic<rational_nt>(vertex_[1].point);
-                            vec3Q P3 = convert_vec3_generic<rational_nt>(vertex_[2].point);
-                            
-                            vec3Q I =
-                            get_segment_triangle_intersection<rational_nt>(
-                                q1, q2, p1, p2, p3
-                            );
-
-
-                            Sign o1 = PCK::orient_2d_projected(
-                                P2,P3,I,f1_normal_axis_
-                            );
-
-                            Sign o1_2 = PCK::orient_2d_projected(
-                                P3,I,P2,f1_normal_axis_
-                            );
-
-                            Sign o1_3 = PCK::orient_2d_projected(
-                                I,P2,P3,f1_normal_axis_
-                            );
-
-                            Sign o1_4 = PCK::orient_2d_projected(
-                                P3,P2,I,f1_normal_axis_
-                            );
-
-                            Sign o1_5 = PCK::orient_2d_projected(
-                                P2,I,P3,f1_normal_axis_
-                            );
-
-                            Sign o1_6 = PCK::orient_2d_projected(
-                                I,P3,P2,f1_normal_axis_
-                            );
-                            
-                            
-                            Sign o2 = PCK::orient_2d_projected(
-                                P3,P1,I,f1_normal_axis_
-                            );
-                            Sign o3 = PCK::orient_2d_projected(
-                                P1,P2,I,f1_normal_axis_
-                            );
-
-                            o1 = Sign(o1*f1_orient_);
-                            o2 = Sign(o2*f1_orient_);
-                            o3 = Sign(o3*f1_orient_);                            
-                            
-                            std::cerr << "   Locate isect: "
-                                      << o1 << " " << o2 << " " << o3
-                                      << std::endl;
-
-                            std::cerr << "   o1..........: "
-                                      << o1   << " " << o1_2 << " " << o1_3 << " "
-                                      << o1_4 << " " << o1_5 << " " << o1_6                                
-                                      << std::endl;
-                            
-
-                            if(
-                                o1 != o1_2 ||
-                                o1 != o1_3 ||
-                                int(o1) != -int(o1_4) ||
-                                int(o1) != -int(o1_5) ||
-                                int(o1) != -int(o1_6)
-                            ) {
-                                std::cerr << "=========> Incoherent o1! (rational_nt is broken ?)"
-                                          << std::endl;
-                                // This *should* not happen in exact mode
-                                // (except when there is an *underflow* in expansion code...)
-                                if(exact) {
-                                    abort();
-                                }
-                            }
-
-                            
-                            Sign oo1 = orient2d(v,1,2,true);
-                            Sign oo2 = orient2d(0,v,2,true);
-                            Sign oo3 = orient2d(0,1,v,true);
-                            oo1 = Sign(oo1*f1_orient_);
-                            oo2 = Sign(oo2*f1_orient_);
-                            oo3 = Sign(oo3*f1_orient_);                    
-
-
-                            std::cerr << "Re-Locate isect: "
-                                      << oo1 << " " << oo2 << " " << oo3
-                                      << std::endl;
-                            
-                        }
-                        
                     }
                     int nb_zeros = (o1==0)+(o2==0)+(o3==0);
                     geo_assert(nb_zeros < 2);
-
                     if(nb_zeros == 1 && (on_macro_edge[v] == -1)) {
                         result = false;
                         log_err(exact);
@@ -815,7 +705,6 @@ namespace {
                     }
                 }
             }
-
             
             // Test vertices on constrained edges
             for(index_t i=0; i<vertex_.size(); ++i) {
@@ -1070,7 +959,8 @@ namespace {
         vector<Vertex> vertex_;
         vector<std::pair<index_t, index_t> > edges_;
         vector<index_t> vertices_in_E_[3];
-        std::map<quadindex, index_t> v_table_;
+        // std::map<quadindex, index_t> v_table_;
+        std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
     };
 
     /***********************************************************************/
@@ -1132,7 +1022,7 @@ namespace {
         return triangles_intersections(p1,p2,p3,q1,q2,q3,I);
     }
     
-    void mesh_intersections(
+    void remesh_intersected_triangles(
         MeshInTriangle& TM, vector<IsectInfo>& intersections
     ) {
         // Sort intersections by f1, so that all intersections between f1
@@ -1309,7 +1199,7 @@ namespace {
         );
 
         MeshInTriangle TM(M);
-        mesh_intersections(TM, intersections);
+        remesh_intersected_triangles(TM, intersections);
         
         vector<index_t> has_intersections(M.facets.nb(), 0);
         for(const IsectInfo& II: intersections) {
