@@ -88,10 +88,11 @@ namespace {
                 init_geometry();
             }
 
-            Vertex(Mesh& M, const vec3Q& point_exact_in) {
+            Vertex(Mesh& M, const vec3Q& point_exact_in, const trindex& T) {
                 type = SECONDARY_ISECT;                
                 mesh = &M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
+                sym.T = T;
                 point_exact = point_exact_in;
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
@@ -126,6 +127,15 @@ namespace {
                 print(out);
                 return out.str();
             }
+
+            bool is_on_facet(index_t f) const {
+                for(index_t g: facets) {
+                    if(f == g) {
+                        return true;
+                    }
+                }
+                return false;
+            }
             
         protected:
 
@@ -148,6 +158,10 @@ namespace {
                         sym.f2, index_t(sym.R2)-3
                     );
                 }
+                if(f2 != NO_INDEX) {
+                    facets.push_back(f2);
+                }
+                sym.T = trindex(index_t(-1), index_t(-1), index_t(-1));
             }
 
             void init_geometry() {
@@ -261,7 +275,10 @@ namespace {
             struct {
                 index_t f1,f2;        // global facet indices in mesh
                 TriangleRegion R1,R2; // triangle regions
-            } sym; 
+                trindex T;            // for triple points
+            } sym;
+            
+            vector<index_t> facets;
         };
 
         
@@ -323,6 +340,7 @@ namespace {
             geo_assert(f1_orient_ != ZERO);
 
 
+            compute_constraints_intersections();
             
             // Sort vertices along triangle's edges
             {
@@ -376,7 +394,6 @@ namespace {
                 }
             }
 
-            compute_constraints_intersections();
             
             if(!ok) {
                 mesh_save(
@@ -417,15 +434,31 @@ namespace {
                 if(vertex_[i].mesh_vertex_index != index_t(-1)) {
                     continue;
                 }
-                
-                auto it = g_v_table_.find(vertex_[i].point_exact);
-                if(it != g_v_table_.end()) {
-                    vertex_[i].mesh_vertex_index = it->second;
+
+                if(
+                    vertex_[i].sym.T.indices[0] != index_t(-1) &&
+                    vertex_[i].sym.T.indices[1] != index_t(-1) &&
+                    vertex_[i].sym.T.indices[2] != index_t(-1) 
+                ) {
+                    auto it = t_v_table_.find(vertex_[i].sym.T);
+                    if(it != t_v_table_.end()) {
+                        vertex_[i].mesh_vertex_index = it->second;
+                    } else {
+                        vec3 p = vertex_[i].point;
+                        index_t v = mesh_.vertices.create_vertex(p.data());
+                        vertex_[i].mesh_vertex_index = v;
+                        t_v_table_[vertex_[i].sym.T] = v;
+                    }
                 } else {
-                    vec3 p = vertex_[i].point;
-                    index_t v = mesh_.vertices.create_vertex(p.data());
-                    vertex_[i].mesh_vertex_index = v;
-                    g_v_table_[vertex_[i].point_exact] = v;
+                    auto it = g_v_table_.find(vertex_[i].point_exact);
+                    if(it != g_v_table_.end()) {
+                        vertex_[i].mesh_vertex_index = it->second;
+                    } else {
+                        vec3 p = vertex_[i].point;
+                        index_t v = mesh_.vertices.create_vertex(p.data());
+                        vertex_[i].mesh_vertex_index = v;
+                        g_v_table_[vertex_[i].point_exact] = v;
+                    }
                 }
             }
 
@@ -540,7 +573,8 @@ namespace {
                 std::cerr << x.num().rep()[i] << " ";
             }
             std::cerr << std::endl << std::endl ;
-            std::cerr << "den: " << x.denom().rep().length() << " : ";            
+            std::cerr << "den: " << x.denom().rep().length() << " : ";
+            
             for(index_t i=0; i<x.denom().rep().length(); ++i) {
                 std::cerr << x.denom().rep()[i] << " ";
             }
@@ -552,7 +586,18 @@ namespace {
             v.y = rational_nt(v.y.estimate());
             v.z = rational_nt(v.z.estimate());            
         }
-            
+
+        index_t common_facet(index_t v1, index_t v2) const {
+            const Vertex& V1 = vertex_[v1];
+            const Vertex& V2 = vertex_[v2];
+            for(index_t f: V1.facets) {
+                if(V2.is_on_facet(f)) {
+                    return f;
+                }
+            }
+            return index_t(-1);
+        }
+        
         bool fix_one_intersection() {
             // Test constrained edges intersections
             for(index_t e1=0; e1<edges_.size(); ++e1) {
@@ -574,15 +619,20 @@ namespace {
                         
                     if(edge_edge_intersect(v1,v2,w1,w2, true)) {
                         std::cerr << "Constraints intersection "
-                                  << v1 << " " << v2 << "      "
-                                  << w1 << " " << w2
+                                  << "in " << f1_ << "    "
+                                  << v1 << "--" << v2 << "  "
+                                  << w1 << "--" << w2
                                   << std::endl;
-
+                        
                         vec3Q P1 = vertex_[v1].point_exact;
                         vec3Q P2 = vertex_[v2].point_exact;
                         vec3Q Q1 = vertex_[w1].point_exact;
-                        vec3Q Q2 = vertex_[w2].point_exact;                        
-
+                        vec3Q Q2 = vertex_[w2].point_exact;
+                        
+                        trindex T(
+                            f1_,common_facet(v1,v2), common_facet(w1,w2)
+                        );
+                                  
                         snap(P1);
                         snap(P2);
                         snap(Q1);
@@ -597,7 +647,7 @@ namespace {
 
                         snap(I);
                         
-                        index_t x = add_vertex(Vertex(mesh_,I));
+                        index_t x = add_vertex(Vertex(mesh_,I,T));
                         std::cerr << "---> " << x << std::endl;
                         edges_[e1] = std::make_pair(v1,x);
                         edges_[e2] = std::make_pair(w1,x);
@@ -887,9 +937,13 @@ namespace {
         }
 
         index_t add_vertex(const Vertex& V) {
-
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(PCK::same_point(vertex_[i].point_exact,V.point_exact)) {
+                    if(
+                        V.sym.f2 != index_t(-1) &&
+                        !vertex_[i].is_on_facet(V.sym.f2)) {
+                        vertex_[i].facets.push_back(V.sym.f2);
+                    }
                     return i;
                 }
             }
@@ -898,6 +952,7 @@ namespace {
         }
         
         void clear() {
+            std::cerr << "clear()" << std::endl;
             vertex_.resize(0);
             edges_.resize(0);
             for(index_t e=0; e<3; ++e) {
@@ -942,8 +997,8 @@ namespace {
         vector<Vertex> vertex_;
         vector<std::pair<index_t, index_t> > edges_;
         vector<index_t> vertices_in_E_[3];
-        // std::map<quadindex, index_t> v_table_;
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
+        std::map<trindex, index_t> t_v_table_; 
     };
 
     /***********************************************************************/
