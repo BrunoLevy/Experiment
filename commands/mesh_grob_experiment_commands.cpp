@@ -77,7 +77,6 @@ namespace {
                 type = PRIMARY_ISECT;
                 mesh = &M;
                 init_sym(f1,f2,R1,R2);
-                mesh_vertex_index = NO_INDEX;	       
                 init_geometry();
             }
 
@@ -85,7 +84,6 @@ namespace {
                 type = MESH_VERTEX;
                 mesh = &M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
-                mesh_vertex_index = M.facets.vertex(f,lv);
                 init_geometry();
             }
 
@@ -102,14 +100,6 @@ namespace {
                 mesh = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = NO_INDEX;
-            }
-
-            bool is_existing_vertex() const {
-                return (region_dim(sym.R1) == 0 || region_dim(sym.R2) == 0);
-            }
-
-            bool is_edge_edge_isect() const {
-                return (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1);
             }
 
             bool is_edge_triangle_isect() const {
@@ -150,27 +140,27 @@ namespace {
                 sym.f2 = f2;
                 sym.R1 = R1;
                 sym.R2 = R2;
-            }
-
-            template <class T> vecng<3,T> get_point() {
-                
-                if(is_existing_vertex()) {
-                    index_t v = NO_INDEX;
-                    if(region_dim(sym.R1) == 0) {
-                        v = mesh->facets.vertex(
-                            sym.f1, index_t(sym.R1)
-                        );
-                    } else if(region_dim(sym.R2) == 0) {
-                        v = mesh->facets.vertex(
-                            sym.f2, index_t(sym.R2)-3
-                        );
-                    }
-                    geo_assert(v != NO_INDEX);
-                    return convert_vec3_generic<T>(
-                        vec3(mesh->vertices.point_ptr(v))
+                mesh_vertex_index = NO_INDEX;
+                if(region_dim(sym.R1) == 0) {
+                    mesh_vertex_index = mesh->facets.vertex(
+                        sym.f1, index_t(sym.R1)
                     );
                 }
+                if(region_dim(sym.R2) == 0) {
+                    mesh_vertex_index = mesh->facets.vertex(
+                        sym.f2, index_t(sym.R2)-3
+                    );
+                }
+            }
 
+            void init_geometry() {
+
+                if(mesh_vertex_index != NO_INDEX) {
+                    point = vec3(mesh->vertices.point_ptr(mesh_vertex_index));
+                    point_exact = convert_vec3_generic<rational_nt>(point);
+                    return;
+                }
+                
                 geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
                 
                 // The three vertices of f1. If intersetion is on an edge
@@ -182,8 +172,9 @@ namespace {
                 // of f2, then [q1,q2] are the vertices of that edge.
                 vec3 q1,q2,q3;
                 get_vertices(sym.R2,q1,q2,q3);                
-                
-                if(is_edge_edge_isect()) {
+
+                // Segment-segment intersection
+                if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1) {
 
                     // We distinguish 3D edge /\ edge isect (then we use
                     // edge /\ facet isect) and 2D edge /\ edge isect (
@@ -197,41 +188,43 @@ namespace {
                         PCK::orient_3d(p1,p2,p3,q1) == ZERO &&
                         PCK::orient_3d(p1,p2,p3,q2) == ZERO
                     ) {
-                        return get_segment_segment_intersection_2D<T>(
-                            q1,q2,p1,p2,
-                            ::GEO::Geom::triangle_normal_axis(p1,p2,p3)
-                        );
-                    } 
-
-                    // We are in 3D, we can use segment /\ triangle
-                    // intersection (even if we know that the intersection
-                    // will be on on (p1,p2))
-                    return get_segment_triangle_intersection<T>(
-                        q1,q2,p1,p2,p3
+                        point_exact =
+                            get_segment_segment_intersection_2D<rational_nt>(
+                                q1,q2,p1,p2,
+                                ::GEO::Geom::triangle_normal_axis(p1,p2,p3)
+                            );
+                    } else {
+                        // We are in 3D, we can use segment /\ triangle
+                        // intersection (even if we know that the intersection
+                        // will be on on (p1,p2))
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                q1,q2,p1,p2,p3
+                            );
+                    }
+                } else {
+                    // Edge-triangle intersection
+                    geo_assert(
+                        (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) ||
+                        (region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1)
                     );
+                
+                    if(region_dim(sym.R1) == 1) {
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                p1,p2,q1,q2,q3
+                            );
+                    } else {
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                q1,q2,p1,p2,p3
+                            ) ;
+                    }
                 }
-                
-                geo_assert(is_edge_triangle_isect());
-                
-                return (region_dim(sym.R1) == 1) ? 
-                    get_segment_triangle_intersection<T>(p1,p2,q1,q2,q3) :
-                    get_segment_triangle_intersection<T>(q1,q2,p1,p2,p3) ;
-                }
-
-            void init_geometry() {
-                
-                if(mesh_vertex_index != NO_INDEX) {
-                    point = vec3(mesh->vertices.point_ptr(mesh_vertex_index));
-                    point_exact = convert_vec3_generic<rational_nt>(point);
-                    return;
-                }
-                
-                point_exact = get_point<rational_nt>();
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
                 point.z = point_exact.z.estimate();                
             }
-
 
             /**
              * \brief Gets the three vertices of a facet from the
