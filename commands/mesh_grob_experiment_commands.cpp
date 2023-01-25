@@ -504,24 +504,6 @@ namespace {
             
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
-
-
-                /*
-                if(vertex_[i].is_existing_vertex()) {
-                    vertex_[i].mesh_vertex_index = vertex_[i].sym.indices[0];
-                } else {
-                    auto it = v_table_.find(vertex_[i].sym);
-                    if(it != v_table_.end()) {
-                        vertex_[i].mesh_vertex_index = it->second;
-                    } else {
-                        vec3 p = vertex_[i].point;
-                        index_t v = mesh_.vertices.create_vertex(p.data());
-                        vertex_[i].mesh_vertex_index = v;
-                        v_table_[vertex_[i].sym] = v;
-                    }
-                }
-                */
-
                 if(vertex_[i].is_existing_vertex()) {
                     vertex_[i].mesh_vertex_index = vertex_[i].sym.indices[0];
                 } else {
@@ -535,9 +517,6 @@ namespace {
                         g_v_table_[vertex_[i].point_exact] = v;
                     }
                 }                
-                
-                
-                
             }
 
             if(true) {
