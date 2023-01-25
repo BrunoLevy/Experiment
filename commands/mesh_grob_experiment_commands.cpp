@@ -65,96 +65,73 @@ namespace {
         class Vertex {
         public:
             enum { NO_INDEX = index_t(-1) };
+            enum Type {
+                UNINITIALIZED, MESH_VERTEX, PRIMARY_ISECT, SECONDARY_ISECT
+            };
             
             Vertex(
                 Mesh& M,
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
             ) {
+                type = PRIMARY_ISECT;
                 mesh = &M;
                 init_sym(f1,f2,R1,R2);
+                mesh_vertex_index = NO_INDEX;	       
                 init_geometry();
-                mesh_vertex_index = NO_INDEX;
             }
 
             Vertex(Mesh& M, index_t f, index_t lv) {
+                type = MESH_VERTEX;
                 mesh = &M;
-                index_t v = M.facets.vertex(f,lv);
-                set_indices(v);
+                init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
+                mesh_vertex_index = M.facets.vertex(f,lv);
                 init_geometry();
-                mesh_vertex_index = v;
-                tt_sym.f1 = f;
-                tt_sym.R1 = TriangleRegion(lv);
-                tt_sym.f2 = index_t(-1);
             }
 
             Vertex(Mesh& M, index_t v) {
+                type = SECONDARY_ISECT;                
                 mesh = &M;
-                set_indices(v);
-                init_geometry();
+                init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = v;
-                tt_sym.f1 = index_t(-1);
-                tt_sym.f2 = index_t(-1);
+                init_geometry();
             }
-
+            
             Vertex() {
-                mesh = nullptr;                
-                set_indices(NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX);
+                type = UNINITIALIZED;                
+                mesh = nullptr;
+                init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = NO_INDEX;
-                tt_sym.f1 = index_t(-1);
-                tt_sym.f2 = index_t(-1);
             }
 
             bool is_existing_vertex() const {
-                return
-                    sym.indices[1] == NO_INDEX &&
-                    sym.indices[2] == NO_INDEX &&
-                    sym.indices[3] == NO_INDEX ;
+                return (region_dim(sym.R1) == 0 || region_dim(sym.R2) == 0);
             }
 
             bool is_edge_edge_isect() const {
-                return sym.indices[3] != NO_INDEX ;
+                return (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1);
             }
 
             bool is_edge_triangle_isect() const {
-                return sym.indices[2] != NO_INDEX &&
-                       sym.indices[3] == NO_INDEX ;
+                return
+                    (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) ||
+                    (region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1) ;      
             }
 
             void print(std::ostream& out=std::cerr) const {
-                out << "[ ";
-                if(is_existing_vertex()) {
-                    out << "v(" << sym.indices[0] << ")";
-                } else if(is_edge_edge_isect()) {
-                    out << "E(" << sym.indices[0] << "," << sym.indices[1]
-                        << ") /\\ E("
-                        << sym.indices[2] << "," << sym.indices[3]
-                        << ")"; 
-                } else if(is_edge_triangle_isect()) {
-                    index_t f = sym.indices[2];
-                    out << "E(" << sym.indices[0] << "," << sym.indices[1]
-                        << ") /\\ F("
-                        << sym.indices[2]
-                        << ":"
-                        << mesh->facets.vertex(f,0) << ","
-                        << mesh->facets.vertex(f,1) << ","
-                        << mesh->facets.vertex(f,2) 
-                        << ")";
+                if(sym.f1 != index_t(-1)) {
+                    out << " ( ";
+                    out << sym.f1;
+                    out << region_to_string(sym.R1).substr(2);
                 }
-                if(tt_sym.f1 != index_t(-1)) {
-                    out << " (= ";
-                    out << tt_sym.f1;
-                    out << region_to_string(tt_sym.R1).substr(2);
-                }
-                if(tt_sym.f2 != index_t(-1)) {
+                if(sym.f2 != index_t(-1)) {
                     out << " /\\ ";
-                    out << tt_sym.f2;
-                    out << region_to_string(tt_sym.R2).substr(2);
+                    out << sym.f2;
+                    out << region_to_string(sym.R2).substr(2);
                 }
-                if(tt_sym.f1 != index_t(-1)) {
-                    out << ") ";
+                if(sym.f1 != index_t(-1)) {
+                    out << " ) ";
                 }
-                out << " ]";
             }
 
             std::string to_string() const {
@@ -169,119 +146,50 @@ namespace {
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
             ) {
-                tt_sym.f1 = f1;
-                tt_sym.f2 = f2;
-                tt_sym.R1 = R1;
-                tt_sym.R2 = R2;
-                
-                index_t v[6] = {
-                    mesh->facets.vertex(f1,0),
-                    mesh->facets.vertex(f1,1),
-                    mesh->facets.vertex(f1,2),
-                    mesh->facets.vertex(f2,0),
-                    mesh->facets.vertex(f2,1),
-                    mesh->facets.vertex(f2,2)
-                };
-            
-                if(region_dim(R1) == 0) {
-                    set_indices(v[R1]);
-                    return;
-                } 
-
-                if(region_dim(R2) == 0) {
-                    set_indices(v[R2]);
-                    return;
-                }
-        
-                if(region_dim(R1) == 1 && region_dim(R2) == 1) {
-                    bindex E1 = get_edge_vertices(R1,v);
-                    bindex E2 = get_edge_vertices(R2,v);
-                    if(E1.indices[0] < E2.indices[0]) {
-                        set_indices(
-                            E1.indices[0], E1.indices[1],
-                            E2.indices[0], E2.indices[1]
-                        );
-                    } else {
-                        set_indices(
-                            E2.indices[0], E2.indices[1],
-                            E1.indices[0], E1.indices[1]
-                        );
-                    }
-                    return;
-                }
-                
-                if(region_dim(R1) == 1) {
-                    bindex E = get_edge_vertices(R1,v);
-                    set_indices(E.indices[0], E.indices[1], f2);
-                    return;
-                }
-                
-                if(region_dim(R2) == 1) {
-                    bindex E = get_edge_vertices(R2,v);
-                    set_indices(E.indices[0], E.indices[1], f1);
-                    return;
-                }
-                geo_assert_not_reached;
+                sym.f1 = f1;
+                sym.f2 = f2;
+                sym.R1 = R1;
+                sym.R2 = R2;
             }
 
             template <class T> vecng<3,T> get_point() {
+                
                 if(is_existing_vertex()) {
+                    index_t v = NO_INDEX;
+                    if(region_dim(sym.R1) == 0) {
+                        v = mesh->facets.vertex(
+                            sym.f1, index_t(sym.R1)
+                        );
+                    } else if(region_dim(sym.R2) == 0) {
+                        v = mesh->facets.vertex(
+                            sym.f2, index_t(sym.R2)-3
+                        );
+                    }
+                    geo_assert(v != NO_INDEX);
                     return convert_vec3_generic<T>(
-                        vec3(mesh->vertices.point_ptr(sym.indices[0]))
+                        vec3(mesh->vertices.point_ptr(v))
                     );
                 }
 
+                geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
+                
+                // The three vertices of f1. If intersetion is on an edge
+                // of f1, then [p1,p2] are the vertices of that edge.
+                vec3 p1,p2,p3;
+                get_vertices(sym.R1,p1,p2,p3);
+
+                // The three vertices of f2. If intersetion is on an edge
+                // of f2, then [q1,q2] are the vertices of that edge.
+                vec3 q1,q2,q3;
+                get_vertices(sym.R2,q1,q2,q3);                
+                
                 if(is_edge_edge_isect()) {
 
                     // We distinguish 3D edge /\ edge isect (then we use
                     // edge /\ facet isect) and 2D edge /\ edge isect (
                     // then develop special code). 
                     
-                    geo_debug_assert(tt_sym.f2 != index_t(-1));
-                    
-                    // The three vertices of f1, with the intersected
-                    // edges as (p1,p2)
-                    vec3 p1, p2, p3;
-                    
-                    // The intersected edge of f2
-                    vec3 q1, q2;
-
-                    {
-                        TriangleRegion lvr1, lvr2;
-                        index_t lv1, lv2, lv3;
-                        // The two vertices of R1 first
-                        GEO::get_edge_vertices(tt_sym.R1,lvr1, lvr2);
-                        lv1 = index_t(lvr1);
-                        lv2 = index_t(lvr2);
-                        geo_debug_assert(lv1 < 3);
-                        geo_debug_assert(lv2 < 3);                        
-                        // The other vertex of f1
-                        lv3 = index_t(tt_sym.R1 - 6);
-                        geo_debug_assert(lv3 < 3);
-                        
-                        index_t v1 = mesh->facets.vertex(tt_sym.f1, lv1);
-                        index_t v2 = mesh->facets.vertex(tt_sym.f1, lv2);
-                        index_t v3 = mesh->facets.vertex(tt_sym.f1, lv3);
-
-                        p1 = vec3(mesh->vertices.point_ptr(v1));
-                        p2 = vec3(mesh->vertices.point_ptr(v2));
-                        p3 = vec3(mesh->vertices.point_ptr(v3));
-                    }
-
-                    {
-                        TriangleRegion lvr1, lvr2;
-                        GEO::get_edge_vertices(tt_sym.R2, lvr1, lvr2);
-                        index_t lv1 = index_t(lvr1);
-                        index_t lv2 = index_t(lvr2);
-                        geo_debug_assert(lv1 >= 3 && lv1 < 6);
-                        geo_debug_assert(lv2 >= 3 && lv2 < 6);
-                        lv1 -= 3;
-                        lv2 -= 3;
-                        index_t v1 = mesh->facets.vertex(tt_sym.f2,lv1);
-                        index_t v2 = mesh->facets.vertex(tt_sym.f2,lv2);
-                        q1 = vec3(mesh->vertices.point_ptr(v1));
-                        q2 = vec3(mesh->vertices.point_ptr(v2));
-                    }
+                    geo_debug_assert(sym.f2 != NO_INDEX);
 
                     // If [q1,q2] is in the supporting plane of (p1,p2,p3),
                     // compute intersection in 2D.
@@ -303,53 +211,59 @@ namespace {
                     );
                 }
                 
-                geo_debug_assert(is_edge_triangle_isect());
+                geo_assert(is_edge_triangle_isect());
                 
-                vec3 q1(mesh->vertices.point_ptr(sym.indices[0]));
-                vec3 q2(mesh->vertices.point_ptr(sym.indices[1]));
-                index_t v1 = mesh->facets.vertex(sym.indices[2],0);
-                index_t v2 = mesh->facets.vertex(sym.indices[2],1);
-                index_t v3 = mesh->facets.vertex(sym.indices[2],2);
-                vec3 p1(mesh->vertices.point_ptr(v1));
-                vec3 p2(mesh->vertices.point_ptr(v2));
-                vec3 p3(mesh->vertices.point_ptr(v3));
-                
-                return get_segment_triangle_intersection<T>(q1,q2,p1,p2,p3);
-            }
+                return (region_dim(sym.R1) == 1) ? 
+                    get_segment_triangle_intersection<T>(p1,p2,q1,q2,q3) :
+                    get_segment_triangle_intersection<T>(q1,q2,p1,p2,p3) ;
+                }
 
             void init_geometry() {
-                // point    = get_point<double>();
+                
+                if(mesh_vertex_index != NO_INDEX) {
+                    point = vec3(mesh->vertices.point_ptr(mesh_vertex_index));
+                    point_exact = convert_vec3_generic<rational_nt>(point);
+                    return;
+                }
+                
                 point_exact = get_point<rational_nt>();
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
                 point.z = point_exact.z.estimate();                
             }
-            
-            void set_indices(
-                index_t i0=NO_INDEX, index_t i1=NO_INDEX,
-                index_t i2=NO_INDEX, index_t i3=NO_INDEX
-            ) {
-                sym.indices[0] = i0;
-                sym.indices[1] = i1;
-                sym.indices[2] = i2;
-                sym.indices[3] = i3;                        
-            }
-            
-            bindex get_edge_vertices(TriangleRegion R, index_t v[]) {
-                TriangleRegion v1,v2;
-                geo_debug_assert(region_dim(R) == 1);
-                ::GEO::get_edge_vertices(R,v1,v2);
-                return bindex(v[v1],v[v2]);
-            }
 
+
+            /**
+             * \brief Gets the three vertices of a facet from the
+             *  TriangleRegion
+             * \details If the TriangleRegion is one of the edges,
+             *  gets the vertices of this edge as the first two 
+             *  vertices \p p1 and \p p2
+             */
+            void get_vertices(TriangleRegion R, vec3& p1, vec3& p2, vec3& p3) {
+                geo_debug_assert(region_dim(R) == 1 || region_dim(R) == 2);
+                index_t f = is_in_T1(R) ? sym.f1 : sym.f2;
+                index_t lv1 = 0;
+                index_t lv2 = 1;
+                index_t lv3 = 2;
+                if(region_dim(R) == 1) {
+                    index_t e = is_in_T1(R) ? index_t(R)-6 : index_t(R)-9;
+                    lv1 = (lv1+e+1)%3;
+                    lv2 = (lv2+e+1)%3;
+                    lv3 = (lv3+e+1)%3;                    
+                }
+                p1 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv1)));
+                p2 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv2)));
+                p3 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv3)));
+            }
+            
         public:
             Mesh* mesh;
             vec3  point;
             vec3Q point_exact;
 
-            // Symbolic information, global indices in mesh
-            quadindex sym;
-
+            Type type;
+            
             // Global mesh vertex index once created
             index_t mesh_vertex_index;
 
@@ -357,7 +271,7 @@ namespace {
             struct {
                 index_t f1,f2;        // global facet indices in mesh
                 TriangleRegion R1,R2; // triangle regions
-            } tt_sym; 
+            } sym; 
         };
 
         
@@ -504,19 +418,21 @@ namespace {
             
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
-                if(vertex_[i].is_existing_vertex()) {
-                    vertex_[i].mesh_vertex_index = vertex_[i].sym.indices[0];
+
+                // Vertex already exists in this MeshInTriangle
+                if(vertex_[i].mesh_vertex_index != index_t(-1)) {
+                    continue;
+                }
+                
+                auto it = g_v_table_.find(vertex_[i].point_exact);
+                if(it != g_v_table_.end()) {
+                    vertex_[i].mesh_vertex_index = it->second;
                 } else {
-                    auto it = g_v_table_.find(vertex_[i].point_exact);
-                    if(it != g_v_table_.end()) {
-                        vertex_[i].mesh_vertex_index = it->second;
-                    } else {
-                        vec3 p = vertex_[i].point;
-                        index_t v = mesh_.vertices.create_vertex(p.data());
-                        vertex_[i].mesh_vertex_index = v;
-                        g_v_table_[vertex_[i].point_exact] = v;
-                    }
-                }                
+                    vec3 p = vertex_[i].point;
+                    index_t v = mesh_.vertices.create_vertex(p.data());
+                    vertex_[i].mesh_vertex_index = v;
+                    g_v_table_[vertex_[i].point_exact] = v;
+                }
             }
 
             if(true) {
@@ -558,6 +474,8 @@ namespace {
                 //   or maybe generate them before, without letting
                 //   Triangle do the job
                 if(del->nb_vertices() > constraints.vertices.nb()) {
+                    geo_assert_not_reached; // for now...
+                    /*
                     vec3 p0 = vertex_[0].point;
                     vec3 p1 = vertex_[1].point;
                     vec3 p2 = vertex_[2].point;
@@ -579,6 +497,7 @@ namespace {
                         V.mesh_vertex_index = vv;
                         vertex_.push_back(V);
                     }
+                    */
                 }
                 
                 // If orientation in Delaunay and orientation in
@@ -885,7 +804,7 @@ namespace {
 
         index_t add_vertex(const Vertex& V) {
             for(index_t i=0; i<vertex_.size(); ++i) {
-                if(vertex_[i].sym == V.sym) {
+                if(PCK::same_point(vertex_[i].point_exact,V.point_exact)) {
                     return i;
                 }
             }
@@ -905,8 +824,8 @@ namespace {
         void show_intersected_facets() const {
             std::vector<index_t> isect_facets;
             for(const Vertex& V: vertex_) {
-                if(V.tt_sym.f2 != index_t(-1)) {
-                    isect_facets.push_back(V.tt_sym.f2);
+                if(V.sym.f2 != index_t(-1)) {
+                    isect_facets.push_back(V.sym.f2);
                 }
             }
             sort_unique(isect_facets);

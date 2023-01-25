@@ -29,6 +29,10 @@ namespace GEO {
     };
     
     namespace PCK {
+
+        bool same_point(const vec3Q& v1, const vec3Q& v2) {
+            return v1.x == v2.x && v1.y == v2.y && v2.z == v1.z;
+        }
         
         /**
          * \brief Computes the orientation predicate in 3d using
