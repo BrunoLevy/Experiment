@@ -30,8 +30,8 @@ namespace GEO {
     
     namespace PCK {
 
-        bool same_point(const vec3Q& v1, const vec3Q& v2) {
-            return v1.x == v2.x && v1.y == v2.y && v2.z == v1.z;
+        template <class VEC> bool same_point(const VEC& v1, const VEC& v2) {
+            return (v1.x == v2.x) && (v1.y == v2.y) && (v2.z == v1.z);
         }
         
         /**
@@ -103,13 +103,17 @@ namespace GEO {
 #ifdef GEO_DEBUG
             Sign o2 = orient_2d_projected_impl(p1,p2,p0,axis);
             Sign o3 = orient_2d_projected_impl(p2,p0,p1,axis);
+            
             Sign o4 = orient_2d_projected_impl(p2,p1,p0,axis);
             Sign o5 = orient_2d_projected_impl(p0,p2,p1,axis);
             Sign o6 = orient_2d_projected_impl(p1,p0,p2,axis);
+
+            // If assertion fails here, then we probably got
+            // an underflow somewhere (restart with sys:FPE=true
+            // to figure out)
             geo_debug_assert(o1 == o2 && o1 == o3);
             geo_debug_assert(o4 == o5 && o4 == o6);
             geo_debug_assert(int(o1) == -int(o4));
-
 #endif
             return o1;            
         }
@@ -183,6 +187,8 @@ namespace GEO {
     /**
      * \brief Computes the intersection between two 3D segments
      *  based on their projection onto one of the axes
+     * \details This version takes input points as vec3 with double
+     *  coordinates (typically all coming from initial mesh)
      * \pre the intersection exists in 3D
      * \tparam T the type of the coordinates
      * \param[in] p1 , p2 the extremities of the first segment
@@ -226,4 +232,54 @@ namespace GEO {
             (T(1.0)-s) * convert_vec3_generic<T>(p1) ;
     }
 
+
+    /**
+     * \brief Computes the intersection between two 3D segments
+     *  based on their projection onto one of the axes
+     * \details This version takes input points as vec3 in arbitrary
+     *  precision (e.g., vec3Q). They can be for instance results of
+     *  previous intersections.
+     * \pre the intersection exists in 3D
+     * \tparam T the type of the coordinates
+     * \param[in] p1 , p2 the extremities of the first segment
+     * \param[in] q1 , q2 the extremities of the second segment
+     * \param[in] ax one of 0,1,2, the axis along which to project
+     * \return the 3D intersection of the two segments
+     */
+    template <class T>    
+    inline vecng<3,T> get_segment_segment_intersection_2D_bis(
+        const vecng<3,T> p1, const vecng<3,T> p2,
+        const vecng<3,T> q1, const vecng<3,T> q2, coord_index_t ax
+    ) {
+        coord_index_t u = coord_index_t((ax + 1)%3);
+        coord_index_t v = coord_index_t((ax + 2)%3);
+
+        // [ a b ] [ l1 ]   [ e ]
+        // [ c d ] [ l2 ] = [ f ]
+        
+        T a = p2[u]-p1[u];
+        T b = q1[u]-q2[u];
+        T c = p2[v]-p1[v];
+        T d = q1[v]-q2[v];
+
+        T e = q1[u]-p1[u];
+        T f = q1[v]-p1[v];
+
+        // [ a b ] [ s ]   [ e ]
+        // [ c d ] [ t ] = [ f ]
+
+        // [ s ]               [ d -b] [ e ]
+        // [ t ] = 1/(ad-bc) * [-c  a] [ f ]
+
+        T det = a*d-b*c;
+
+        geo_assert(geo_sgn(det) != ZERO);
+        
+        T s = ( d*e-b*f)/det;
+        
+        return
+            s          * p2 +
+            (T(1.0)-s) * p1 ;
+    }
+    
 }

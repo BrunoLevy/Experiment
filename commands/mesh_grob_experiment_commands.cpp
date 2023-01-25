@@ -68,7 +68,8 @@ namespace {
             enum Type {
                 UNINITIALIZED, MESH_VERTEX, PRIMARY_ISECT, SECONDARY_ISECT
             };
-            
+
+
             Vertex(
                 Mesh& M,
                 index_t f1, index_t f2,
@@ -87,12 +88,14 @@ namespace {
                 init_geometry();
             }
 
-            Vertex(Mesh& M, index_t v) {
+            Vertex(Mesh& M, const vec3Q& point_exact_in) {
                 type = SECONDARY_ISECT;                
                 mesh = &M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
-                mesh_vertex_index = v;
-                init_geometry();
+                point_exact = point_exact_in;
+                point.x = point_exact.x.estimate();
+                point.y = point_exact.y.estimate();
+                point.z = point_exact.z.estimate();                
             }
             
             Vertex() {
@@ -100,12 +103,6 @@ namespace {
                 mesh = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = NO_INDEX;
-            }
-
-            bool is_edge_triangle_isect() const {
-                return
-                    (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) ||
-                    (region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1) ;      
             }
 
             void print(std::ostream& out=std::cerr) const {
@@ -325,6 +322,8 @@ namespace {
             // Sanity check: the facet does not have zero area
             geo_assert(f1_orient_ != ZERO);
 
+
+            
             // Sort vertices along triangle's edges
             {
                 for(index_t e=0; e<3; ++e) {
@@ -377,6 +376,8 @@ namespace {
                 }
             }
 
+            compute_constraints_intersections();
+            
             if(!ok) {
                 mesh_save(
                     debug_constraints,
@@ -453,7 +454,6 @@ namespace {
                         abort();
                     }
                     return;
-                    // abort();
                 }
                 
                 
@@ -534,6 +534,104 @@ namespace {
             }
         }
 
+        static void print(const rational_nt& x) {
+            std::cerr << "num: " << x.num().rep().length() << " : ";
+            for(index_t i=0; i<x.num().rep().length(); ++i) {
+                std::cerr << x.num().rep()[i] << " ";
+            }
+            std::cerr << std::endl << std::endl ;
+            std::cerr << "den: " << x.denom().rep().length() << " : ";            
+            for(index_t i=0; i<x.denom().rep().length(); ++i) {
+                std::cerr << x.denom().rep()[i] << " ";
+            }
+            std::cerr << std::endl << std::endl << std::endl;
+        }
+
+        static void snap(vec3Q& v) {
+            v.x = rational_nt(v.x.estimate());
+            v.y = rational_nt(v.y.estimate());
+            v.z = rational_nt(v.z.estimate());            
+        }
+            
+        bool fix_one_intersection() {
+            // Test constrained edges intersections
+            for(index_t e1=0; e1<edges_.size(); ++e1) {
+                index_t v1 = edges_[e1].first;
+                index_t v2 = edges_[e1].second;
+                for(index_t e2=e1+1; e2 < edges_.size(); ++e2) {
+                    index_t w1 = edges_[e2].first;
+                    index_t w2 = edges_[e2].second;
+                    if(v1 == w1 || v1 == w2 || v2 == w1 || v2 == w2) {
+                        // NOTE/TODO: we could have two edges
+                        // coming from two
+                        // different triangles and having an intersection
+                        // along an edge with an existing vertex.
+                        continue;
+                    }
+
+                    // TODO: check whether intersection is one of the
+                    // vertices.
+                        
+                    if(edge_edge_intersect(v1,v2,w1,w2, true)) {
+                        std::cerr << "Constraints intersection "
+                                  << v1 << " " << v2 << "      "
+                                  << w1 << " " << w2
+                                  << std::endl;
+
+                        vec3Q P1 = vertex_[v1].point_exact;
+                        vec3Q P2 = vertex_[v2].point_exact;
+                        vec3Q Q1 = vertex_[w1].point_exact;
+                        vec3Q Q2 = vertex_[w2].point_exact;                        
+
+                        snap(P1);
+                        snap(P2);
+                        snap(Q1);
+                        snap(Q2);                        
+                        
+                        vec3Q I = get_segment_segment_intersection_2D_bis<
+                            rational_nt
+                        >(
+                            P1,P2,Q1,Q2,
+                            f1_normal_axis_
+                        );
+
+                        snap(I);
+                        
+                        index_t x = add_vertex(Vertex(mesh_,I));
+                        std::cerr << "---> " << x << std::endl;
+                        edges_[e1] = std::make_pair(v1,x);
+                        edges_[e2] = std::make_pair(w1,x);
+                        edges_.push_back(std::make_pair(x,v2));
+                        edges_.push_back(std::make_pair(x,w2));
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        void compute_constraints_intersections() {
+            // int iter = 0;
+            while(fix_one_intersection()) {
+                /*
+                check_constraints(true);
+                // Create a 2D constrained Delaunay triangulation
+                Mesh constraints;
+                constraints.vertices.set_dimension(2);
+                for(index_t i=0; i<vertex_.size(); ++i) {
+                    constraints.vertices.create_vertex(
+                        project(i).data()
+                    );
+                }
+                for(std::pair<index_t,index_t>& E: edges_) {
+                    constraints.edges.create_edge(E.first, E.second);
+                }
+                mesh_save(constraints, "constraints_" + String::to_string(iter) + ".geogram");
+                ++iter;
+                */
+            }
+        }
+        
         bool check_constraints(bool exact = false) const {
             Mesh debug_constraints;
             Attribute<bool> debug_vertex_show(
@@ -632,6 +730,9 @@ namespace {
                         E1.second == E2.first ||
                         E1.second == E2.second
                     ) {
+                        // NOTE: we could have two edges coming from two
+                        // different triangles and having an intersection
+                        // along an edge with an existing vertex.
                         continue;
                     }
                     if(edge_edge_intersect(
@@ -709,19 +810,9 @@ namespace {
         }
 
         bool same_point(index_t i, index_t j, bool exact=false) const {
-            if(exact) {
-                const vec3Q& p1 = vertex_[i].point_exact;
-                const vec3Q& p2 = vertex_[j].point_exact;
-                return (p1[0] == p2[0]) &&
-                       (p1[1] == p2[1]) &&
-                       (p1[2] == p2[2]) ;
-            }
-            
-            const vec3& p1 = vertex_[i].point;
-            const vec3& p2 = vertex_[j].point;            
-            return (p1[0] == p2[0]) &&
-                   (p1[1] == p2[1]) &&
-                   (p1[2] == p2[2]) ;
+            return exact ?
+                PCK::same_point(vertex_[i].point_exact, vertex_[j].point_exact):
+                PCK::same_point(vertex_[i].point,       vertex_[j].point      );
         }
 
         bool vertex_on_edge(
@@ -796,6 +887,7 @@ namespace {
         }
 
         index_t add_vertex(const Vertex& V) {
+
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(PCK::same_point(vertex_[i].point_exact,V.point_exact)) {
                     return i;
@@ -1023,6 +1115,12 @@ namespace {
         // (example, cubes that touch on a facet).
         PCK::SOSMode SOS_bkp = PCK::get_SOS_mode();
         PCK::set_SOS_mode(PCK::SOS_LEXICO);
+
+        // Exact arithmetics is exact ... until we encounter
+        // underflows/overflows (and underflows can happen quite
+        // often !!) -> I want to detect them.
+        bool FPE_bkp = Process::FPE_enabled();
+        Process::enable_FPE(true);
         
         vector<IsectInfo> intersections;
         MeshFacetsAABB AABB(M,order_facets);
@@ -1101,6 +1199,9 @@ namespace {
         M.facets.delete_elements(has_intersections);
         M.facets.connect();
 
+        if(!FPE_bkp) {
+            Process::enable_FPE(false);
+        }
         PCK::set_SOS_mode(SOS_bkp);
     }
 }
