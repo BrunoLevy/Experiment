@@ -435,6 +435,7 @@ namespace {
 
                 // Debug display creation of triple points
                 if(
+                    false && 
                     vertex_[i].sym.R1 == T1_RGN_T &&
                     vertex_[i].sym.R2 == T2_RGN_T 
                 ) {
@@ -674,9 +675,11 @@ namespace {
                         );
                         snap(I_inexact);
                         */
-                        
-                        std::cerr << "Triple point: "
-                                  << f1 << " " << f2 << " " << f3 << std::endl;
+
+                        if(false) {
+                            std::cerr << "Triple point: "
+                                      << f1 << " " << f2 << " " << f3 << std::endl;
+                        }
 
                         index_t x = add_vertex(Vertex(mesh_,I));
                         vertex_[x].facets.push_back(f2);
@@ -1175,7 +1178,7 @@ namespace {
     }
     
     void intersect_surface_impl(
-        Mesh& M, bool test_adjacent_facets, bool order_facets
+        Mesh& M, bool test_adjacent_facets, bool order_facets, bool FPE
     ) {
 
         // Set symbolic perturbation mode to lexicographic order
@@ -1189,7 +1192,7 @@ namespace {
         // underflows/overflows (and underflows can happen quite
         // often !!) -> I want to detect them.
         bool FPE_bkp = Process::FPE_enabled();
-        // Process::enable_FPE(true);
+        Process::enable_FPE(FPE);
         
         vector<IsectInfo> intersections;
         MeshFacetsAABB AABB(M,order_facets);
@@ -1287,7 +1290,8 @@ namespace OGF {
         bool merge_vertices_and_facets,
         bool test_neighboring_triangles,
         bool post_connect_facets,
-        bool order_facets
+        bool order_facets,
+        bool FPE
     ) {
         if(!mesh_grob()->facets.are_simplices()) {
             Logger::err("Intersect") << "Mesh is not triangulated"
@@ -1299,9 +1303,21 @@ namespace OGF {
             mesh_colocate_vertices_no_check(*mesh_grob());
             mesh_remove_bad_facets_no_check(*mesh_grob());
         }
-         
+
+        const double SCALING = double(1ull << 20);
+        const double INV_SCALING = 1.0/SCALING;
+        
+        {
+            double* p = mesh_grob()->vertices.point_ptr(0);
+            index_t N = mesh_grob()->vertices.nb() *
+                        mesh_grob()->vertices.dimension();
+            for(index_t i=0; i<N; ++i) {
+                p[i] *= SCALING;
+            }
+        }
+        
         intersect_surface_impl(
-            *mesh_grob(), test_neighboring_triangles, order_facets
+            *mesh_grob(), test_neighboring_triangles, order_facets, FPE
         );
 
         if(post_connect_facets) {
@@ -1313,7 +1329,15 @@ namespace OGF {
                 0.0
             );
         }
-        
+
+        {
+            double* p = mesh_grob()->vertices.point_ptr(0);
+            index_t N = mesh_grob()->vertices.nb() *
+                        mesh_grob()->vertices.dimension();
+            for(index_t i=0; i<N; ++i) {
+                p[i] *= INV_SCALING;
+            }
+        }
         
         show_mesh();
         mesh_grob()->update();
