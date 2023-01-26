@@ -88,12 +88,10 @@ namespace {
                 init_geometry();
             }
 
-            Vertex(Mesh& M, const vec3Q& point_exact_in, const trindex& T, const vec3Q& K) {
+            Vertex(Mesh& M, const vec3Q& point_exact_in) {
                 type = SECONDARY_ISECT;                
                 mesh = &M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
-                sym.T = T;
-                sym.geom_key = K;
                 point_exact = point_exact_in;
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
@@ -162,7 +160,6 @@ namespace {
                 if(f2 != NO_INDEX) {
                     facets.push_back(f2);
                 }
-                sym.T = trindex(index_t(-1), index_t(-1), index_t(-1));
             }
 
             void init_geometry() {
@@ -276,8 +273,6 @@ namespace {
             struct {
                 index_t f1,f2;        // global facet indices in mesh
                 TriangleRegion R1,R2; // triangle regions
-                trindex T;            // for triple points
-                vec3Q geom_key;       // for triple points
             } sym;
             
             vector<index_t> facets;
@@ -436,46 +431,29 @@ namespace {
                     continue;
                 }
 
-                vec3Q* K = &(vertex_[i].point_exact);
-                
-                if(
-                    vertex_[i].sym.T.indices[0] != index_t(-1) &&
-                    vertex_[i].sym.T.indices[1] != index_t(-1) &&
-                    vertex_[i].sym.T.indices[2] != index_t(-1) 
-                ) {
-                    K = &(vertex_[i].sym.geom_key);
+                const vec3Q& K = vertex_[i].point_exact;
 
-                    {
-                        auto it = g_v_table_.find(*K);
-                        if(it == g_v_table_.end()) {
-                            std::cerr << "New triple point" << std::endl;
-                        } else {
-                            std::cerr << "Existing triple point" << std::endl;
-                        }
-                    }
-                    /*
-                    auto it = t_v_table_.find(vertex_[i].sym.T);
-                    if(it != t_v_table_.end()) {
-                        vertex_[i].mesh_vertex_index = it->second;
+                // Debug display creation of triple points
+                if(
+                    vertex_[i].sym.R1 == T1_RGN_T &&
+                    vertex_[i].sym.R2 == T2_RGN_T 
+                ) {
+                    auto it = g_v_table_.find(K);
+                    if(it == g_v_table_.end()) {
+                        std::cerr << "New triple point" << std::endl;
                     } else {
-                        vec3 p = vertex_[i].point;
-                        index_t v = mesh_.vertices.create_vertex(p.data());
-                        vertex_[i].mesh_vertex_index = v;
-                        t_v_table_[vertex_[i].sym.T] = v;
+                        std::cerr << "Existing triple point" << std::endl;
                     }
-                    */
-                } // else
+                } 
                 
-                {
-                    auto it = g_v_table_.find(*K);
-                    if(it != g_v_table_.end()) {
-                        vertex_[i].mesh_vertex_index = it->second;
-                    } else {
-                        vec3 p = vertex_[i].point;
-                        index_t v = mesh_.vertices.create_vertex(p.data());
-                        vertex_[i].mesh_vertex_index = v;
-                        g_v_table_[*K] = v;
-                    }
+                auto it = g_v_table_.find(K);
+                if(it != g_v_table_.end()) {
+                    vertex_[i].mesh_vertex_index = it->second;
+                } else {
+                    vec3 p = vertex_[i].point;
+                    index_t v = mesh_.vertices.create_vertex(p.data());
+                    vertex_[i].mesh_vertex_index = v;
+                    g_v_table_[K] = v;
                 }
             }
 
@@ -653,11 +631,13 @@ namespace {
                         index_t f2 = common_facet(v1,v2);
                         index_t f3 = common_facet(w1,w2);
 
-                        trindex T(f1,f2,f3);
-
-                        f1 = T.indices[0];
-                        f2 = T.indices[1];
-                        f3 = T.indices[2];                        
+                        /*
+                        if(f2 == index_t(-1) || f3 ==index_t(-1)) {
+                            Mesh constraints;
+                            get_constraints(constraints);
+                            mesh_save(constraints, "constraints.geogram");
+                        }
+                        */
                         
                         geo_assert(f1 != index_t(-1));
                         geo_assert(f2 != index_t(-1));
@@ -675,37 +655,33 @@ namespace {
                             vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,2)))
                         };
 
-                        vec3Q I_exact = get_three_planes_intersection(
+                        vec3Q I = get_three_planes_intersection(
                             P[0], P[1], P[2],
                             P[3], P[4], P[5],
                             P[6], P[7], P[8]
                         );
 
-                        
+                        /*
                         snap(P1);
                         snap(P2);
                         snap(Q1);
                         snap(Q2);                        
-                        vec3Q I = get_segment_segment_intersection_2D_bis<
+                        vec3Q I_inexact = get_segment_segment_intersection_2D_bis<
                             rational_nt
                         >(
                             P1,P2,Q1,Q2,
                             f1_normal_axis_
                         );
-                        snap(I);
-
-                        std::cerr << "Triple point: "
-                                  << f1 << " " << f2 << " " << f3 << std::endl
-                                  << I_exact.x.estimate() << " "
-                                  << I_exact.y.estimate() << " "
-                                  << I_exact.z.estimate() << std::endl
-                                  << I.x.estimate() << " "
-                                  << I.y.estimate() << " "
-                                  << I.z.estimate() << std::endl;
-
-                        I = I_exact;
+                        snap(I_inexact);
+                        */
                         
-                        index_t x = add_vertex(Vertex(mesh_,I,T,I_exact));
+                        std::cerr << "Triple point: "
+                                  << f1 << " " << f2 << " " << f3 << std::endl;
+
+                        index_t x = add_vertex(Vertex(mesh_,I));
+                        vertex_[x].facets.push_back(f2);
+                        vertex_[x].facets.push_back(f3);
+                        
                         edges_[e1] = std::make_pair(v1,x);
                         edges_[e2] = std::make_pair(w1,x);
                         edges_.push_back(std::make_pair(x,v2));
@@ -1213,7 +1189,7 @@ namespace {
         // underflows/overflows (and underflows can happen quite
         // often !!) -> I want to detect them.
         bool FPE_bkp = Process::FPE_enabled();
-        Process::enable_FPE(true);
+        // Process::enable_FPE(true);
         
         vector<IsectInfo> intersections;
         MeshFacetsAABB AABB(M,order_facets);

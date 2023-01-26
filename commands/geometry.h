@@ -80,18 +80,44 @@ namespace GEO {
             coord_index_t u = coord_index_t((axis + 1)%3);
             coord_index_t v = coord_index_t((axis + 2)%3);
 
+            /*
             rational_nt a11 = p1[u] - p0[u];
             rational_nt a12 = p1[v] - p0[v];
-            
             rational_nt a21 = p2[u] - p0[u] ;
             rational_nt a22 = p2[v] - p0[v] ;
-            
             rational_nt Delta = det2x2(
                 a11,a12,
                 a21,a22
             );
-
             return Delta.sign();
+            */
+
+            // This version seems to be best in terms
+            // of risk of underflow (to be tested)
+            return det3x3(
+                p0[u], p0[v], rational_nt(1.0),
+                p1[u], p1[v], rational_nt(1.0),
+                p2[u], p2[v], rational_nt(1.0)
+            ).sign() ;
+            
+            /*
+            rational_nt d1 = det2x2(
+                p1[u], p1[v],
+                p2[u], p2[v]
+            );
+
+            rational_nt d2 = det2x2(
+                p0[u], p0[v],
+                p2[u], p2[v]
+            );
+
+            rational_nt d3 = det2x2(
+                p0[u], p0[v],
+                p1[u], p1[v]
+            );
+
+            return (d1-d2+d3).sign();
+            */
         }
 
 
