@@ -4,8 +4,9 @@
 
 namespace GEO {
 
-    typedef vecng<3,rational_nt> vec3Q;
-
+    typedef vecng<3,expansion_nt> vec3E;    
+    typedef vecng<3,rational_nt>  vec3Q;
+    
     class vec3QLexicoCompare {
     public:
         bool operator()(const vec3Q& v1, const vec3Q& v2) const {
@@ -273,13 +274,69 @@ namespace GEO {
 
         T det = a*d-b*c;
 
-        geo_assert(geo_sgn(det) != ZERO);
-        
-        T s = ( d*e-b*f)/det;
+        // geo_assert(geo_sgn(det) != ZERO);
+
+        T s = (geo_sgn(det) == ZERO) ? T(0.5) : ( d*e-b*f)/det;
         
         return
             s          * p2 +
             (T(1.0)-s) * p1 ;
     }
+
+    inline vec3Q get_three_planes_intersection(
+        const vec3& p1, const vec3& p2, const vec3& p3,
+        const vec3& q1, const vec3& q2, const vec3& q3,
+        const vec3& r1, const vec3& r2, const vec3& r3
+    ) {
+        vec3E P1 = convert_vec3_generic<expansion_nt>(p1);
+        vec3E P2 = convert_vec3_generic<expansion_nt>(p2);
+        vec3E P3 = convert_vec3_generic<expansion_nt>(p3);        
+
+        vec3E Q1 = convert_vec3_generic<expansion_nt>(q1);
+        vec3E Q2 = convert_vec3_generic<expansion_nt>(q2);
+        vec3E Q3 = convert_vec3_generic<expansion_nt>(q3);        
+
+        vec3E R1 = convert_vec3_generic<expansion_nt>(r1);
+        vec3E R2 = convert_vec3_generic<expansion_nt>(r2);
+        vec3E R3 = convert_vec3_generic<expansion_nt>(r3);        
+
+        vec3E N1 = cross(P2-P1,P3-P1);
+        vec3E N2 = cross(Q2-Q1,Q3-Q1);
+        vec3E N3 = cross(R2-R1,R3-R1);
+
+        vec3E B(dot(N1,P1),dot(N2,Q1),dot(N3,R1));
+        
+        expansion_nt Delta = det3x3(
+            N1.x, N1.y, N1.z,
+            N2.x, N2.y, N2.z,
+            N3.x, N3.y, N3.z
+        );
+
+        expansion_nt X = det3x3(
+            B.x, N1.y, N1.z,
+            B.y, N2.y, N2.z,
+            B.z, N3.y, N3.z
+        );
+
+        expansion_nt Y = det3x3(
+            N1.x, B.x, N1.z,
+            N2.x, B.y, N2.z,
+            N3.x, B.z, N3.z
+        );
+
+        expansion_nt Z = det3x3(
+            N1.x, N1.y, B.x,
+            N2.x, N2.y, B.y,
+            N3.x, N3.y, B.z
+        );
+
+        return vec3Q(
+            rational_nt(X,Delta),
+            rational_nt(Y,Delta),
+            rational_nt(Z,Delta)            
+        );
+        
+    }
+
     
 }

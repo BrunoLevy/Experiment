@@ -88,15 +88,16 @@ namespace {
                 init_geometry();
             }
 
-            Vertex(Mesh& M, const vec3Q& point_exact_in, const trindex& T) {
+            Vertex(Mesh& M, const vec3Q& point_exact_in, const trindex& T, const vec3Q& K) {
                 type = SECONDARY_ISECT;                
                 mesh = &M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 sym.T = T;
+                sym.geom_key = K;
                 point_exact = point_exact_in;
                 point.x = point_exact.x.estimate();
                 point.y = point_exact.y.estimate();
-                point.z = point_exact.z.estimate();                
+                point.z = point_exact.z.estimate();
             }
             
             Vertex() {
@@ -276,6 +277,7 @@ namespace {
                 index_t f1,f2;        // global facet indices in mesh
                 TriangleRegion R1,R2; // triangle regions
                 trindex T;            // for triple points
+                vec3Q geom_key;       // for triple points
             } sym;
             
             vector<index_t> facets;
@@ -415,7 +417,6 @@ namespace {
                     edges_.push_back(std::make_pair(prev, v1));
                 }
             }
-
             commit();
             clear();
         }
@@ -435,11 +436,24 @@ namespace {
                     continue;
                 }
 
+                vec3Q* K = &(vertex_[i].point_exact);
+                
                 if(
                     vertex_[i].sym.T.indices[0] != index_t(-1) &&
                     vertex_[i].sym.T.indices[1] != index_t(-1) &&
                     vertex_[i].sym.T.indices[2] != index_t(-1) 
                 ) {
+                    K = &(vertex_[i].sym.geom_key);
+
+                    {
+                        auto it = g_v_table_.find(*K);
+                        if(it == g_v_table_.end()) {
+                            std::cerr << "New triple point" << std::endl;
+                        } else {
+                            std::cerr << "Existing triple point" << std::endl;
+                        }
+                    }
+                    /*
                     auto it = t_v_table_.find(vertex_[i].sym.T);
                     if(it != t_v_table_.end()) {
                         vertex_[i].mesh_vertex_index = it->second;
@@ -449,15 +463,18 @@ namespace {
                         vertex_[i].mesh_vertex_index = v;
                         t_v_table_[vertex_[i].sym.T] = v;
                     }
-                } else {
-                    auto it = g_v_table_.find(vertex_[i].point_exact);
+                    */
+                } // else
+                
+                {
+                    auto it = g_v_table_.find(*K);
                     if(it != g_v_table_.end()) {
                         vertex_[i].mesh_vertex_index = it->second;
                     } else {
                         vec3 p = vertex_[i].point;
                         index_t v = mesh_.vertices.create_vertex(p.data());
                         vertex_[i].mesh_vertex_index = v;
-                        g_v_table_[vertex_[i].point_exact] = v;
+                        g_v_table_[*K] = v;
                     }
                 }
             }
@@ -590,12 +607,20 @@ namespace {
         index_t common_facet(index_t v1, index_t v2) const {
             const Vertex& V1 = vertex_[v1];
             const Vertex& V2 = vertex_[v2];
+            index_t result = index_t(-1);
+            index_t nb = 0;
             for(index_t f: V1.facets) {
                 if(V2.is_on_facet(f)) {
-                    return f;
+                    result = f;
+                    ++nb;
                 }
             }
-            return index_t(-1);
+            if(nb > 1) {
+                std::cerr
+                    << "====> more than one facet common to edge extremities"
+                    << std::endl;
+            }
+            return result;
         }
         
         bool fix_one_intersection() {
@@ -617,38 +642,70 @@ namespace {
                     // TODO: check whether intersection is one of the
                     // vertices.
                         
-                    if(edge_edge_intersect(v1,v2,w1,w2, true)) {
-                        std::cerr << "Constraints intersection "
-                                  << "in " << f1_ << "    "
-                                  << v1 << "--" << v2 << "  "
-                                  << w1 << "--" << w2
-                                  << std::endl;
+                    if(edge_edge_intersect(v1,v2,w1,w2,true)) {
                         
                         vec3Q P1 = vertex_[v1].point_exact;
                         vec3Q P2 = vertex_[v2].point_exact;
                         vec3Q Q1 = vertex_[w1].point_exact;
                         vec3Q Q2 = vertex_[w2].point_exact;
+
+                        index_t f1 = f1_;
+                        index_t f2 = common_facet(v1,v2);
+                        index_t f3 = common_facet(w1,w2);
+
+                        trindex T(f1,f2,f3);
+
+                        f1 = T.indices[0];
+                        f2 = T.indices[1];
+                        f3 = T.indices[2];                        
                         
-                        trindex T(
-                            f1_,common_facet(v1,v2), common_facet(w1,w2)
+                        geo_assert(f1 != index_t(-1));
+                        geo_assert(f2 != index_t(-1));
+                        geo_assert(f3 != index_t(-1));                        
+
+                        vec3 P[9] = {
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,0))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,1))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,2))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,0))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,1))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,2))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,0))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,1))),
+                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,2)))
+                        };
+
+                        vec3Q I_exact = get_three_planes_intersection(
+                            P[0], P[1], P[2],
+                            P[3], P[4], P[5],
+                            P[6], P[7], P[8]
                         );
-                                  
+
+                        
                         snap(P1);
                         snap(P2);
                         snap(Q1);
                         snap(Q2);                        
-                        
                         vec3Q I = get_segment_segment_intersection_2D_bis<
                             rational_nt
                         >(
                             P1,P2,Q1,Q2,
                             f1_normal_axis_
                         );
-
                         snap(I);
+
+                        std::cerr << "Triple point: "
+                                  << f1 << " " << f2 << " " << f3 << std::endl
+                                  << I_exact.x.estimate() << " "
+                                  << I_exact.y.estimate() << " "
+                                  << I_exact.z.estimate() << std::endl
+                                  << I.x.estimate() << " "
+                                  << I.y.estimate() << " "
+                                  << I.z.estimate() << std::endl;
+
+                        I = I_exact;
                         
-                        index_t x = add_vertex(Vertex(mesh_,I,T));
-                        std::cerr << "---> " << x << std::endl;
+                        index_t x = add_vertex(Vertex(mesh_,I,T,I_exact));
                         edges_[e1] = std::make_pair(v1,x);
                         edges_[e2] = std::make_pair(w1,x);
                         edges_.push_back(std::make_pair(x,v2));
@@ -661,25 +718,7 @@ namespace {
         }
         
         void compute_constraints_intersections() {
-            // int iter = 0;
-            while(fix_one_intersection()) {
-                /*
-                check_constraints(true);
-                // Create a 2D constrained Delaunay triangulation
-                Mesh constraints;
-                constraints.vertices.set_dimension(2);
-                for(index_t i=0; i<vertex_.size(); ++i) {
-                    constraints.vertices.create_vertex(
-                        project(i).data()
-                    );
-                }
-                for(std::pair<index_t,index_t>& E: edges_) {
-                    constraints.edges.create_edge(E.first, E.second);
-                }
-                mesh_save(constraints, "constraints_" + String::to_string(iter) + ".geogram");
-                ++iter;
-                */
-            }
+            while(fix_one_intersection());
         }
         
         bool check_constraints(bool exact = false) const {
@@ -952,7 +991,6 @@ namespace {
         }
         
         void clear() {
-            std::cerr << "clear()" << std::endl;
             vertex_.resize(0);
             edges_.resize(0);
             for(index_t e=0; e<3; ++e) {
