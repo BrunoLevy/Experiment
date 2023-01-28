@@ -89,35 +89,6 @@ namespace GEO {
                 a21,a22
             );
             return Delta.sign();
-
-            // This version seems to be best in terms
-            // of risk of underflow (to be tested)
-            /*
-            return det3x3(
-                p0[u], p0[v], rational_nt(1.0),
-                p1[u], p1[v], rational_nt(1.0),
-                p2[u], p2[v], rational_nt(1.0)
-            ).sign() ;
-            */
-            
-            /*
-            rational_nt d1 = det2x2(
-                p1[u], p1[v],
-                p2[u], p2[v]
-            );
-
-            rational_nt d2 = det2x2(
-                p0[u], p0[v],
-                p2[u], p2[v]
-            );
-
-            rational_nt d3 = det2x2(
-                p0[u], p0[v],
-                p1[u], p1[v]
-            );
-
-            return (d1-d2+d3).sign();
-            */
         }
 
 
@@ -259,24 +230,10 @@ namespace GEO {
             (T(1.0)-s) * convert_vec3_generic<T>(p1) ;
     }
 
-
-    /**
-     * \brief Computes the intersection between two 3D segments
-     *  based on their projection onto one of the axes
-     * \details This version takes input points as vec3 in arbitrary
-     *  precision (e.g., vec3Q). They can be for instance results of
-     *  previous intersections.
-     * \pre the intersection exists in 3D
-     * \tparam T the type of the coordinates
-     * \param[in] p1 , p2 the extremities of the first segment
-     * \param[in] q1 , q2 the extremities of the second segment
-     * \param[in] ax one of 0,1,2, the axis along which to project
-     * \return the 3D intersection of the two segments
-     */
-    template <class T>    
-    inline vecng<3,T> get_segment_segment_intersection_2D_bis(
-        const vecng<3,T> p1, const vecng<3,T> p2,
-        const vecng<3,T> q1, const vecng<3,T> q2, coord_index_t ax
+    inline bool get_segment_segment_intersection_2D_bis(
+        vec3Q& result,
+        const vec3Q& p1, const vec3Q& p2,
+        const vec3Q& q1, const vec3Q& q2, coord_index_t ax
     ) {
         coord_index_t u = coord_index_t((ax + 1)%3);
         coord_index_t v = coord_index_t((ax + 2)%3);
@@ -284,13 +241,13 @@ namespace GEO {
         // [ a b ] [ l1 ]   [ e ]
         // [ c d ] [ l2 ] = [ f ]
         
-        T a = p2[u]-p1[u];
-        T b = q1[u]-q2[u];
-        T c = p2[v]-p1[v];
-        T d = q1[v]-q2[v];
+        rational_nt a = p2[u]-p1[u];
+        rational_nt b = q1[u]-q2[u];
+        rational_nt c = p2[v]-p1[v];
+        rational_nt d = q1[v]-q2[v];
 
-        T e = q1[u]-p1[u];
-        T f = q1[v]-p1[v];
+        rational_nt e = q1[u]-p1[u];
+        rational_nt f = q1[v]-p1[v];
 
         // [ a b ] [ s ]   [ e ]
         // [ c d ] [ t ] = [ f ]
@@ -298,18 +255,23 @@ namespace GEO {
         // [ s ]               [ d -b] [ e ]
         // [ t ] = 1/(ad-bc) * [-c  a] [ f ]
 
-        T det = a*d-b*c;
+        rational_nt det = a*d-b*c;
 
-        // geo_assert(geo_sgn(det) != ZERO);
+        if(det.sign() == ZERO) {
+            return false;
+        }
 
-        T s = (geo_sgn(det) == ZERO) ? T(0.5) : ( d*e-b*f)/det;
+        rational_nt s = (d*e-b*f)/det;
         
-        return
-            s          * p2 +
-            (T(1.0)-s) * p1 ;
+        result = 
+            s                    * p2 +
+            (rational_nt(1.0)-s) * p1 ;
+
+        return true;
     }
 
-    inline vec3Q get_three_planes_intersection(
+    inline bool get_three_planes_intersection(
+        vec3Q& result,
         const vec3& p1, const vec3& p2, const vec3& p3,
         const vec3& q1, const vec3& q2, const vec3& q3,
         const vec3& r1, const vec3& r2, const vec3& r3
@@ -338,6 +300,10 @@ namespace GEO {
             N3.x, N3.y, N3.z
         );
 
+        if(Delta.sign() == ZERO) {
+            return false;
+        }
+        
         expansion_nt X = det3x3(
             B.x, N1.y, N1.z,
             B.y, N2.y, N2.z,
@@ -356,12 +322,13 @@ namespace GEO {
             N3.x, N3.y, B.z
         );
 
-        return vec3Q(
+        result = vec3Q(
             rational_nt(X,Delta),
             rational_nt(Y,Delta),
             rational_nt(Z,Delta)            
         );
-        
+
+        return true;
     }
 
     

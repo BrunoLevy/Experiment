@@ -620,9 +620,11 @@ namespace {
 
                     // TODO: check whether intersection is one of the
                     // vertices.
-                        
+
+                    // std::cerr << v1 << "-" << v2 << " /\\ " << w1 << "-" << w2 << std::endl;
+                    
                     if(edge_edge_intersect(v1,v2,w1,w2,true)) {
-                        
+
                         vec3Q P1 = vertex_[v1].point_exact;
                         vec3Q P2 = vertex_[v2].point_exact;
                         vec3Q Q1 = vertex_[w1].point_exact;
@@ -656,26 +658,28 @@ namespace {
                             vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,2)))
                         };
 
-                        vec3Q I = get_three_planes_intersection(
+                        vec3Q I;
+                        if(
+                          !get_three_planes_intersection(
+                            I,
                             P[0], P[1], P[2],
                             P[3], P[4], P[5],
                             P[6], P[7], P[8]
-                        );
-
-                        /*
-                        snap(P1);
-                        snap(P2);
-                        snap(Q1);
-                        snap(Q2);                        
-                        vec3Q I_inexact = get_segment_segment_intersection_2D_bis<
-                            rational_nt
-                        >(
-                            P1,P2,Q1,Q2,
-                            f1_normal_axis_
-                        );
-                        snap(I_inexact);
-                        */
-
+                           )
+                        ) {
+                            std::cerr << " 2D cnstr isect" << std::endl;
+                            if(
+                                !get_segment_segment_intersection_2D_bis(
+                                    I,
+                                    P1,P2,Q1,Q2,
+                                    f1_normal_axis_
+                                )
+                            ) {
+                                std::cerr << " 1D cnstr isect" << std::endl;
+                                geo_assert_not_reached;
+                            }
+                        }
+                        
                         if(false) {
                             std::cerr << "Triple point: "
                                       << f1 << " " << f2 << " " << f3 << std::endl;
@@ -684,11 +688,11 @@ namespace {
                         index_t x = add_vertex(Vertex(mesh_,I));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
-                        
                         edges_[e1] = std::make_pair(v1,x);
                         edges_[e2] = std::make_pair(w1,x);
                         edges_.push_back(std::make_pair(x,v2));
                         edges_.push_back(std::make_pair(x,w2));
+                        
                         return true;
                     }
                 }
