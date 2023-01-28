@@ -71,40 +71,41 @@ namespace {
 
 
             Vertex(
-                Mesh& M,
+                MeshInTriangle* M,
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
             ) {
                 type = PRIMARY_ISECT;
-                mesh = &M;
+                mesh_in_triangle = M;
                 init_sym(f1,f2,R1,R2);
                 init_geometry();
             }
 
-            Vertex(Mesh& M, index_t f, index_t lv) {
+            Vertex(MeshInTriangle* M, index_t f, index_t lv) {
                 type = MESH_VERTEX;
-                mesh = &M;
+                mesh_in_triangle = M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
                 init_geometry();
             }
 
-            Vertex(Mesh& M, const vec3Q& point_exact_in) {
+            Vertex(MeshInTriangle* M, const vec3Q& point_exact_in) {
                 type = SECONDARY_ISECT;                
-                mesh = &M;
+                mesh_in_triangle = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 point_exact = point_exact_in;
-                point.x = point_exact.x.estimate();
-                point.y = point_exact.y.estimate();
-                point.z = point_exact.z.estimate();
             }
             
             Vertex() {
                 type = UNINITIALIZED;                
-                mesh = nullptr;
+                mesh_in_triangle = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = NO_INDEX;
             }
 
+            Mesh& mesh() {
+                return mesh_in_triangle->mesh();
+            }
+            
             void print(std::ostream& out=std::cerr) const {
                 if(sym.f1 != index_t(-1)) {
                     out << " ( ";
@@ -148,12 +149,12 @@ namespace {
                 sym.R2 = R2;
                 mesh_vertex_index = NO_INDEX;
                 if(region_dim(sym.R1) == 0) {
-                    mesh_vertex_index = mesh->facets.vertex(
+                    mesh_vertex_index = mesh().facets.vertex(
                         sym.f1, index_t(sym.R1)
                     );
                 }
                 if(region_dim(sym.R2) == 0) {
-                    mesh_vertex_index = mesh->facets.vertex(
+                    mesh_vertex_index = mesh().facets.vertex(
                         sym.f2, index_t(sym.R2)-3
                     );
                 }
@@ -165,8 +166,9 @@ namespace {
             void init_geometry() {
 
                 if(mesh_vertex_index != NO_INDEX) {
-                    point = vec3(mesh->vertices.point_ptr(mesh_vertex_index));
+                    vec3 point(mesh().vertices.point_ptr(mesh_vertex_index));
                     point_exact = convert_vec3_generic<rational_nt>(point);
+                    // UV_exact = vec2Q(point_exact[u_], point_exact[v]);
                     return;
                 }
                 
@@ -230,9 +232,6 @@ namespace {
                             ) ;
                     }
                 }
-                point.x = point_exact.x.estimate();
-                point.y = point_exact.y.estimate();
-                point.z = point_exact.z.estimate();                
             }
 
             /**
@@ -254,15 +253,16 @@ namespace {
                     lv2 = (lv2+e+1)%3;
                     lv3 = (lv3+e+1)%3;                    
                 }
-                p1 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv1)));
-                p2 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv2)));
-                p3 = vec3(mesh->vertices.point_ptr(mesh->facets.vertex(f,lv3)));
+                p1 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv1)));
+                p2 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv2)));
+                p3 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv3)));
             }
             
         public:
-            Mesh* mesh;
-            vec3  point;
+            MeshInTriangle* mesh_in_triangle;
+
             vec3Q point_exact;
+            vec2Q UV_exact;
 
             Type type;
             
@@ -275,23 +275,29 @@ namespace {
                 TriangleRegion R1,R2; // triangle regions
             } sym;
             
-            vector<index_t> facets;
+            vector<index_t> facets;   // all the facets that touch this vertex
         };
 
         
         MeshInTriangle(Mesh& M) : mesh_(M), f1_(index_t(-1)) {
         }
 
+        Mesh& mesh() {
+            return mesh_;
+        }
+        
         void begin_facet(index_t f) {
             f1_ = f;
-            for(index_t lv=0; lv<3; ++lv) {
-                add_vertex(Vertex(mesh_, f, lv));
-            }
             f1_normal_axis_ = ::GEO::Geom::triangle_normal_axis(
-                vertex_[0].point, vertex_[1].point, vertex_[2].point
+                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,0))),
+                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,1))),
+                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,2)))
             );
             u_ = coord_index_t((f1_normal_axis_ + 1) % 3);
             v_ = coord_index_t((f1_normal_axis_ + 2) % 3);
+            for(index_t lv=0; lv<3; ++lv) {
+                add_vertex(Vertex(this, f, lv));
+            }
             f1_orient_ = PCK::orient_2d(project(0), project(1), project(2));
         }
         
@@ -300,7 +306,7 @@ namespace {
             TriangleRegion R1, TriangleRegion R2
         ) {
             geo_debug_assert(f1_ != index_t(-1));
-            Vertex V(mesh_, f1_, f2, R1, R2);
+            Vertex V(this, f1_, f2, R1, R2);
             index_t sz = vertex_.size();
             index_t v = add_vertex(V);
             // If it is a new vertex, and if it is on
@@ -342,18 +348,20 @@ namespace {
             // Sort vertices along triangle's edges
             {
                 for(index_t e=0; e<3; ++e) {
-                    index_t v_org = (e+1)%3; // e's origin
                     index_t v_opp = e;       // f1's vertex opposite to e
                     std::sort(
                         vertices_in_E_[e].begin(),
                         vertices_in_E_[e].end(),
                         [&](index_t v1, index_t v2)->bool{
 
-                            Sign o12 = orient2d(v1,v2,v_opp,true);
-
+                            Sign o12 = orient2d(v1,v2,v_opp);
+                            bool result_1 = (o12 == f1_orient_);
+#ifdef GEO_DEBUG
+                            index_t v_org = (e+1)%3; // e's origin
+                            
                             // Supposed to be negative if
                             // v1 is between v_org and v2 (what we want)
-                            Sign o_o12 = dot3d(v1,v_org,v2,true);
+                            Sign o_o12 = dot3d(v1,v_org,v2);
                             
                             if(o12 == ZERO || o_o12 == ZERO) {
                                 log_err();
@@ -367,7 +375,6 @@ namespace {
                                 ok = false;
                             }
 
-                            bool result_1 = (o12 == f1_orient_);
                             bool result_2 = (o_o12 == NEGATIVE);
 
                             if(result_1 != result_2) {
@@ -385,6 +392,7 @@ namespace {
                                 get_constraints(debug_constraints);
                                 ok = false;
                             }
+#endif                            
                             return result_1;
                         }
                     );
@@ -420,8 +428,7 @@ namespace {
 
         void commit() {
 
-            bool OK_exact   = check_constraints(true);
-            bool OK_inexact = true; // check_constraints(false);
+            bool OK = check_constraints();
             
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
@@ -451,102 +458,70 @@ namespace {
                 if(it != g_v_table_.end()) {
                     vertex_[i].mesh_vertex_index = it->second;
                 } else {
-                    vec3 p = vertex_[i].point;
+                    vec3 p(
+                        vertex_[i].point_exact.x.estimate(),
+                        vertex_[i].point_exact.y.estimate(),
+                        vertex_[i].point_exact.z.estimate()
+                    );
                     index_t v = mesh_.vertices.create_vertex(p.data());
                     vertex_[i].mesh_vertex_index = v;
                     g_v_table_[K] = v;
                 }
             }
 
-            if(true) {
-                // Create a 2D constrained Delaunay triangulation
-                Mesh constraints;
-                constraints.vertices.set_dimension(2);
-                for(index_t i=0; i<vertex_.size(); ++i) {
-                    constraints.vertices.create_vertex(
-                        project(i).data()
-                    );
-                }
-                for(std::pair<index_t,index_t>& E: edges_) {
-                    constraints.edges.create_edge(E.first, E.second);
-                }
-
-                if(!OK_exact || !OK_inexact) {
-                    std::cerr << "==============================>>>>"
-                              << "There were errors, saving constraints..."
-                              << std::endl;
-                    mesh_save(
-                        constraints,
-                        "constraints_" + String::to_string(f1_) + ".geogram"
-                    );
-                    if(!OK_exact) {
-                        abort();
-                    }
-                    return;
-                }
-                
-                
-                Delaunay_var del = Delaunay::create(2, "triangle");
-                del->set_constraints(&constraints);
-                del->set_vertices(0, nullptr);
-
-                // There were intersections between the constraints,
-                //    Triangle created steiner points
-                // TODO: generate their correct symbolic info,
-                //   or maybe generate them before, without letting
-                //   Triangle do the job
-                if(del->nb_vertices() > constraints.vertices.nb()) {
-                    geo_assert_not_reached; // for now...
-                    /*
-                    vec3 p0 = vertex_[0].point;
-                    vec3 p1 = vertex_[1].point;
-                    vec3 p2 = vertex_[2].point;
-                    vec2 q0 = project(0);
-                    vec2 q1 = project(1);
-                    vec2 q2 = project(2);
-                    double A = ::GEO::Geom::triangle_area(q0,q1,q2);
-                    for(
-                        index_t v = constraints.vertices.nb();
-                        v < del->nb_vertices(); ++v
-                    ) {
-                        vec2 q(del->vertex_ptr(v));
-                        double l0 = ::GEO::Geom::triangle_area(q,q1,q2);
-                        double l1 = ::GEO::Geom::triangle_area(q0,q,q2);
-                        double l2 = ::GEO::Geom::triangle_area(q0,q1,q);
-                        vec3 p = (1.0/A)*(l0*p0 + l1*p1 + l2*p2);
-                        index_t vv = mesh_.vertices.create_vertex(p.data());
-                        Vertex V(mesh_,vv);
-                        V.mesh_vertex_index = vv;
-                        vertex_.push_back(V);
-                    }
-                    */
-                }
-                
-                // If orientation in Delaunay and orientation in
-                // facet do not match, we will need to flip
-                // triangles.
-                vec2 p1(del->vertex_ptr(index_t(del->cell_vertex(0,0))));
-                vec2 p2(del->vertex_ptr(index_t(del->cell_vertex(0,1))));
-                vec2 p3(del->vertex_ptr(index_t(del->cell_vertex(0,2))));
-                
-                bool flip = (PCK::orient_2d(p1,p2,p3) != f1_orient_);
-
-                // For each triangle of the Delaunay triangulation,
-                // create a triangle in the mesh (and flip if need be).
-                for(index_t t=0; t<del->nb_cells(); ++t) {
-                    index_t i = index_t(del->cell_vertex(t,0));
-                    index_t j = index_t(del->cell_vertex(t,1));
-                    index_t k = index_t(del->cell_vertex(t,2));
-                    i = vertex_[i].mesh_vertex_index;
-                    j = vertex_[j].mesh_vertex_index;
-                    k = vertex_[k].mesh_vertex_index;                    
-                    if(flip) {
-                        std::swap(i,j);
-                    }
-                    mesh_.facets.create_triangle(i,j,k);
-                }
-            }
+            // Create a 2D constrained Delaunay triangulation
+            Mesh constraints;
+            get_constraints(constraints);
             
+
+            if(!OK) {
+                std::cerr << "==============================>>>>"
+                          << "There were errors, saving constraints..."
+                          << std::endl;
+                mesh_save(
+                    constraints,
+                    "constraints_" + String::to_string(f1_) + ".geogram"
+                );
+                abort();
+            }
+                
+                
+            Delaunay_var del = Delaunay::create(2, "triangle");
+            del->set_constraints(&constraints);
+            del->set_vertices(0, nullptr);
+            
+            // There were intersections between the constraints,
+            //    Triangle created steiner points
+            // TODO: generate their correct symbolic info,
+            //   or maybe generate them before, without letting
+            //   Triangle do the job
+            if(del->nb_vertices() > constraints.vertices.nb()) {
+                geo_assert_not_reached; // for now...
+            }
+                
+            // If orientation in Delaunay and orientation in
+            // facet do not match, we will need to flip
+            // triangles.
+            vec2 p1(del->vertex_ptr(index_t(del->cell_vertex(0,0))));
+            vec2 p2(del->vertex_ptr(index_t(del->cell_vertex(0,1))));
+            vec2 p3(del->vertex_ptr(index_t(del->cell_vertex(0,2))));
+            
+            bool flip = (PCK::orient_2d(p1,p2,p3) != f1_orient_);
+            
+            // For each triangle of the Delaunay triangulation,
+            // create a triangle in the mesh (and flip if need be).
+            for(index_t t=0; t<del->nb_cells(); ++t) {
+                index_t i = index_t(del->cell_vertex(t,0));
+                index_t j = index_t(del->cell_vertex(t,1));
+                index_t k = index_t(del->cell_vertex(t,2));
+                i = vertex_[i].mesh_vertex_index;
+                j = vertex_[j].mesh_vertex_index;
+                k = vertex_[k].mesh_vertex_index;                    
+                if(flip) {
+                    std::swap(i,j);
+                }
+                mesh_.facets.create_triangle(i,j,k);
+            }
         }
         
         void get_constraints(Mesh& M, bool with_edges=true) const {
@@ -575,12 +550,6 @@ namespace {
                 std::cerr << x.denom().rep()[i] << " ";
             }
             std::cerr << std::endl << std::endl << std::endl;
-        }
-
-        static void snap(vec3Q& v) {
-            v.x = rational_nt(v.x.estimate());
-            v.y = rational_nt(v.y.estimate());
-            v.z = rational_nt(v.z.estimate());            
         }
 
         index_t common_facet(index_t v1, index_t v2) const {
@@ -623,7 +592,7 @@ namespace {
 
                     // std::cerr << v1 << "-" << v2 << " /\\ " << w1 << "-" << w2 << std::endl;
                     
-                    if(edge_edge_intersect(v1,v2,w1,w2,true)) {
+                    if(edge_edge_intersect(v1,v2,w1,w2)) {
 
                         vec3Q P1 = vertex_[v1].point_exact;
                         vec3Q P2 = vertex_[v2].point_exact;
@@ -685,7 +654,7 @@ namespace {
                                       << f1 << " " << f2 << " " << f3 << std::endl;
                         }
 
-                        index_t x = add_vertex(Vertex(mesh_,I));
+                        index_t x = add_vertex(Vertex(this,I));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
                         edges_[e1] = std::make_pair(v1,x);
@@ -704,7 +673,7 @@ namespace {
             while(fix_one_intersection());
         }
         
-        bool check_constraints(bool exact = false) const {
+        bool check_constraints() const {
             Mesh debug_constraints;
             Attribute<bool> debug_vertex_show(
                 debug_constraints.vertices.attributes(), "selection"
@@ -714,9 +683,9 @@ namespace {
             // Test duplicated vertices
             for(index_t i=0; i<vertex_.size(); ++i) {
                 for(index_t j=i+1; j<vertex_.size(); ++j) {
-                    if(same_point(i,j,exact)) {
+                    if(same_point(i,j)) {
                         result = false;
-                        log_err(exact);
+                        log_err();
                         std::cerr << "Same point ("<<i<<","<<j<<")"<<std::endl;
                         std::cerr << "   " <<vertex_[i].to_string()<<std::endl;
                         std::cerr << "   " <<vertex_[j].to_string()<<std::endl;
@@ -736,15 +705,15 @@ namespace {
                     }
                 }
                 for(index_t v=3; v<vertex_.size(); ++v) {
-                    Sign o1 = orient2d(1,2,v,exact);
-                    Sign o2 = orient2d(2,0,v,exact);
-                    Sign o3 = orient2d(0,1,v,exact);
+                    Sign o1 = orient2d(1,2,v);
+                    Sign o2 = orient2d(2,0,v);
+                    Sign o3 = orient2d(0,1,v);
                     o1 = Sign(o1*f1_orient_);
                     o2 = Sign(o2*f1_orient_);
                     o3 = Sign(o3*f1_orient_);                    
                     if(o1 == NEGATIVE || o2 == NEGATIVE || o3 == NEGATIVE) {
                         result = false;
-                        log_err(exact);
+                        log_err();
                         std::cerr << "Point outside tri ("<<v<<")" <<std::endl;
                         std::cerr << o1 << " " << o2 << " " << o3  <<std::endl;
                         std::cerr << "on macro edge:" << on_macro_edge[v]
@@ -757,7 +726,7 @@ namespace {
                     geo_assert(nb_zeros < 2);
                     if(nb_zeros == 1 && (on_macro_edge[v] == -1)) {
                         result = false;
-                        log_err(exact);
+                        log_err();
                         std::cerr << "Inner point on macro edge (" << v << ")"
                                   << std::endl;
                         std::cerr << "   " <<vertex_[v].to_string()<<std::endl;
@@ -772,10 +741,10 @@ namespace {
                 for(std::pair<index_t,index_t> E: edges_) {
                     if(
                         i != E.first && i != E.second && 
-                        vertex_on_edge(i, E.first, E.second, exact)
+                        vertex_on_edge(i, E.first, E.second)
                     ) {
                         result = false;
-                        log_err(exact);
+                        log_err();
                         std::cerr << "Point on edge !" << std::endl;
                         std::cerr << "    Pt:"<< vertex_[i].to_string()
                                   << std::endl;
@@ -808,10 +777,10 @@ namespace {
                         continue;
                     }
                     if(edge_edge_intersect(
-                           E1.first, E1.second, E2.first, E2.second, exact
+                           E1.first, E1.second, E2.first, E2.second
                     )) {
                         result = false;
-                        log_err(exact);
+                        log_err();
                         std::cerr << "Intersecting edges !" << std::endl;
                         std::cerr << "   Edge1: " 
                                   << vertex_[E1.first].to_string()
@@ -834,28 +803,6 @@ namespace {
                         debug_vertex_show[E1.second] = true;
                         debug_vertex_show[E2.first] = true;
                         debug_vertex_show[E2.second] = true;
-
-
-                        if(exact) {
-                            Mesh debug_show;
-                            debug_show.vertices.set_dimension(2);
-                            vec2 p;
-                            p.x = vertex_[E1.first].point_exact[u_].estimate();
-                            p.y = vertex_[E1.first].point_exact[v_].estimate();
-                            debug_show.vertices.create_vertex(p.data());
-                            p.x = vertex_[E1.second].point_exact[u_].estimate();
-                            p.y = vertex_[E1.second].point_exact[v_].estimate();
-                            debug_show.vertices.create_vertex(p.data());
-                            p.x = vertex_[E2.first].point_exact[u_].estimate();
-                            p.y = vertex_[E2.first].point_exact[v_].estimate();
-                            debug_show.vertices.create_vertex(p.data());
-                            p.x = vertex_[E2.second].point_exact[u_].estimate();
-                            p.y = vertex_[E2.second].point_exact[v_].estimate();
-                            debug_show.vertices.create_vertex(p.data());
-                            debug_show.edges.create_edge(0,1);
-                            debug_show.edges.create_edge(2,3);
-                            mesh_save(debug_show,"debug_show_exact.geogram");
-                        }
                     }
                 }
             }
@@ -864,7 +811,7 @@ namespace {
                 mesh_save(
                     debug_constraints,
                     "debug_constraints_" + String::to_string(f1_) +
-                    (exact ? "_exact" : "_inexact") + ".geogram"
+                    ".geogram"
                 );
             }
 
@@ -881,30 +828,28 @@ namespace {
             return result;
         }
 
-        bool same_point(index_t i, index_t j, bool exact=false) const {
-            return exact ?
-                PCK::same_point(vertex_[i].point_exact, vertex_[j].point_exact):
-                PCK::same_point(vertex_[i].point,       vertex_[j].point      );
+        bool same_point(index_t i, index_t j) const {
+            return PCK::same_point(
+                vertex_[i].point_exact,
+                vertex_[j].point_exact
+            );
         }
 
-        bool vertex_on_edge(
-            index_t i, index_t j, index_t k, bool exact=false
-        ) const {
-            if(orient2d(i,j,k,exact) != ZERO) {
+        bool vertex_on_edge(index_t i, index_t j, index_t k) const {
+            if(orient2d(i,j,k) != ZERO) {
                 return false;
             }
-            Sign o = dot3d(i,j,k,exact);
+            Sign o = dot3d(i,j,k);
             return (int(o) <= 0);
         }
 
         bool edge_edge_intersect(
             index_t i, index_t j,
-            index_t k, index_t l,
-            bool exact = false
+            index_t k, index_t l
         ) const {
             
-            Sign o1 = orient2d(i,j,k,exact);
-            Sign o2 = orient2d(i,j,l,exact);
+            Sign o1 = orient2d(i,j,k);
+            Sign o2 = orient2d(i,j,l);
 
             if(o1*o2 > 0) {
                 return false;
@@ -912,52 +857,34 @@ namespace {
 
             // Particular case: 1D
             if(o1 == 0 && o2 == 0) {
-                Sign d1 = dot3d(k,i,j,exact);
-                Sign d2 = dot3d(l,i,j,exact);
+                Sign d1 = dot3d(k,i,j);
+                Sign d2 = dot3d(l,i,j);
                 return (d1 <= 0 || d2 <= 0);
             }
             
-            Sign o3 = orient2d(k,l,i,exact);
-            Sign o4 = orient2d(k,l,j,exact);
+            Sign o3 = orient2d(k,l,i);
+            Sign o4 = orient2d(k,l,j);
             return (o3*o4 <= 0);
         } 
         
 
-        Sign orient2d(index_t v1,index_t v2,index_t v3,bool exact=false) const {
-            if(exact) {
-                return PCK::orient_2d_projected(
-                    vertex_[v1].point_exact,
-                    vertex_[v2].point_exact,
-                    vertex_[v3].point_exact,
-                    f1_normal_axis_
-                );
-            }
-            return PCK::orient_2d(project(v1), project(v2), project(v3));
+        Sign orient2d(index_t v1,index_t v2,index_t v3) const {
+            return PCK::orient_2d_projected(
+                vertex_[v1].point_exact,
+                vertex_[v2].point_exact,
+                vertex_[v3].point_exact,
+                f1_normal_axis_
+            );
         }
 
-        Sign dot3d(index_t v1, index_t v2, index_t v3, bool exact=false) const {
-            if(exact) {
-                return PCK::dot_3d(
-                    vertex_[v1].point_exact,
-                    vertex_[v2].point_exact,
-                    vertex_[v3].point_exact                    
-                );
-            }
+        Sign dot3d(index_t v1, index_t v2, index_t v3) const {
             return PCK::dot_3d(
-                vertex_[v1].point,
-                vertex_[v2].point,
-                vertex_[v3].point
+                vertex_[v1].point_exact,
+                vertex_[v2].point_exact,
+                vertex_[v3].point_exact                    
             );
         }
         
-        vec2 project(vec3 p) const {
-            return vec2(p[u_], p[v_]);
-        }
-        
-        vec2 project(index_t v) const {
-            return project(vertex_[v].point);
-        }
-
         index_t add_vertex(const Vertex& V) {
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(PCK::same_point(vertex_[i].point_exact,V.point_exact)) {
@@ -1006,6 +933,13 @@ namespace {
             }
             std::cerr << "Houston, we got a problem (while remeshing facet "
                       << f1_ << "):" << std::endl;
+        }
+
+        vec2 project(index_t i) const {
+            return vec2(
+                vertex_[i].point_exact[u_].estimate(),
+                vertex_[i].point_exact[v_].estimate()
+            );
         }
         
     private:

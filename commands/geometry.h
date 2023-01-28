@@ -4,8 +4,12 @@
 
 namespace GEO {
 
+    typedef vecng<2,expansion_nt> vec2E;    
+    typedef vecng<2,rational_nt>  vec2Q;
+    
     typedef vecng<3,expansion_nt> vec3E;    
     typedef vecng<3,rational_nt>  vec3Q;
+
     
     class vec3QLexicoCompare {
     public:
