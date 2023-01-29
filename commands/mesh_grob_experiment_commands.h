@@ -62,7 +62,8 @@ namespace OGF {
             bool check_neighboring_triangles = true,
             bool post_connect_facets=true,
             bool order_facets=true,
-            bool FPE=true
+            bool FPE=true,
+            bool check_constraints=true
         );
 
         /**

@@ -168,7 +168,10 @@ namespace {
                 if(mesh_vertex_index != NO_INDEX) {
                     vec3 point(mesh().vertices.point_ptr(mesh_vertex_index));
                     point_exact = convert_vec3_generic<rational_nt>(point);
-                    // UV_exact = vec2Q(point_exact[u_], point_exact[v]);
+                    UV_exact = vec2Q(
+                        point_exact[mesh_in_triangle->u_],
+                        point_exact[mesh_in_triangle->v_]
+                    );
                     return;
                 }
                 
@@ -232,6 +235,11 @@ namespace {
                             ) ;
                     }
                 }
+
+                UV_exact = vec2Q(
+                    point_exact[mesh_in_triangle->u_],
+                    point_exact[mesh_in_triangle->v_]
+                );
             }
 
             /**
@@ -279,7 +287,11 @@ namespace {
         };
 
         
-        MeshInTriangle(Mesh& M) : mesh_(M), f1_(index_t(-1)) {
+        MeshInTriangle(Mesh& M, bool check_cnstr) :
+            mesh_(M),
+            f1_(index_t(-1)),
+            check_cnstr_(check_cnstr)
+        {
         }
 
         Mesh& mesh() {
@@ -428,7 +440,7 @@ namespace {
 
         void commit() {
 
-            bool OK = check_constraints();
+            bool OK = check_cnstr_ ? check_constraints() : true;
             
             // Create all vertices (or find them if they already exist)
             for(index_t i=0; i<vertex_.size(); ++i) {
@@ -603,14 +615,6 @@ namespace {
                         index_t f2 = common_facet(v1,v2);
                         index_t f3 = common_facet(w1,w2);
 
-                        /*
-                        if(f2 == index_t(-1) || f3 ==index_t(-1)) {
-                            Mesh constraints;
-                            get_constraints(constraints);
-                            mesh_save(constraints, "constraints.geogram");
-                        }
-                        */
-                        
                         geo_assert(f1 != index_t(-1));
                         geo_assert(f2 != index_t(-1));
                         geo_assert(f3 != index_t(-1));                        
@@ -649,11 +653,6 @@ namespace {
                             }
                         }
                         
-                        if(false) {
-                            std::cerr << "Triple point: "
-                                      << f1 << " " << f2 << " " << f3 << std::endl;
-                        }
-
                         index_t x = add_vertex(Vertex(this,I));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
@@ -953,7 +952,8 @@ namespace {
         vector<std::pair<index_t, index_t> > edges_;
         vector<index_t> vertices_in_E_[3];
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
-        std::map<trindex, index_t> t_v_table_; 
+        std::map<trindex, index_t> t_v_table_;
+        bool check_cnstr_;
     };
 
     /***********************************************************************/
@@ -1116,7 +1116,8 @@ namespace {
     }
     
     void intersect_surface_impl(
-        Mesh& M, bool test_adjacent_facets, bool order_facets, bool FPE
+        Mesh& M, bool test_adjacent_facets, bool order_facets,
+        bool FPE, bool check_constraints
     ) {
 
         // Set symbolic perturbation mode to lexicographic order
@@ -1197,7 +1198,7 @@ namespace {
             }
         );
 
-        MeshInTriangle TM(M);
+        MeshInTriangle TM(M,check_constraints);
         remesh_intersected_triangles(TM, intersections);
         
         vector<index_t> has_intersections(M.facets.nb(), 0);
@@ -1229,7 +1230,8 @@ namespace OGF {
         bool test_neighboring_triangles,
         bool post_connect_facets,
         bool order_facets,
-        bool FPE
+        bool FPE,
+        bool check_constraints
     ) {
         if(!mesh_grob()->facets.are_simplices()) {
             Logger::err("Intersect") << "Mesh is not triangulated"
@@ -1255,7 +1257,8 @@ namespace OGF {
         }
         
         intersect_surface_impl(
-            *mesh_grob(), test_neighboring_triangles, order_facets, FPE
+            *mesh_grob(), test_neighboring_triangles,
+            order_facets, FPE, check_constraints
         );
 
         if(post_connect_facets) {
