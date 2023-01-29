@@ -75,6 +75,7 @@ namespace {
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
             ) {
+                geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
                 mesh_in_triangle = M;
                 init_sym(f1,f2,R1,R2);
@@ -82,17 +83,23 @@ namespace {
             }
 
             Vertex(MeshInTriangle* M, index_t f, index_t lv) {
+                geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
                 mesh_in_triangle = M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
                 init_geometry();
             }
 
-            Vertex(MeshInTriangle* M, const vec3Q& point_exact_in) {
+            Vertex(
+                MeshInTriangle* M,
+                const vec3Q& point_exact_in,
+                const vec2Q& UV_exact_in
+            ) : point_exact(point_exact_in),
+                UV_exact(UV_exact_in)
+            {
                 type = SECONDARY_ISECT;                
                 mesh_in_triangle = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
-                point_exact = point_exact_in;
             }
             
             Vertex() {
@@ -438,6 +445,28 @@ namespace {
 
     protected:
 
+        index_t add_vertex(const Vertex& V) {
+            // Test whether there is already a vertex at the same position
+            for(index_t i=0; i<vertex_.size(); ++i) {
+                // TODO: can we use UV_exact instead ?
+                if(PCK::same_point(vertex_[i].UV_exact,V.UV_exact)) {
+                    // If the vertex already exist, update its list of
+                    // incident facets
+                    if(
+                        V.sym.f2 != index_t(-1) &&
+                        !vertex_[i].is_on_facet(V.sym.f2)) {
+                        vertex_[i].facets.push_back(V.sym.f2);
+                    }
+                    // Return found vertex
+                    return i;
+                }
+            }
+            // There was no vertex at the same position, so add it
+            // to the list of vertices
+            vertex_.push_back(V);
+            return vertex_.size()-1;
+        }
+        
         void commit() {
 
             bool OK = check_cnstr_ ? check_constraints() : true;
@@ -652,8 +681,9 @@ namespace {
                                 geo_assert_not_reached;
                             }
                         }
-                        
-                        index_t x = add_vertex(Vertex(this,I));
+
+                        vec2Q I_UV(I[u_],I[v_]);
+                        index_t x = add_vertex(Vertex(this,I,I_UV));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
                         edges_[e1] = std::make_pair(v1,x);
@@ -829,8 +859,8 @@ namespace {
 
         bool same_point(index_t i, index_t j) const {
             return PCK::same_point(
-                vertex_[i].point_exact,
-                vertex_[j].point_exact
+                vertex_[i].UV_exact,
+                vertex_[j].UV_exact
             );
         }
 
@@ -868,36 +898,21 @@ namespace {
         
 
         Sign orient2d(index_t v1,index_t v2,index_t v3) const {
-            return PCK::orient_2d_projected(
-                vertex_[v1].point_exact,
-                vertex_[v2].point_exact,
-                vertex_[v3].point_exact,
-                f1_normal_axis_
+            return PCK::orient_2d(
+                vertex_[v1].UV_exact,
+                vertex_[v2].UV_exact,
+                vertex_[v3].UV_exact
             );
         }
 
         Sign dot3d(index_t v1, index_t v2, index_t v3) const {
-            return PCK::dot_3d(
-                vertex_[v1].point_exact,
-                vertex_[v2].point_exact,
-                vertex_[v3].point_exact                    
+            return PCK::dot_2d(
+                vertex_[v1].UV_exact,
+                vertex_[v2].UV_exact,
+                vertex_[v3].UV_exact
             );
         }
         
-        index_t add_vertex(const Vertex& V) {
-            for(index_t i=0; i<vertex_.size(); ++i) {
-                if(PCK::same_point(vertex_[i].point_exact,V.point_exact)) {
-                    if(
-                        V.sym.f2 != index_t(-1) &&
-                        !vertex_[i].is_on_facet(V.sym.f2)) {
-                        vertex_[i].facets.push_back(V.sym.f2);
-                    }
-                    return i;
-                }
-            }
-            vertex_.push_back(V);
-            return vertex_.size()-1;
-        }
         
         void clear() {
             vertex_.resize(0);
@@ -924,12 +939,7 @@ namespace {
             std::cerr << std::endl;
         }
         
-        void log_err(bool exact=false) const {
-            if(exact) {
-                std::cerr << "[Exact] ";
-            } else {
-                std::cerr << "[Inexact] ";                
-            }
+        void log_err() const {
             std::cerr << "Houston, we got a problem (while remeshing facet "
                       << f1_ << "):" << std::endl;
         }

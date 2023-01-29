@@ -35,8 +35,12 @@ namespace GEO {
     
     namespace PCK {
 
-        template <class VEC> bool same_point(const VEC& v1, const VEC& v2) {
+        template <class T> bool same_point(const vecng<3,T>& v1, const vecng<3,T>& v2) {
             return (v1.x == v2.x) && (v1.y == v2.y) && (v2.z == v1.z);
+        }
+
+        template <class T> bool same_point(const vecng<2,T>& v1, const vecng<2,T>& v2) {
+            return (v1.x == v2.x) && (v1.y == v2.y);
         }
         
         /**
@@ -119,8 +123,26 @@ namespace GEO {
 #endif
             return o1;            
         }
-        
+
         Sign dot_3d(const vec3Q& p0, const vec3Q& p1, const vec3Q& p2) {
+            return dot(p1-p0,p2-p0).sign();
+        }
+
+        Sign orient_2d(
+            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
+        ) {
+            rational_nt a11 = p1.x - p0.x;
+            rational_nt a12 = p1.y - p0.y;
+            rational_nt a21 = p2.x - p0.x;
+            rational_nt a22 = p2.y - p0.y;
+            rational_nt Delta = det2x2(
+                a11,a12,
+                a21,a22
+            );
+            return Delta.sign();
+        }
+        
+        Sign dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2) {
             return dot(p1-p0,p2-p0).sign();
         }
         
