@@ -69,7 +69,6 @@ namespace {
                 UNINITIALIZED, MESH_VERTEX, PRIMARY_ISECT, SECONDARY_ISECT
             };
 
-
             Vertex(
                 MeshInTriangle* M,
                 index_t f1, index_t f2,
@@ -145,7 +144,11 @@ namespace {
             }
             
         protected:
-
+            
+            vec3 mesh_facet_vertex(index_t f, index_t lv) const {
+                return mesh_in_triangle->mesh_facet_vertex(f,lv);
+            }
+            
             void init_sym(
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
@@ -268,9 +271,9 @@ namespace {
                     lv2 = (lv2+e+1)%3;
                     lv3 = (lv3+e+1)%3;                    
                 }
-                p1 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv1)));
-                p2 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv2)));
-                p3 = vec3(mesh().vertices.point_ptr(mesh().facets.vertex(f,lv3)));
+                p1 = mesh_facet_vertex(f,lv1);
+                p2 = mesh_facet_vertex(f,lv2);
+                p3 = mesh_facet_vertex(f,lv3);                
             }
             
         public:
@@ -308,9 +311,9 @@ namespace {
         void begin_facet(index_t f) {
             f1_ = f;
             f1_normal_axis_ = ::GEO::Geom::triangle_normal_axis(
-                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,0))),
-                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,1))),
-                vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f,2)))
+                mesh_facet_vertex(f,0),
+                mesh_facet_vertex(f,1),
+                mesh_facet_vertex(f,2)                
             );
             u_ = coord_index_t((f1_normal_axis_ + 1) % 3);
             v_ = coord_index_t((f1_normal_axis_ + 2) % 3);
@@ -356,76 +359,37 @@ namespace {
         void end_facet() {
             bool ok = true;
 
-            Mesh debug_constraints;
-            
             // Sanity check: the facet does not have zero area
             geo_assert(f1_orient_ != ZERO);
-
 
             compute_constraints_intersections();
             
             // Sort vertices along triangle's edges
             {
                 for(index_t e=0; e<3; ++e) {
-                    index_t v_opp = e;       // f1's vertex opposite to e
+                    index_t v_org = (e+1)%3; // e's origin                    
                     std::sort(
                         vertices_in_E_[e].begin(),
                         vertices_in_E_[e].end(),
                         [&](index_t v1, index_t v2)->bool{
-
-                            Sign o12 = orient2d(v1,v2,v_opp);
-                            bool result_1 = (o12 == f1_orient_);
-#ifdef GEO_DEBUG
-                            index_t v_org = (e+1)%3; // e's origin
-                            
                             // Supposed to be negative if
                             // v1 is between v_org and v2 (what we want)
-                            Sign o_o12 = dot3d(v1,v_org,v2);
-                            
-                            if(o12 == ZERO || o_o12 == ZERO) {
+                            Sign o12 = dot2d(v1,v_org,v2);
+                            if(o12 == ZERO) {
                                 log_err();
                                 std::cerr << "Macro edge: " << e << std::endl;
                                 std::cerr << "(found two coincident vertices)"
                                           << std::endl;
                                 std::cerr <<vertex_[v1].to_string() <<std::endl;
                                 std::cerr <<vertex_[v2].to_string() <<std::endl;
-                                
-                                get_constraints(debug_constraints);
                                 ok = false;
                             }
-
-                            bool result_2 = (o_o12 == NEGATIVE);
-
-                            if(result_1 != result_2) {
-                                log_err();
-                                std::cerr << "Macro edge: " << e << std::endl;
-                                std::cerr << "Different results in two tests: "
-                                          << std::endl;
-                                std::cerr << " 2d: " << o12
-                                          << " ==? "  << f1_orient_
-                                          << std::endl;
-                                std::cerr << " 3d: " << o_o12
-                                          << " negative?"
-                                          << std::endl;
-
-                                get_constraints(debug_constraints);
-                                ok = false;
-                            }
-#endif                            
-                            return result_1;
+                            return (o12 == NEGATIVE);
                         }
                     );
                 }
             }
 
-            
-            if(!ok) {
-                mesh_save(
-                    debug_constraints,
-                    "constraints_" + String::to_string(f1_) + ".geogram"
-                );
-            }
-            
             // Create edges along f1's edges, in MeshInTriangle data structure
             {
                 for(index_t e=0; e<3; ++e) {
@@ -445,10 +409,14 @@ namespace {
 
     protected:
 
+        vec3 mesh_facet_vertex(index_t f, index_t lv) const {
+            index_t v = mesh_.facets.vertex(f,lv);
+            return vec3(mesh_.vertices.point_ptr(v));
+        }
+        
         index_t add_vertex(const Vertex& V) {
             // Test whether there is already a vertex at the same position
             for(index_t i=0; i<vertex_.size(); ++i) {
-                // TODO: can we use UV_exact instead ?
                 if(PCK::same_point(vertex_[i].UV_exact,V.UV_exact)) {
                     // If the vertex already exist, update its list of
                     // incident facets
@@ -481,20 +449,6 @@ namespace {
 
                 const vec3Q& K = vertex_[i].point_exact;
 
-                // Debug display creation of triple points
-                if(
-                    false && 
-                    vertex_[i].sym.R1 == T1_RGN_T &&
-                    vertex_[i].sym.R2 == T2_RGN_T 
-                ) {
-                    auto it = g_v_table_.find(K);
-                    if(it == g_v_table_.end()) {
-                        std::cerr << "New triple point" << std::endl;
-                    } else {
-                        std::cerr << "Existing triple point" << std::endl;
-                    }
-                } 
-                
                 auto it = g_v_table_.find(K);
                 if(it != g_v_table_.end()) {
                     vertex_[i].mesh_vertex_index = it->second;
@@ -513,7 +467,6 @@ namespace {
             // Create a 2D constrained Delaunay triangulation
             Mesh constraints;
             get_constraints(constraints);
-            
 
             if(!OK) {
                 std::cerr << "==============================>>>>"
@@ -612,12 +565,16 @@ namespace {
             return result;
         }
         
-        bool fix_one_intersection() {
-            // Test constrained edges intersections
+        void compute_constraints_intersections() {
+
+            // I don't like to use vectors of vectors, but well...
+            vector<vector<index_t> > new_vertices_in_edge(edges_.size());
+
+            // Step 1: Compute all intersections
             for(index_t e1=0; e1<edges_.size(); ++e1) {
                 index_t v1 = edges_[e1].first;
                 index_t v2 = edges_[e1].second;
-                for(index_t e2=e1+1; e2 < edges_.size(); ++e2) {
+                for(index_t e2=e1+1; e2<edges_.size(); ++e2) {
                     index_t w1 = edges_[e2].first;
                     index_t w2 = edges_[e2].second;
                     if(v1 == w1 || v1 == w2 || v2 == w1 || v2 == w2) {
@@ -627,18 +584,11 @@ namespace {
                         // along an edge with an existing vertex.
                         continue;
                     }
-
                     // TODO: check whether intersection is one of the
                     // vertices.
+                    // TODO: check co-linear edges
 
-                    // std::cerr << v1 << "-" << v2 << " /\\ " << w1 << "-" << w2 << std::endl;
-                    
                     if(edge_edge_intersect(v1,v2,w1,w2)) {
-
-                        vec3Q P1 = vertex_[v1].point_exact;
-                        vec3Q P2 = vertex_[v2].point_exact;
-                        vec3Q Q1 = vertex_[w1].point_exact;
-                        vec3Q Q2 = vertex_[w2].point_exact;
 
                         index_t f1 = f1_;
                         index_t f2 = common_facet(v1,v2);
@@ -649,15 +599,15 @@ namespace {
                         geo_assert(f3 != index_t(-1));                        
 
                         vec3 P[9] = {
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,0))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,1))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f1,2))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,0))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,1))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f2,2))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,0))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,1))),
-                            vec3(mesh_.vertices.point_ptr(mesh_.facets.vertex(f3,2)))
+                            mesh_facet_vertex(f1,0),
+                            mesh_facet_vertex(f1,1),
+                            mesh_facet_vertex(f1,2),
+                            mesh_facet_vertex(f2,0),
+                            mesh_facet_vertex(f2,1),
+                            mesh_facet_vertex(f2,2),
+                            mesh_facet_vertex(f3,0),
+                            mesh_facet_vertex(f3,1),
+                            mesh_facet_vertex(f3,2)                            
                         };
 
                         vec3Q I;
@@ -670,6 +620,10 @@ namespace {
                            )
                         ) {
                             std::cerr << " 2D cnstr isect" << std::endl;
+                            const vec3Q& P1 = vertex_[v1].point_exact;
+                            const vec3Q& P2 = vertex_[v2].point_exact;
+                            const vec3Q& Q1 = vertex_[w1].point_exact;
+                            const vec3Q& Q2 = vertex_[w2].point_exact;
                             if(
                                 !get_segment_segment_intersection_2D_bis(
                                     I,
@@ -681,25 +635,60 @@ namespace {
                                 geo_assert_not_reached;
                             }
                         }
-
                         vec2Q I_UV(I[u_],I[v_]);
                         index_t x = add_vertex(Vertex(this,I,I_UV));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
-                        edges_[e1] = std::make_pair(v1,x);
-                        edges_[e2] = std::make_pair(w1,x);
-                        edges_.push_back(std::make_pair(x,v2));
-                        edges_.push_back(std::make_pair(x,w2));
-                        
-                        return true;
+
+                        new_vertices_in_edge[e1].push_back(x);
+                        new_vertices_in_edge[e2].push_back(x);                        
                     }
                 }
             }
-            return false;
-        }
-        
-        void compute_constraints_intersections() {
-            while(fix_one_intersection());
+
+            // Step 2: sort intersections in edges
+            for(index_t e=0; e<edges_.size(); ++e) {
+                vector<index_t>& V = new_vertices_in_edge[e];
+                index_t v_org = edges_[e].first;
+                std::sort(
+                    V.begin(), V.end(),
+                    [&](index_t v1, index_t v2)->bool {
+                        // Supposed to be negative if
+                        // v1 is between v_org and v2 (what we want)
+                        Sign o_o12 = dot2d(v1,v_org,v2);
+                        if(o_o12 == ZERO) {
+                            std::cerr << "Same intersection in edge"
+                                      << std::endl;
+                        }
+                        return (o_o12 == NEGATIVE);
+                    }
+                );
+                // There can be degenerate vertices if there is
+                // a triple point in the triangle (quadruple point
+                // in 3D) ... shit happens ! [Forrest Gump]
+                V.erase(
+                    std::unique(V.begin(), V.end()), V.end()
+                );
+
+                // TODO: check intersections on edge extremities...
+            }
+
+            // Step 3: "remesh" edges with intersection
+            for(index_t e=0; e<new_vertices_in_edge.size(); ++e) {
+                index_t prev_v = edges_[e].first;
+                index_t last_v = edges_[e].second;
+                new_vertices_in_edge[e].push_back(last_v);
+                for(index_t i=0; i<new_vertices_in_edge[e].size(); ++i) {
+                    index_t cur_v = new_vertices_in_edge[e][i];
+                    if(i == 0) {
+                        edges_[e].second = cur_v;
+                    } else {
+                        edges_.push_back(std::make_pair(prev_v, cur_v));
+                    }
+                    prev_v = cur_v;
+                }
+            }
+            
         }
         
         bool check_constraints() const {
@@ -868,7 +857,7 @@ namespace {
             if(orient2d(i,j,k) != ZERO) {
                 return false;
             }
-            Sign o = dot3d(i,j,k);
+            Sign o = dot2d(i,j,k);
             return (int(o) <= 0);
         }
 
@@ -886,9 +875,13 @@ namespace {
 
             // Particular case: 1D
             if(o1 == 0 && o2 == 0) {
-                Sign d1 = dot3d(k,i,j);
-                Sign d2 = dot3d(l,i,j);
-                return (d1 <= 0 || d2 <= 0);
+                Sign d1 = dot2d(k,i,j);
+                Sign d2 = dot2d(l,i,j);
+                bool result = (d1 <= 0 || d2 <= 0);
+                if(result) {
+                    std::cerr << "Isect in co-linear edges" << std::endl;
+                }
+                return result;
             }
             
             Sign o3 = orient2d(k,l,i);
@@ -905,7 +898,7 @@ namespace {
             );
         }
 
-        Sign dot3d(index_t v1, index_t v2, index_t v3) const {
+        Sign dot2d(index_t v1, index_t v2, index_t v3) const {
             return PCK::dot_2d(
                 vertex_[v1].UV_exact,
                 vertex_[v2].UV_exact,
