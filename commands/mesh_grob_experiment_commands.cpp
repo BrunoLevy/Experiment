@@ -187,12 +187,12 @@ namespace {
                 
                 geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
                 
-                // The three vertices of f1. If intersetion is on an edge
+                // The three vertices of f1. If intersection is on an edge
                 // of f1, then [p1,p2] are the vertices of that edge.
                 vec3 p1,p2,p3;
                 get_vertices(sym.R1,p1,p2,p3);
 
-                // The three vertices of f2. If intersetion is on an edge
+                // The three vertices of f2. If intersection is on an edge
                 // of f2, then [q1,q2] are the vertices of that edge.
                 vec3 q1,q2,q3;
                 get_vertices(sym.R2,q1,q2,q3);                
@@ -357,63 +357,37 @@ namespace {
         }
 
         void end_facet() {
-            bool ok = true;
-
             // Sanity check: the facet does not have zero area
             geo_assert(f1_orient_ != ZERO);
 
             compute_constraints_intersections();
             
-            // Sort vertices along triangle's edges
-            {
-                for(index_t e=0; e<3; ++e) {
-                    index_t v_org = (e+1)%3; // e's origin                    
-                    std::sort(
-                        vertices_in_E_[e].begin(),
-                        vertices_in_E_[e].end(),
-                        [&](index_t v1, index_t v2)->bool{
-                            // Supposed to be negative if
-                            // v1 is between v_org and v2 (what we want)
-                            Sign o12 = dot2d(v1,v_org,v2);
-                            if(o12 == ZERO) {
-                                log_err();
-                                std::cerr << "Macro edge: " << e << std::endl;
-                                std::cerr << "(found two coincident vertices)"
-                                          << std::endl;
-                                std::cerr <<vertex_[v1].to_string() <<std::endl;
-                                std::cerr <<vertex_[v2].to_string() <<std::endl;
-                                ok = false;
-                            }
-                            return (o12 == NEGATIVE);
-                        }
-                    );
-                }
+            // Sort vertices along macro-triangle's edges
+            for(index_t e=0; e<3; ++e) {
+                std::pair<index_t, index_t> E = std::make_pair(
+                    (e+1)%3, (e+2)%3
+                );
+                sort_vertices_along_edge(E, vertices_in_E_[e]);
             }
 
             // Create edges along f1's edges, in MeshInTriangle data structure
-            {
-                for(index_t e=0; e<3; ++e) {
-                    index_t v0 = (e+1)%3;
-                    index_t v1 = (e+2)%3;
-                    index_t prev = v0;
-                    for(index_t v: vertices_in_E_[e]) {
-                        edges_.push_back(std::make_pair(prev, v));
-                        prev = v;
-                    }
-                    edges_.push_back(std::make_pair(prev, v1));
+            for(index_t e=0; e<3; ++e) {
+                index_t v0 = (e+1)%3;
+                index_t v1 = (e+2)%3;
+                index_t prev = v0;
+                for(index_t v: vertices_in_E_[e]) {
+                    edges_.push_back(std::make_pair(prev, v));
+                    prev = v;
                 }
+                edges_.push_back(std::make_pair(prev, v1));
             }
+
             commit();
             clear();
         }
 
     protected:
 
-        vec3 mesh_facet_vertex(index_t f, index_t lv) const {
-            index_t v = mesh_.facets.vertex(f,lv);
-            return vec3(mesh_.vertices.point_ptr(v));
-        }
-        
         index_t add_vertex(const Vertex& V) {
             // Test whether there is already a vertex at the same position
             for(index_t i=0; i<vertex_.size(); ++i) {
@@ -437,6 +411,7 @@ namespace {
         
         void commit() {
 
+            // Sanity check
             bool OK = check_cnstr_ ? check_constraints() : true;
             
             // Create all vertices (or find them if they already exist)
@@ -447,12 +422,15 @@ namespace {
                     continue;
                 }
 
+                // Use exact geometry as key
                 const vec3Q& K = vertex_[i].point_exact;
-
                 auto it = g_v_table_.find(K);
                 if(it != g_v_table_.end()) {
+                    // Vertex alreay exists in target mesh
                     vertex_[i].mesh_vertex_index = it->second;
                 } else {
+                    // Vertex does not exist in target mesh,
+                    // create it and update table
                     vec3 p(
                         vertex_[i].point_exact.x.estimate(),
                         vertex_[i].point_exact.y.estimate(),
@@ -635,45 +613,24 @@ namespace {
                                 geo_assert_not_reached;
                             }
                         }
+                        
                         vec2Q I_UV(I[u_],I[v_]);
                         index_t x = add_vertex(Vertex(this,I,I_UV));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
 
                         new_vertices_in_edge[e1].push_back(x);
-                        new_vertices_in_edge[e2].push_back(x);                        
+                        new_vertices_in_edge[e2].push_back(x);
                     }
                 }
             }
 
             // Step 2: sort intersections in edges
             for(index_t e=0; e<edges_.size(); ++e) {
-                vector<index_t>& V = new_vertices_in_edge[e];
-                index_t v_org = edges_[e].first;
-                std::sort(
-                    V.begin(), V.end(),
-                    [&](index_t v1, index_t v2)->bool {
-                        // Supposed to be negative if
-                        // v1 is between v_org and v2 (what we want)
-                        Sign o_o12 = dot2d(v1,v_org,v2);
-                        if(o_o12 == ZERO) {
-                            std::cerr << "Same intersection in edge"
-                                      << std::endl;
-                        }
-                        return (o_o12 == NEGATIVE);
-                    }
-                );
-                // There can be degenerate vertices if there is
-                // a triple point in the triangle (quadruple point
-                // in 3D) ... shit happens ! [Forrest Gump]
-                V.erase(
-                    std::unique(V.begin(), V.end()), V.end()
-                );
-
-                // TODO: check intersections on edge extremities...
+                sort_vertices_along_edge(edges_[e], new_vertices_in_edge[e]);
             }
 
-            // Step 3: "remesh" edges with intersection
+            // Step 3: "remesh" the edges that have intersections
             for(index_t e=0; e<new_vertices_in_edge.size(); ++e) {
                 index_t prev_v = edges_[e].first;
                 index_t last_v = edges_[e].second;
@@ -846,6 +803,39 @@ namespace {
             return result;
         }
 
+
+        void sort_vertices_along_edge(
+            std::pair<index_t, index_t> E,
+            vector<index_t>& V
+        ) {
+            index_t v_org = E.first;
+            std::sort(
+                V.begin(), V.end(),
+                [&](index_t v1, index_t v2)->bool {
+                    // Supposed to be negative if
+                    // v1 is between v_org and v2 (what we want)
+                    Sign o_o12 = dot2d(v1,v_org,v2);
+                    if(o_o12 == ZERO) {
+                        std::cerr << "Duplicated vertex in edge"
+                                  << std::endl;
+                    }
+                    return (o_o12 == NEGATIVE);
+                }
+            );
+            // There can be degenerate vertices if there is
+            // a triple point in the triangle (quadruple point
+            // in 3D) ... shit happens ! [Forrest Gump]
+            V.erase(
+                std::unique(V.begin(), V.end()), V.end()
+            );
+            // TODO: check intersections on edge extremities...
+        }
+        
+        vec3 mesh_facet_vertex(index_t f, index_t lv) const {
+            index_t v = mesh_.facets.vertex(f,lv);
+            return vec3(mesh_.vertices.point_ptr(v));
+        }
+        
         bool same_point(index_t i, index_t j) const {
             return PCK::same_point(
                 vertex_[i].UV_exact,
