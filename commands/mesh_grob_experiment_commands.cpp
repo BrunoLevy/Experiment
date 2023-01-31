@@ -60,10 +60,12 @@ namespace {
     // and adding the intersections only when detecting them). It would be
     // a bit stupid, because we know already that they are in the three
     // edges...
-
-    // TODO: each time a point is added, check whether it is in one of
-    // the three edges of the triangle (if it is a new point of course)
-    // -> for three_cubes_1.obj
+    // TODO: each time a point is added, debug-check whether it is in
+    // one of the three edges of the triangle
+    //
+    // TODO: figure out what happens for ~/three_cubes.obj
+    //
+    // TODO: sort_uniq all edges to detect duplicated edges
     
     /**
      * \brief Meshes a single triangle with the constraints that come from
@@ -72,23 +74,26 @@ namespace {
     class MeshInTriangle {
     public:
 
-        // TODO: comparison for sort_uniq
+
         class Edge {
         public:
             Edge(
                 index_t v1_in = index_t(-1),
                 index_t v2_in = index_t(-1),
-                index_t f2 = index_t(-1)
+                index_t f2    = index_t(-1),
+                TriangleRegion R2 = T2_RGN_T
             ) :
                 v1(v1_in),
                 v2(v2_in)
             {
                 sym.f2 = f2;
+                sym.R2 = R2;
             }
             index_t v1;
             index_t v2;
             struct {
-                index_t f2;
+                index_t        f2;
+                TriangleRegion R2;
             } sym;
         };
         
@@ -247,8 +252,11 @@ namespace {
                     return;
                 }
 
-                // case 3: f1 /\ f2 edge
-                if(region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1) {
+                // case 3: f1 /\ f2 edge or f1 edge /\ f2 edge in 3D
+                if(
+                    (region_dim(sym.R1) == 2 || region_dim(sym.R1) == 1) &&
+                     region_dim(sym.R2) == 1
+                ) {
                     
                     // Compute u,v,t using Moller & Trumbore's algorithm
                     // see: https://stackoverflow.com/questions/42740765/
@@ -263,21 +271,28 @@ namespace {
                     vec3 q1 = mesh_facet_vertex(sym.f2, (e+1)%3);
                     vec3 q2 = mesh_facet_vertex(sym.f2, (e+2)%3);
 
-                    vec3E D   = make_vec3_generic<expansion_nt>(q1,q2);
-                    vec3E E1  = make_vec3_generic<expansion_nt>(p1,p2);
-                    vec3E E2  = make_vec3_generic<expansion_nt>(p1,p3);
-                    vec3E AO  = make_vec3_generic<expansion_nt>(p1,q1);
-                    vec3E N   = cross(E1,E2);
+                    bool seg_seg_two_D = (
+                        region_dim(sym.R1) == 1 &&
+                        PCK::orient_3d(p1,p2,p3,q1) == ZERO &&
+                        PCK::orient_3d(p1,p2,p3,q2) == ZERO) ;
+
+                    if(!seg_seg_two_D) {
+                        vec3E D   = make_vec3_generic<expansion_nt>(q1,q2);
+                        vec3E E1  = make_vec3_generic<expansion_nt>(p1,p2);
+                        vec3E E2  = make_vec3_generic<expansion_nt>(p1,p3);
+                        vec3E AO  = make_vec3_generic<expansion_nt>(p1,q1);
+                        vec3E N   = cross(E1,E2);
                     
-                    expansion_nt d = -dot(D,N);
-                    geo_assert(d.sign() != ZERO);
-                    rational_nt t(dot(AO,N),d);
-                    point_exact = mix(t,q1,q2);
-                    
-                    vec3E DAO = cross(AO,D);
-                    UV_exact.x = rational_nt( dot(E2,DAO),d);
-                    UV_exact.y = rational_nt(-dot(E1,DAO),d);
-                    return;
+                        expansion_nt d = -dot(D,N);
+                        geo_assert(d.sign() != ZERO);
+                        rational_nt t(dot(AO,N),d);
+                        point_exact = mix(t,q1,q2);
+                        
+                        vec3E DAO = cross(AO,D);
+                        UV_exact.x = rational_nt( dot(E2,DAO),d);
+                        UV_exact.y = rational_nt(-dot(E1,DAO),d);
+                        return;
+                    }
                 }
 
                 // case 4: f1 edge /\ f2
@@ -306,8 +321,9 @@ namespace {
                     return;
                 }
 
-                // case 5: f1 edge /\ f2 edge
+                // case 5: f1 edge /\ f2 edge in 2D
                 if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1) {
+
                     index_t e1 = index_t(sym.R1) - index_t(T1_RGN_E0);
                     geo_debug_assert(e1 < 3);
                     index_t e2 = index_t(sym.R2) - index_t(T2_RGN_E0);
@@ -321,19 +337,22 @@ namespace {
                     );
 
                     vec2 q1 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e2+1)%3
+                        sym.f2, (e2+1)%3
                     );
                     vec2 q2 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e2+2)%3
+                        sym.f2, (e2+2)%3
                     );
 
                     vec2E D1 = make_vec2_generic<expansion_nt>(p1,p2);
                     vec2E D2 = make_vec2_generic<expansion_nt>(q1,q2);
-                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);                    
 
+                    expansion_nt d = det(D1,D2);
+                    geo_assert(d.sign() != ZERO);
+                    
+                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);                    
                     vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
                     vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
-                    rational_nt t(det(AO,D2),det(D1,D2));
+                    rational_nt t(det(AO,D2),d);
                     point_exact = mix(t,P1,P2);
                     UV_exact    = mix(t, uv[(e1+1)%3], uv[(e1+2)%3]);
                     return;
@@ -374,30 +393,6 @@ namespace {
             mesh_facet_vertex_project(index_t f, index_t lv) const {
                 index_t v = mesh().facets.vertex(f,lv);
                 return mesh_vertex_project<VEC>(v);
-            }
-            
-            /**
-             * \brief Gets the three vertices of a facet from the
-             *  TriangleRegion
-             * \details If the TriangleRegion is one of the edges,
-             *  gets the vertices of this edge as the first two 
-             *  vertices \p p1 and \p p2
-             */
-            void get_vertices(TriangleRegion R, vec3& p1, vec3& p2, vec3& p3) {
-                geo_debug_assert(region_dim(R) == 1 || region_dim(R) == 2);
-                index_t f = is_in_T1(R) ? sym.f1 : sym.f2;
-                index_t lv1 = 0;
-                index_t lv2 = 1;
-                index_t lv3 = 2;
-                if(region_dim(R) == 1) {
-                    index_t e = is_in_T1(R) ? index_t(R)-6 : index_t(R)-9;
-                    lv1 = (lv1+e+1)%3;
-                    lv2 = (lv2+e+1)%3;
-                    lv3 = (lv3+e+1)%3;                    
-                }
-                p1 = mesh_facet_vertex(f,lv1);
-                p2 = mesh_facet_vertex(f,lv2);
-                p3 = mesh_facet_vertex(f,lv3);                
             }
             
         public:
@@ -481,7 +476,28 @@ namespace {
         ) {
             index_t v1 = add_vertex(f2, AR1, AR2);
             index_t v2 = add_vertex(f2, BR1, BR2);
-            edges_.push_back(Edge(v1,v2,f2));
+
+            TriangleRegion R = T2_RGN_T;
+            
+            if(region_dim(AR2) == 1 && region_dim(BR2) == 0) {
+                index_t e = index_t(AR2) - index_t(T2_RGN_E0);
+                index_t v = index_t(BR2) - index_t(T2_RGN_P0);
+                if(e != v) {
+                    R = AR2;
+                }
+            } else if(region_dim(BR2) == 1 && region_dim(AR2) == 0) {
+                index_t e = index_t(BR2) - index_t(T2_RGN_E0);
+                index_t v = index_t(AR2) - index_t(T2_RGN_P0);
+                if(e != v) {
+                    R = BR2;
+                }
+            }
+            
+            if(region_dim(R) == 1) {
+                edges_.push_back(Edge(v1,v2,f2,R));
+            } else {
+                edges_.push_back(Edge(v1,v2,f2));                
+            }
         }
 
         void end_facet() {
@@ -701,8 +717,8 @@ namespace {
                     if(edge_edge_intersect(v1,v2,w1,w2)) {
 
                         index_t f1 = f1_;
-                        index_t f2 = common_facet(v1,v2);
-                        index_t f3 = common_facet(w1,w2);
+                        index_t f2 = edges_[e1].sym.f2; // common_facet(v1,v2);
+                        index_t f3 = edges_[e2].sym.f2; // common_facet(w1,w2);
 
                         geo_assert(f1 != index_t(-1));
                         geo_assert(f2 != index_t(-1));
@@ -766,6 +782,12 @@ namespace {
                             
                         } else {
                             std::cerr << "2D constraints intersection" << std::endl;
+
+                            std::cerr << edges_[e1].sym.f2 << "." << region_to_string(edges_[e1].sym.R2)
+                                      << " /\\ "
+                                      << edges_[e2].sym.f2 << "." << region_to_string(edges_[e2].sym.R2)
+                                      << std::endl;
+                            
                             geo_assert_not_reached;
                         }
                         
@@ -1209,9 +1231,11 @@ namespace {
                     );
                 } else {
                     // If both ends in same edge of f1,
-                    // then add individual vertices (because
-                    // edges will be created by sorting
-                    // vertices along triangle edges).
+                    // then add individual vertices and
+                    // do not add edge (because
+                    // edges in macro edges will be
+                    // created by sorting vertices
+                    // along triangle edges).
                     if(
                         II.A_rgn_f1 == II.B_rgn_f1 &&
                         region_dim(II.A_rgn_f1) == 1
