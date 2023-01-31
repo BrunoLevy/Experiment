@@ -10,6 +10,39 @@ namespace GEO {
     typedef vecng<3,expansion_nt> vec3E;    
     typedef vecng<3,rational_nt>  vec3Q;
 
+    vec3Q mix(rational_nt t, const vec3& p1, const vec3& p2) {
+        rational_nt tt = rational_nt(1.0)-t;
+        return vec3Q(
+            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
+            tt*rational_nt(p1.y)+t*rational_nt(p2.y),
+            tt*rational_nt(p1.z)+t*rational_nt(p2.z)
+        );
+    }
+
+    vec2Q mix(rational_nt t, const vec2& p1, const vec2& p2) {
+        rational_nt tt = rational_nt(1.0)-t;
+        return vec2Q(
+            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
+            tt*rational_nt(p1.y)+t*rational_nt(p2.y)
+        );
+    }
+
+    vec2Q mix(rational_nt t, const vec2Q& p1, const vec2Q& p2) {
+        rational_nt tt = rational_nt(1.0)-t;
+        return vec2Q(
+            tt*p1.x+t*p2.x,
+            tt*p1.y+t*p2.y
+        );
+    }
+
+    vec3Q mix(rational_nt t, const vec3Q& p1, const vec3Q& p2) {
+        rational_nt tt = rational_nt(1.0)-t;
+        return vec3Q(
+            tt*p1.x+t*p2.x,
+            tt*p1.y+t*p2.y,
+            tt*p1.z+t*p2.z
+        );
+    }
     
     class vec3QLexicoCompare {
     public:
@@ -32,14 +65,18 @@ namespace GEO {
             return s == POSITIVE;
         }
     };
-    
+
     namespace PCK {
 
-        template <class T> bool same_point(const vecng<3,T>& v1, const vecng<3,T>& v2) {
+        template <class T> bool same_point(
+            const vecng<3,T>& v1, const vecng<3,T>& v2
+        ) {
             return (v1.x == v2.x) && (v1.y == v2.y) && (v2.z == v1.z);
         }
 
-        template <class T> bool same_point(const vecng<2,T>& v1, const vecng<2,T>& v2) {
+        template <class T> bool same_point(
+            const vecng<2,T>& v1, const vecng<2,T>& v2
+        ) {
             return (v1.x == v2.x) && (v1.y == v2.y);
         }
         
@@ -179,6 +216,24 @@ namespace GEO {
             T(p2.x) - T(p1.x),
             T(p2.y) - T(p1.y),
             T(p2.z) - T(p1.z)
+        );
+    }
+
+    /**
+     * \brief Creates a vector with coordinates of type T
+     *  from two points with double coordinates
+     * \param[in] p1 , p2 the two vectors
+     * \return The vector \p p2 - \p p1 
+     *  with coordinates of type T
+     * \tparam T the type of the coordinates
+     */
+    template <class T>
+    inline vecng<2,T> make_vec2_generic(
+        const vec2& p1, const vec2& p2
+    ) {
+        return vecng<2,T>(
+            T(p2.x) - T(p1.x),
+            T(p2.y) - T(p1.y)
         );
     }
     

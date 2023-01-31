@@ -55,42 +55,12 @@ namespace {
 
     /***********************************************************************/
 
-    // TODO: can we treat the three edges of the macro-triangle and the
-    // other edges the same way ? (that is, starting with the three edges,
-    // and adding the intersections only when detecting them). It would be
-    // a bit stupid, because we know already that they are in the three
-    // edges...
-
-    // TODO: each time a point is added, check whether it is in one of
-    // the three edges of the triangle (if it is a new point of course)
-    // -> for three_cubes_1.obj
-    
     /**
      * \brief Meshes a single triangle with the constraints that come from
      *  the intersections with the other triangles.
      */
     class MeshInTriangle {
     public:
-
-        // TODO: comparison for sort_uniq
-        class Edge {
-        public:
-            Edge(
-                index_t v1_in = index_t(-1),
-                index_t v2_in = index_t(-1),
-                index_t f2 = index_t(-1)
-            ) :
-                v1(v1_in),
-                v2(v2_in)
-            {
-                sym.f2 = f2;
-            }
-            index_t v1;
-            index_t v2;
-            struct {
-                index_t f2;
-            } sym;
-        };
         
         class Vertex {
         public:
@@ -138,7 +108,7 @@ namespace {
                 mesh_vertex_index = NO_INDEX;
             }
 
-            Mesh& mesh() const {
+            Mesh& mesh() {
                 return mesh_in_triangle->mesh();
             }
             
@@ -174,7 +144,11 @@ namespace {
             }
             
         protected:
-
+            
+            vec3 mesh_facet_vertex(index_t f, index_t lv) const {
+                return mesh_in_triangle->mesh_facet_vertex(f,lv);
+            }
+            
             void init_sym(
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
@@ -201,181 +175,83 @@ namespace {
 
             void init_geometry() {
 
-                static vec2 uv[3] = {
-                    vec2(0.0, 0.0),
-                    vec2(1.0, 0.0),
-                    vec2(0.0, 1.0)
-                };
-
-                mesh_vertex_index = NO_INDEX;
-                
-                // Case 1: f1 vertex
-                if(region_dim(sym.R1) == 0) {
-                    index_t lv = index_t(sym.R1);
-                    geo_assert(lv < 3);
-                    mesh_vertex_index = mesh().facets.vertex(sym.f1,lv);
-                    point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
-                    UV_exact=vec2Q(rational_nt(uv[lv].x),rational_nt(uv[lv].y));
-                    return;
-                }
-
-                geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
-
-                // Case 2: f2 vertex
-                if(region_dim(sym.R2) == 0) {
-                    index_t lv = index_t(sym.R2)-3;
-                    geo_assert(lv < 3);
-                    mesh_vertex_index = mesh().facets.vertex(sym.f2, lv);
-                    point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
-                    vec2E q  = mesh_facet_vertex_project<vec2E>(
-                        sym.f2, lv
-                    );
-                    vec2E p1 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 0
-                    );
-                    vec2E p2 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 1
-                    );
-                    vec2E p3 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 2
-                    );
-                    expansion_nt D = det(p2-p1,p3-p1);
+                if(mesh_vertex_index != NO_INDEX) {
+                    vec3 point(mesh().vertices.point_ptr(mesh_vertex_index));
+                    point_exact = convert_vec3_generic<rational_nt>(point);
                     UV_exact = vec2Q(
-                        rational_nt(det(q-p1,p3-p1),D),
-                        rational_nt(det(p2-p1,q-p1),D)
+                        point_exact[mesh_in_triangle->u_],
+                        point_exact[mesh_in_triangle->v_]
                     );
                     return;
                 }
+                
+                geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
+                
+                // The three vertices of f1. If intersection is on an edge
+                // of f1, then [p1,p2] are the vertices of that edge.
+                vec3 p1,p2,p3;
+                get_vertices(sym.R1,p1,p2,p3);
 
-                // case 3: f1 /\ f2 edge
-                if(region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1) {
-                    
-                    // Compute u,v,t using Moller & Trumbore's algorithm
-                    // see: https://stackoverflow.com/questions/42740765/
-                    //  intersection-between-line-and-triangle-in-3d
+                // The three vertices of f2. If intersection is on an edge
+                // of f2, then [q1,q2] are the vertices of that edge.
+                vec3 q1,q2,q3;
+                get_vertices(sym.R2,q1,q2,q3);                
 
-                    vec3 p1 = mesh_facet_vertex(sym.f1, 0);
-                    vec3 p2 = mesh_facet_vertex(sym.f1, 1);
-                    vec3 p3 = mesh_facet_vertex(sym.f1, 2);
-                    
-                    index_t e = index_t(sym.R2)-index_t(T2_RGN_E0);
-                    geo_debug_assert(e<3);
-                    vec3 q1 = mesh_facet_vertex(sym.f2, (e+1)%3);
-                    vec3 q2 = mesh_facet_vertex(sym.f2, (e+2)%3);
-
-                    vec3E D   = make_vec3_generic<expansion_nt>(q1,q2);
-                    vec3E E1  = make_vec3_generic<expansion_nt>(p1,p2);
-                    vec3E E2  = make_vec3_generic<expansion_nt>(p1,p3);
-                    vec3E AO  = make_vec3_generic<expansion_nt>(p1,q1);
-                    vec3E N   = cross(E1,E2);
-                    
-                    expansion_nt d = -dot(D,N);
-                    geo_assert(d.sign() != ZERO);
-                    rational_nt t(dot(AO,N),d);
-                    point_exact = mix(t,q1,q2);
-                    
-                    vec3E DAO = cross(AO,D);
-                    UV_exact.x = rational_nt( dot(E2,DAO),d);
-                    UV_exact.y = rational_nt(-dot(E1,DAO),d);
-                    return;
-                }
-
-                // case 4: f1 edge /\ f2
-                if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) {
-                    index_t e = index_t(sym.R1)-index_t(T1_RGN_E0);
-                    geo_debug_assert(e<3);
-                    vec3 p1 = mesh_facet_vertex(sym.f1, (e+1)%3);
-                    vec3 p2 = mesh_facet_vertex(sym.f1, (e+2)%3);
-
-                    vec3 q1 = mesh_facet_vertex(sym.f2,0);
-                    vec3 q2 = mesh_facet_vertex(sym.f2,1);
-                    vec3 q3 = mesh_facet_vertex(sym.f2,2);
-                    
-                    vec3E E1  = make_vec3_generic<expansion_nt>(q1,q2);
-                    vec3E E2  = make_vec3_generic<expansion_nt>(q1,q3);
-                    vec3E N   = cross(E1,E2);
-
-                    vec3E D   = make_vec3_generic<expansion_nt>(p1,p2);
-                    vec3E AO  = make_vec3_generic<expansion_nt>(q1,p1);
-
-                    expansion_nt d = -dot(D,N);
-                    rational_nt t(dot(AO,N),d);
-
-                    point_exact = mix(t, p1, p2);
-                    UV_exact    = mix(t, uv[(e+1)%3], uv[(e+2)%3]);
-                    return;
-                }
-
-                // case 5: f1 edge /\ f2 edge
+                // Segment-segment intersection
                 if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1) {
-                    index_t e1 = index_t(sym.R1) - index_t(T1_RGN_E0);
-                    geo_debug_assert(e1 < 3);
-                    index_t e2 = index_t(sym.R2) - index_t(T2_RGN_E0);
-                    geo_debug_assert(e2 < 3);
 
-                    vec2 p1 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e1+1)%3
-                    );
-                    vec2 p2 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e1+2)%3
-                    );
+                    // We distinguish 3D edge /\ edge isect (then we use
+                    // edge /\ facet isect) and 2D edge /\ edge isect (
+                    // then develop special code). 
+                    
+                    geo_debug_assert(sym.f2 != NO_INDEX);
 
-                    vec2 q1 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e2+1)%3
+                    // If [q1,q2] is in the supporting plane of (p1,p2,p3),
+                    // compute intersection in 2D.
+                    if(
+                        PCK::orient_3d(p1,p2,p3,q1) == ZERO &&
+                        PCK::orient_3d(p1,p2,p3,q2) == ZERO
+                    ) {
+                        point_exact =
+                            get_segment_segment_intersection_2D<rational_nt>(
+                                q1,q2,p1,p2,
+                                ::GEO::Geom::triangle_normal_axis(p1,p2,p3)
+                            );
+                    } else {
+                        // We are in 3D, we can use segment /\ triangle
+                        // intersection (even if we know that the intersection
+                        // will be on on (p1,p2))
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                q1,q2,p1,p2,p3
+                            );
+                    }
+                } else {
+                    // Edge-triangle intersection
+                    geo_assert(
+                        (region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) ||
+                        (region_dim(sym.R1) == 2 && region_dim(sym.R2) == 1)
                     );
-                    vec2 q2 = mesh_facet_vertex_project<vec2>(
-                        sym.f1, (e2+2)%3
-                    );
-
-                    vec2E D1 = make_vec2_generic<expansion_nt>(p1,p2);
-                    vec2E D2 = make_vec2_generic<expansion_nt>(q1,q2);
-                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);                    
-
-                    vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
-                    vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
-                    rational_nt t(det(AO,D2),det(D1,D2));
-                    point_exact = mix(t,P1,P2);
-                    UV_exact    = mix(t, uv[(e1+1)%3], uv[(e1+2)%3]);
-                    return;
+                
+                    if(region_dim(sym.R1) == 1) {
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                p1,p2,q1,q2,q3
+                            );
+                    } else {
+                        point_exact =
+                            get_segment_triangle_intersection<rational_nt>(
+                                q1,q2,p1,p2,p3
+                            ) ;
+                    }
                 }
 
-                // Normally we enumerated all possible cases
-                geo_assert_not_reached;
-            }
-            
-            template <class VEC = vec3> VEC
-            mesh_vertex(index_t v) const {
-                typedef typename VEC::value_type value_type;
-                const double* p = mesh().vertices.point_ptr(v);
-                return VEC(
-                    value_type(p[0]),
-                    value_type(p[1]),
-                    value_type(p[2])                    
+                UV_exact = vec2Q(
+                    point_exact[mesh_in_triangle->u_],
+                    point_exact[mesh_in_triangle->v_]
                 );
-            }
-            
-            template <class VEC = vec3> VEC
-            mesh_facet_vertex(index_t f, index_t lv) const {
-                index_t v = mesh().facets.vertex(f,lv);
-                return mesh_vertex<VEC>(v);
             }
 
-            template <class VEC = vec2> VEC
-            mesh_vertex_project(index_t v) const {
-                typedef typename VEC::value_type value_type;
-                const double* p = mesh().vertices.point_ptr(v);
-                return VEC(
-                    value_type(p[mesh_in_triangle->u_]),
-                    value_type(p[mesh_in_triangle->v_])
-                );
-            }
-            
-            template <class VEC = vec2> VEC
-            mesh_facet_vertex_project(index_t f, index_t lv) const {
-                index_t v = mesh().facets.vertex(f,lv);
-                return mesh_vertex_project<VEC>(v);
-            }
-            
             /**
              * \brief Gets the three vertices of a facet from the
              *  TriangleRegion
@@ -444,11 +320,7 @@ namespace {
             for(index_t lv=0; lv<3; ++lv) {
                 add_vertex(Vertex(this, f, lv));
             }
-            f1_orient_ = PCK::orient_2d(
-                vec2(0.0, 0.0),
-                vec2(1.0, 0.0),
-                vec2(0.0, 1.0)
-            );
+            f1_orient_ = PCK::orient_2d(project(0), project(1), project(2));
         }
         
         index_t add_vertex(
@@ -481,7 +353,7 @@ namespace {
         ) {
             index_t v1 = add_vertex(f2, AR1, AR2);
             index_t v2 = add_vertex(f2, BR1, BR2);
-            edges_.push_back(Edge(v1,v2,f2));
+            edges_.push_back(std::make_pair(v1,v2));
         }
 
         void end_facet() {
@@ -492,7 +364,7 @@ namespace {
             
             // Sort vertices along macro-triangle's edges
             for(index_t e=0; e<3; ++e) {
-                Edge E(
+                std::pair<index_t, index_t> E = std::make_pair(
                     (e+1)%3, (e+2)%3
                 );
                 sort_vertices_along_edge(E, vertices_in_E_[e]);
@@ -504,10 +376,10 @@ namespace {
                 index_t v1 = (e+2)%3;
                 index_t prev = v0;
                 for(index_t v: vertices_in_E_[e]) {
-                    edges_.push_back(Edge(prev, v));
+                    edges_.push_back(std::make_pair(prev, v));
                     prev = v;
                 }
-                edges_.push_back(Edge(prev, v1));
+                edges_.push_back(std::make_pair(prev, v1));
             }
 
             commit();
@@ -628,16 +500,12 @@ namespace {
             if(M.vertices.nb() == 0) {
                 M.vertices.set_dimension(2);
                 for(index_t v=0; v<vertex_.size(); ++v) {
-                    vec2 p(
-                        vertex_[v].UV_exact.x.estimate(),
-                        vertex_[v].UV_exact.y.estimate()
-                    );
-                    M.vertices.create_vertex(p.data());
+                    M.vertices.create_vertex(project(v).data());
                 }
             }
             if(with_edges && M.edges.nb() == 0) {
-                for(const Edge& E: edges_) {
-                    M.edges.create_edge(E.v1, E.v2);
+                for(std::pair<index_t, index_t> E: edges_) {
+                    M.edges.create_edge(E.first, E.second);
                 }
             }
         }
@@ -682,11 +550,11 @@ namespace {
 
             // Step 1: Compute all intersections
             for(index_t e1=0; e1<edges_.size(); ++e1) {
-                index_t v1 = edges_[e1].v1;
-                index_t v2 = edges_[e1].v2;
+                index_t v1 = edges_[e1].first;
+                index_t v2 = edges_[e1].second;
                 for(index_t e2=e1+1; e2<edges_.size(); ++e2) {
-                    index_t w1 = edges_[e2].v1;
-                    index_t w2 = edges_[e2].v2;
+                    index_t w1 = edges_[e2].first;
+                    index_t w2 = edges_[e2].second;
                     if(v1 == w1 || v1 == w2 || v2 == w1 || v2 == w2) {
                         // NOTE/TODO: we could have two edges
                         // coming from two
@@ -721,57 +589,33 @@ namespace {
                         };
 
                         vec3Q I;
-                        vec2Q I_uv;
-                        
                         if(
-                            get_three_planes_intersection(
-                                I,
-                                P[0], P[1], P[2],
-                                P[3], P[4], P[5],
-                                P[6], P[7], P[8]
-                            )
+                          !get_three_planes_intersection(
+                            I,
+                            P[0], P[1], P[2],
+                            P[3], P[4], P[5],
+                            P[6], P[7], P[8]
+                           )
                         ) {
-                            vec3E PP[9] = {
-                                convert_vec3_generic<expansion_nt>(P[0]), // 0->p1
-                                convert_vec3_generic<expansion_nt>(P[1]), // 1->p2
-                                convert_vec3_generic<expansion_nt>(P[2]), // 2->p3
-                                convert_vec3_generic<expansion_nt>(P[3]), // 3->q1
-                                convert_vec3_generic<expansion_nt>(P[4]), // 4->q2
-                                convert_vec3_generic<expansion_nt>(P[5]), // 5->q3
-                                convert_vec3_generic<expansion_nt>(P[6]), // 6->r1
-                                convert_vec3_generic<expansion_nt>(P[7]), // 7->r2
-                                convert_vec3_generic<expansion_nt>(P[8])  // 8->r3                     
-                            };
-
-                            vec3E E1 = PP[1]-PP[0];
-                            vec3E E2 = PP[2]-PP[0];
-                            
-                            vec3E N1 = cross(PP[4]-PP[3],PP[5]-PP[3]);
-                            vec3E N2 = cross(PP[7]-PP[6],PP[8]-PP[6]);
-                            
-                            vec2E C1(dot(E1,N1),dot(E1,N2));
-                            vec2E C2(dot(E2,N1),dot(E2,N2));
-                            
-                            vec2E B(
-                                dot(PP[3]-PP[0],N1),
-                                dot(PP[6]-PP[0],N2)
-                            );
-
-                            expansion_nt d = det(C1,C2);
-                            geo_assert(d.sign() != ZERO);
-                            
-                            
-                            I_uv.x = rational_nt(det(B,C2),d);
-                            I_uv.y = rational_nt(det(C1,B),d);
-                            
-                        } else {
-                            std::cerr << "2D constraints intersection" << std::endl;
-                            geo_assert_not_reached;
+                            std::cerr << " 2D cnstr isect" << std::endl;
+                            const vec3Q& P1 = vertex_[v1].point_exact;
+                            const vec3Q& P2 = vertex_[v2].point_exact;
+                            const vec3Q& Q1 = vertex_[w1].point_exact;
+                            const vec3Q& Q2 = vertex_[w2].point_exact;
+                            if(
+                                !get_segment_segment_intersection_2D_bis(
+                                    I,
+                                    P1,P2,Q1,Q2,
+                                    f1_normal_axis_
+                                )
+                            ) {
+                                std::cerr << " 1D cnstr isect" << std::endl;
+                                geo_assert_not_reached;
+                            }
                         }
                         
-                        
-
-                        index_t x = add_vertex(Vertex(this,I,I_uv));
+                        vec2Q I_UV(I[u_],I[v_]);
+                        index_t x = add_vertex(Vertex(this,I,I_UV));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
 
@@ -788,15 +632,15 @@ namespace {
 
             // Step 3: "remesh" the edges that have intersections
             for(index_t e=0; e<new_vertices_in_edge.size(); ++e) {
-                index_t prev_v = edges_[e].v1;
-                index_t last_v = edges_[e].v2;
+                index_t prev_v = edges_[e].first;
+                index_t last_v = edges_[e].second;
                 new_vertices_in_edge[e].push_back(last_v);
                 for(index_t i=0; i<new_vertices_in_edge[e].size(); ++i) {
                     index_t cur_v = new_vertices_in_edge[e][i];
                     if(i == 0) {
-                        edges_[e].v2 = cur_v;
+                        edges_[e].second = cur_v;
                     } else {
-                        edges_.push_back(Edge(prev_v, cur_v));
+                        edges_.push_back(std::make_pair(prev_v, cur_v));
                     }
                     prev_v = cur_v;
                 }
@@ -869,38 +713,38 @@ namespace {
             
             // Test vertices on constrained edges
             for(index_t i=0; i<vertex_.size(); ++i) {
-                for(const Edge& E: edges_) {
+                for(std::pair<index_t,index_t> E: edges_) {
                     if(
-                        i != E.v1 && i != E.v2 && 
-                        vertex_on_edge(i, E.v1, E.v2)
+                        i != E.first && i != E.second && 
+                        vertex_on_edge(i, E.first, E.second)
                     ) {
                         result = false;
                         log_err();
                         std::cerr << "Point on edge !" << std::endl;
                         std::cerr << "    Pt:"<< vertex_[i].to_string()
                                   << std::endl;
-                        std::cerr << "   Edge:"<< vertex_[E.v1].to_string()
+                        std::cerr << "   Edge:"<< vertex_[E.first].to_string()
                                   << " --- "
-                                  << vertex_[E.v2].to_string() << std::endl;
+                                  << vertex_[E.second].to_string() << std::endl;
                         get_constraints(debug_constraints, false);
                         debug_vertex_show[i] = true;
-                        debug_vertex_show[E.v1] = true;
-                        debug_vertex_show[E.v2] = true;
-                        debug_constraints.edges.create_edge(E.v1, E.v2);
+                        debug_vertex_show[E.first] = true;
+                        debug_vertex_show[E.second] = true;
+                        debug_constraints.edges.create_edge(E.first, E.second);
                     }
                 }
             }
             
             // Test constrained edges intersetions
             for(index_t e1=0; e1<edges_.size(); ++e1) {
-                const Edge& E1 = edges_[e1];                
+                std::pair<index_t,index_t> E1 = edges_[e1];                
                 for(index_t e2=e1+1; e2 < edges_.size(); ++e2) {
-                    const Edge& E2 = edges_[e2];
+                    std::pair<index_t,index_t> E2 = edges_[e2];
                     if(
-                        E1.v1 == E2.v1 ||
-                        E1.v1 == E2.v2 ||
-                        E1.v2 == E2.v1 ||
-                        E1.v2 == E2.v2
+                        E1.first == E2.first ||
+                        E1.first == E2.second ||
+                        E1.second == E2.first ||
+                        E1.second == E2.second
                     ) {
                         // NOTE: we could have two edges coming from two
                         // different triangles and having an intersection
@@ -908,32 +752,32 @@ namespace {
                         continue;
                     }
                     if(edge_edge_intersect(
-                           E1.v1, E1.v2, E2.v1, E2.v2
+                           E1.first, E1.second, E2.first, E2.second
                     )) {
                         result = false;
                         log_err();
                         std::cerr << "Intersecting edges !" << std::endl;
                         std::cerr << "   Edge1: " 
-                                  << vertex_[E1.v1].to_string()
+                                  << vertex_[E1.first].to_string()
                                   << " --- "
-                                  << vertex_[E1.v2].to_string()
+                                  << vertex_[E1.second].to_string()
                                   << std::endl;
                         std::cerr << "   Edge2: " 
-                                  << vertex_[E2.v1].to_string()
+                                  << vertex_[E2.first].to_string()
                                   << " --- "
-                                  << vertex_[E2.v2].to_string()
+                                  << vertex_[E2.second].to_string()
                                   << std::endl;
                         get_constraints(debug_constraints, false);
                         debug_constraints.edges.create_edge(
-                            E1.v1, E1.v2
+                            E1.first, E1.second
                         );
                         debug_constraints.edges.create_edge(
-                            E2.v1, E2.v2
+                            E2.first, E2.second
                         );
-                        debug_vertex_show[E1.v1] = true;
-                        debug_vertex_show[E1.v2] = true;
-                        debug_vertex_show[E2.v1] = true;
-                        debug_vertex_show[E2.v2] = true;
+                        debug_vertex_show[E1.first] = true;
+                        debug_vertex_show[E1.second] = true;
+                        debug_vertex_show[E2.first] = true;
+                        debug_vertex_show[E2.second] = true;
                     }
                 }
             }
@@ -961,10 +805,10 @@ namespace {
 
 
         void sort_vertices_along_edge(
-            Edge E,
+            std::pair<index_t, index_t> E,
             vector<index_t>& V
         ) {
-            index_t v_org = E.v1;
+            index_t v_org = E.first;
             std::sort(
                 V.begin(), V.end(),
                 [&](index_t v1, index_t v2)->bool {
@@ -1083,14 +927,12 @@ namespace {
                       << f1_ << "):" << std::endl;
         }
 
-        /*
-        vec2 project_approx(index_t i) const {
+        vec2 project(index_t i) const {
             return vec2(
                 vertex_[i].point_exact[u_].estimate(),
                 vertex_[i].point_exact[v_].estimate()
             );
         }
-        */
         
     private:
         Mesh& mesh_;
@@ -1100,7 +942,7 @@ namespace {
         coord_index_t v_; // = (f1_normal_axis_ + 2)%3
         Sign f1_orient_;
         vector<Vertex> vertex_;
-        vector<Edge> edges_;
+        vector<std::pair<index_t, index_t> > edges_;
         vector<index_t> vertices_in_E_[3];
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
         std::map<trindex, index_t> t_v_table_;
