@@ -26,7 +26,7 @@
  */
  
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
-#include <OGF/Experiment/commands/geometry.h>
+#include <OGF/Experiment/commands/exact_geometry.h>
 #include <geogram/mesh/triangle_intersection.h>
 #include <geogram/mesh/mesh_AABB.h>
 #include <geogram/mesh/mesh_repair.h>
@@ -44,7 +44,8 @@ namespace {
     /***********************************************************************/
 
     // BUG: PR10: generates several triangles several times (?) 
-    // BUG: PR3:  generates several triangles several times (?) / misses isects ?
+    // BUG: PR3:  generates several triangles several times (?)
+    //            / misses isects ?
     //
     // TODO: can we treat the three edges of the macro-triangle and the
     // other edges the same way ? (that is, starting with the three edges,
@@ -281,10 +282,10 @@ namespace {
                         PCK::orient_3d(p1,p2,p3,q2) == ZERO) ;
 
                     if(!seg_seg_two_D) {
-                        vec3E D   = make_vec3_generic<expansion_nt>(q1,q2);
-                        vec3E E1  = make_vec3_generic<expansion_nt>(p1,p2);
-                        vec3E E2  = make_vec3_generic<expansion_nt>(p1,p3);
-                        vec3E AO  = make_vec3_generic<expansion_nt>(p1,q1);
+                        vec3E D   = make_vec3<vec3E>(q1,q2);
+                        vec3E E1  = make_vec3<vec3E>(p1,p2);
+                        vec3E E2  = make_vec3<vec3E>(p1,p3);
+                        vec3E AO  = make_vec3<vec3E>(p1,q1);
                         vec3E N   = cross(E1,E2);
                     
                         expansion_nt d = -dot(D,N);
@@ -315,12 +316,12 @@ namespace {
                     vec3 q2 = mesh_facet_vertex(sym.f2,1);
                     vec3 q3 = mesh_facet_vertex(sym.f2,2);
                     
-                    vec3E E1  = make_vec3_generic<expansion_nt>(q1,q2);
-                    vec3E E2  = make_vec3_generic<expansion_nt>(q1,q3);
+                    vec3E E1  = make_vec3<vec3E>(q1,q2);
+                    vec3E E2  = make_vec3<vec3E>(q1,q3);
                     vec3E N   = cross(E1,E2);
 
-                    vec3E D   = make_vec3_generic<expansion_nt>(p1,p2);
-                    vec3E AO  = make_vec3_generic<expansion_nt>(q1,p1);
+                    vec3E D   = make_vec3<vec3E>(p1,p2);
+                    vec3E AO  = make_vec3<vec3E>(q1,p1);
 
                     expansion_nt d = -dot(D,N);
                     rational_nt t(dot(AO,N),d);
@@ -357,13 +358,13 @@ namespace {
                         sym.f2, (e2+2)%3
                     );
 
-                    vec2E D1 = make_vec2_generic<expansion_nt>(p1,p2);
-                    vec2E D2 = make_vec2_generic<expansion_nt>(q1,q2);
+                    vec2E D1 = make_vec2<vec2E>(p1,p2);
+                    vec2E D2 = make_vec2<vec2E>(q1,q2);
 
                     expansion_nt d = det(D1,D2);
                     geo_assert(d.sign() != ZERO);
                     
-                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);
+                    vec2E AO = make_vec2<vec2E>(p1,q1);
                     vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
                     vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
                     rational_nt t(det(AO,D2),d);
@@ -810,32 +811,23 @@ namespace {
                                 P[6], P[7], P[8]
                             )
                         ) {
-                            // Barycentric mode: compute (u,v) from 3D geometry (data)
+                            // Barycentric mode:
+                            // compute (u,v) from 3D geometry (direct from
+                            // data, reduces degree of used expansions)
                             if(barycentric_) {
-                                vec3E PP[9] = {
-                                    convert_vec3_generic<expansion_nt>(P[0]), // 0->p1
-                                    convert_vec3_generic<expansion_nt>(P[1]), // 1->p2
-                                    convert_vec3_generic<expansion_nt>(P[2]), // 2->p3
-                                    convert_vec3_generic<expansion_nt>(P[3]), // 3->q1
-                                    convert_vec3_generic<expansion_nt>(P[4]), // 4->q2
-                                    convert_vec3_generic<expansion_nt>(P[5]), // 5->q3
-                                    convert_vec3_generic<expansion_nt>(P[6]), // 6->r1
-                                    convert_vec3_generic<expansion_nt>(P[7]), // 7->r2
-                                    convert_vec3_generic<expansion_nt>(P[8])  // 8->r3                     
-                                };
-
-                                vec3E E1 = PP[1]-PP[0];
-                                vec3E E2 = PP[2]-PP[0];
                                 
-                                vec3E N1 = cross(PP[4]-PP[3],PP[5]-PP[3]);
-                                vec3E N2 = cross(PP[7]-PP[6],PP[8]-PP[6]);
-                            
+                                vec3E E1 = make_vec3<vec3E>(P[0],P[1]); 
+                                vec3E E2 = make_vec3<vec3E>(P[0],P[2]); 
+
+                                vec3E N1 = triangle_normal<vec3E>(P[3],P[4],P[5]);
+                                vec3E N2 = triangle_normal<vec3E>(P[6],P[7],P[8]);
+                                
                                 vec2E C1(dot(E1,N1),dot(E1,N2));
                                 vec2E C2(dot(E2,N1),dot(E2,N2));
                             
                                 vec2E B(
-                                    dot(PP[3]-PP[0],N1),
-                                    dot(PP[6]-PP[0],N2)
+                                    dot(make_vec3<vec3E>(P[0],P[3]),N1),
+                                    dot(make_vec3<vec3E>(P[0],P[6]),N2)
                                 );
 
                                 expansion_nt d = det(C1,C2);
