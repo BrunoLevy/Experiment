@@ -56,6 +56,18 @@ namespace OGF {
     gom_slots:
         /**
           * Computes and remeshes intersection in a surface mesh.
+          * \param[in] merge_vertices_and_facets pre-check duplicated
+          *  vertices and facets
+          * \param[in] check_neighboring_triangles check intersections
+          *  also between triangles that share a vertex
+          * \param[in] post_connect_facets connect the facets of the 
+          *  result, and identify/disconnect non-manifold edges
+          * \param[in] order_facets spatially order the facets for the AABB
+          * \param[in] FPE check floating point exceptions
+          * \param[in] check_constraints double-check the constraints for
+          *  intersections
+          * \param[in] barycentric use barycentric coordinate for local
+          *  triangle geometry
           */
         void intersect_surface(
             bool merge_vertices_and_facets = true,
@@ -63,7 +75,8 @@ namespace OGF {
             bool post_connect_facets=true,
             bool order_facets=true,
             bool FPE=true,
-            bool check_constraints=true
+            bool check_constraints=true,
+            bool barycentric=true
         );
 
         /**

@@ -23,18 +23,6 @@
  *  Contact for Graphite: Bruno Levy - Bruno.Levy@inria.fr
  *  Contact for this Plugin: Bruno Levy - Bruno.Levy@inria.fr
  *
- *     Project ALICE
- *     LORIA, INRIA Lorraine, 
- *     Campus Scientifique, BP 239
- *     54506 VANDOEUVRE LES NANCY CEDEX 
- *     FRANCE
- *
- *  Note that the GNU General Public License does not permit incorporating
- *  the Software into proprietary programs. 
- *
- * As an exception to the GPL, Graphite can be linked with the following
- * (non-GPL) libraries:
- *     Qt, tetgen, SuperLU, WildMagic and CGAL
  */
  
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
@@ -55,6 +43,9 @@ namespace {
 
     /***********************************************************************/
 
+    // BUG: PR10: generates several triangles several times (?) 
+    // BUG: PR3:  generates several triangles several times (?) / misses isects ?
+    //
     // TODO: can we treat the three edges of the macro-triangle and the
     // other edges the same way ? (that is, starting with the three edges,
     // and adding the intersections only when detecting them). It would be
@@ -104,6 +95,14 @@ namespace {
                 UNINITIALIZED, MESH_VERTEX, PRIMARY_ISECT, SECONDARY_ISECT
             };
 
+            Vertex(MeshInTriangle* M, index_t f, index_t lv) {
+                geo_assert(f == M->f1_);
+                type = MESH_VERTEX;
+                mesh_in_triangle = M;
+                init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
+                init_geometry();
+            }
+
             Vertex(
                 MeshInTriangle* M,
                 index_t f1, index_t f2,
@@ -113,14 +112,6 @@ namespace {
                 type = PRIMARY_ISECT;
                 mesh_in_triangle = M;
                 init_sym(f1,f2,R1,R2);
-                init_geometry();
-            }
-
-            Vertex(MeshInTriangle* M, index_t f, index_t lv) {
-                geo_assert(f == M->f1_);
-                type = MESH_VERTEX;
-                mesh_in_triangle = M;
-                init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
                 init_geometry();
             }
 
@@ -220,7 +211,14 @@ namespace {
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f1,lv);
                     point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
-                    UV_exact=vec2Q(rational_nt(uv[lv].x),rational_nt(uv[lv].y));
+                    if(barycentric()) {
+                        UV_exact.x = rational_nt(uv[lv].x);
+                        UV_exact.y = rational_nt(uv[lv].y);
+                    } else {
+                        UV_exact = mesh_vertex_project<vec2Q>(
+                            mesh_vertex_index
+                        );
+                    }
                     return;
                 }
 
@@ -232,23 +230,29 @@ namespace {
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f2, lv);
                     point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
-                    vec2E q  = mesh_facet_vertex_project<vec2E>(
-                        sym.f2, lv
-                    );
-                    vec2E p1 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 0
-                    );
-                    vec2E p2 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 1
-                    );
-                    vec2E p3 = mesh_facet_vertex_project<vec2E>(
-                        sym.f1, 2
-                    );
-                    expansion_nt D = det(p2-p1,p3-p1);
-                    UV_exact = vec2Q(
-                        rational_nt(det(q-p1,p3-p1),D),
-                        rational_nt(det(p2-p1,q-p1),D)
-                    );
+                    if(barycentric()) {
+                        vec2E q  = mesh_facet_vertex_project<vec2E>(
+                            sym.f2, lv
+                        );
+                        vec2E p1 = mesh_facet_vertex_project<vec2E>(
+                            sym.f1, 0
+                        );
+                        vec2E p2 = mesh_facet_vertex_project<vec2E>(
+                            sym.f1, 1
+                        );
+                        vec2E p3 = mesh_facet_vertex_project<vec2E>(
+                            sym.f1, 2
+                        );
+                        expansion_nt D = det(p2-p1,p3-p1);
+                        UV_exact = vec2Q(
+                            rational_nt(det(q-p1,p3-p1),D),
+                            rational_nt(det(p2-p1,q-p1),D)
+                        );
+                    } else {
+                        UV_exact = mesh_vertex_project<vec2Q>(
+                            mesh_vertex_index
+                        );
+                    }
                     return;
                 }
 
@@ -287,10 +291,15 @@ namespace {
                         geo_assert(d.sign() != ZERO);
                         rational_nt t(dot(AO,N),d);
                         point_exact = mix(t,q1,q2);
-                        
-                        vec3E DAO = cross(AO,D);
-                        UV_exact.x = rational_nt( dot(E2,DAO),d);
-                        UV_exact.y = rational_nt(-dot(E1,DAO),d);
+
+                        if(barycentric()) {
+                            vec3E DAO = cross(AO,D);
+                            UV_exact.x = rational_nt( dot(E2,DAO),d);
+                            UV_exact.y = rational_nt(-dot(E1,DAO),d);
+                        } else {
+                            UV_exact.x = point_exact[u_coord()];
+                            UV_exact.y = point_exact[v_coord()];
+                        }
                         return;
                     }
                 }
@@ -317,7 +326,12 @@ namespace {
                     rational_nt t(dot(AO,N),d);
 
                     point_exact = mix(t, p1, p2);
-                    UV_exact    = mix(t, uv[(e+1)%3], uv[(e+2)%3]);
+                    if(barycentric()) {
+                        UV_exact    = mix(t, uv[(e+1)%3], uv[(e+2)%3]);
+                    } else {
+                        UV_exact.x = point_exact[u_coord()];
+                        UV_exact.y = point_exact[v_coord()];
+                    }
                     return;
                 }
 
@@ -349,17 +363,34 @@ namespace {
                     expansion_nt d = det(D1,D2);
                     geo_assert(d.sign() != ZERO);
                     
-                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);                    
+                    vec2E AO = make_vec2_generic<expansion_nt>(p1,q1);
                     vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
                     vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
                     rational_nt t(det(AO,D2),d);
                     point_exact = mix(t,P1,P2);
-                    UV_exact    = mix(t, uv[(e1+1)%3], uv[(e1+2)%3]);
+                    if(barycentric()) {
+                        UV_exact = mix(t, uv[(e1+1)%3], uv[(e1+2)%3]);
+                    } else {
+                        UV_exact.x = point_exact[u_coord()];
+                        UV_exact.y = point_exact[v_coord()];
+                    }
                     return;
                 }
 
                 // Normally we enumerated all possible cases
                 geo_assert_not_reached;
+            }
+
+            bool barycentric() const {
+                return mesh_in_triangle->barycentric_;
+            }
+
+            coord_index_t u_coord() const {
+                return mesh_in_triangle->u_;
+            }
+
+            coord_index_t v_coord() const {
+                return mesh_in_triangle->v_;                
             }
             
             template <class VEC = vec3> VEC
@@ -384,8 +415,8 @@ namespace {
                 typedef typename VEC::value_type value_type;
                 const double* p = mesh().vertices.point_ptr(v);
                 return VEC(
-                    value_type(p[mesh_in_triangle->u_]),
-                    value_type(p[mesh_in_triangle->v_])
+                    value_type(p[u_coord()]),
+                    value_type(p[v_coord()])
                 );
             }
             
@@ -416,34 +447,52 @@ namespace {
         };
 
         
-        MeshInTriangle(Mesh& M, bool check_cnstr) :
+        MeshInTriangle(Mesh& M) :
             mesh_(M),
             f1_(index_t(-1)),
-            check_cnstr_(check_cnstr)
+            check_cnstr_(true),
+            barycentric_(true)
         {
         }
 
+        void set_check_constraints(bool x) {
+            check_cnstr_ = x;
+        }
+
+        void set_barycentric(bool x) {
+            barycentric_ = x;
+        }
+        
         Mesh& mesh() {
             return mesh_;
         }
         
         void begin_facet(index_t f) {
             f1_ = f;
+            vec3 p1 = mesh_facet_vertex(f,0);
+            vec3 p2 = mesh_facet_vertex(f,1);
+            vec3 p3 = mesh_facet_vertex(f,2);
             f1_normal_axis_ = ::GEO::Geom::triangle_normal_axis(
-                mesh_facet_vertex(f,0),
-                mesh_facet_vertex(f,1),
-                mesh_facet_vertex(f,2)                
+                p1,p2,p3
             );
             u_ = coord_index_t((f1_normal_axis_ + 1) % 3);
             v_ = coord_index_t((f1_normal_axis_ + 2) % 3);
             for(index_t lv=0; lv<3; ++lv) {
                 add_vertex(Vertex(this, f, lv));
             }
-            f1_orient_ = PCK::orient_2d(
-                vec2(0.0, 0.0),
-                vec2(1.0, 0.0),
-                vec2(0.0, 1.0)
-            );
+            if(barycentric_) {
+                f1_orient_ = PCK::orient_2d(
+                    vec2(0.0, 0.0),
+                    vec2(1.0, 0.0),
+                    vec2(0.0, 1.0)
+                );
+            } else {
+                f1_orient_ = PCK::orient_2d(
+                    vec2(p1[u_],p1[v_]),
+                    vec2(p2[u_],p2[v_]),
+                    vec2(p3[u_],p3[v_])                    
+                );
+            }
         }
         
         index_t add_vertex(
@@ -477,6 +526,11 @@ namespace {
             index_t v1 = add_vertex(f2, AR1, AR2);
             index_t v2 = add_vertex(f2, BR1, BR2);
 
+            /*
+            std::cerr << "    \\_____> add_edge"
+                      << std::endl;
+            */
+            
             TriangleRegion R = T2_RGN_T;
             
             if(region_dim(AR2) == 1 && region_dim(BR2) == 0) {
@@ -503,7 +557,6 @@ namespace {
         void end_facet() {
             // Sanity check: the facet does not have zero area
             geo_assert(f1_orient_ != ZERO);
-
             compute_constraints_intersections();
             
             // Sort vertices along macro-triangle's edges
@@ -533,6 +586,7 @@ namespace {
     protected:
 
         index_t add_vertex(const Vertex& V) {
+            // std::cerr << "Add vertex: " << V.to_string() << std::endl;
             // Test whether there is already a vertex at the same position
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(PCK::same_point(vertex_[i].UV_exact,V.UV_exact)) {
@@ -544,12 +598,14 @@ namespace {
                         vertex_[i].facets.push_back(V.sym.f2);
                     }
                     // Return found vertex
+                    // std::cerr << "--> " << i << std::endl;
                     return i;
                 }
             }
             // There was no vertex at the same position, so add it
             // to the list of vertices
             vertex_.push_back(V);
+            // std::cerr << "--> " << vertex_.size()-1 << std::endl;
             return vertex_.size()-1;
         }
         
@@ -590,6 +646,8 @@ namespace {
             Mesh constraints;
             get_constraints(constraints);
 
+            // std::cerr << " Nb edges=" << edges_.size() << std::endl;
+            
             if(!OK) {
                 std::cerr << "==============================>>>>"
                           << "There were errors, saving constraints..."
@@ -653,8 +711,10 @@ namespace {
             }
             if(with_edges && M.edges.nb() == 0) {
                 for(const Edge& E: edges_) {
+                    // std::cerr << E.v1 << "-" << E.v2 << " ";
                     M.edges.create_edge(E.v1, E.v2);
                 }
+                // std::cerr << std::endl;
             }
         }
 
@@ -717,8 +777,11 @@ namespace {
                     if(edge_edge_intersect(v1,v2,w1,w2)) {
 
                         index_t f1 = f1_;
-                        index_t f2 = edges_[e1].sym.f2; // common_facet(v1,v2);
-                        index_t f3 = edges_[e2].sym.f2; // common_facet(w1,w2);
+                        index_t f2 = edges_[e1].sym.f2; 
+                        index_t f3 = edges_[e2].sym.f2; 
+                        //index_t f2 = common_facet(v1,v2);
+                        //index_t f3 = common_facet(w1,w2);
+                        
 
                         geo_assert(f1 != index_t(-1));
                         geo_assert(f2 != index_t(-1));
@@ -747,38 +810,43 @@ namespace {
                                 P[6], P[7], P[8]
                             )
                         ) {
-                            vec3E PP[9] = {
-                                convert_vec3_generic<expansion_nt>(P[0]), // 0->p1
-                                convert_vec3_generic<expansion_nt>(P[1]), // 1->p2
-                                convert_vec3_generic<expansion_nt>(P[2]), // 2->p3
-                                convert_vec3_generic<expansion_nt>(P[3]), // 3->q1
-                                convert_vec3_generic<expansion_nt>(P[4]), // 4->q2
-                                convert_vec3_generic<expansion_nt>(P[5]), // 5->q3
-                                convert_vec3_generic<expansion_nt>(P[6]), // 6->r1
-                                convert_vec3_generic<expansion_nt>(P[7]), // 7->r2
-                                convert_vec3_generic<expansion_nt>(P[8])  // 8->r3                     
-                            };
+                            // Barycentric mode: compute (u,v) from 3D geometry (data)
+                            if(barycentric_) {
+                                vec3E PP[9] = {
+                                    convert_vec3_generic<expansion_nt>(P[0]), // 0->p1
+                                    convert_vec3_generic<expansion_nt>(P[1]), // 1->p2
+                                    convert_vec3_generic<expansion_nt>(P[2]), // 2->p3
+                                    convert_vec3_generic<expansion_nt>(P[3]), // 3->q1
+                                    convert_vec3_generic<expansion_nt>(P[4]), // 4->q2
+                                    convert_vec3_generic<expansion_nt>(P[5]), // 5->q3
+                                    convert_vec3_generic<expansion_nt>(P[6]), // 6->r1
+                                    convert_vec3_generic<expansion_nt>(P[7]), // 7->r2
+                                    convert_vec3_generic<expansion_nt>(P[8])  // 8->r3                     
+                                };
 
-                            vec3E E1 = PP[1]-PP[0];
-                            vec3E E2 = PP[2]-PP[0];
+                                vec3E E1 = PP[1]-PP[0];
+                                vec3E E2 = PP[2]-PP[0];
+                                
+                                vec3E N1 = cross(PP[4]-PP[3],PP[5]-PP[3]);
+                                vec3E N2 = cross(PP[7]-PP[6],PP[8]-PP[6]);
                             
-                            vec3E N1 = cross(PP[4]-PP[3],PP[5]-PP[3]);
-                            vec3E N2 = cross(PP[7]-PP[6],PP[8]-PP[6]);
+                                vec2E C1(dot(E1,N1),dot(E1,N2));
+                                vec2E C2(dot(E2,N1),dot(E2,N2));
                             
-                            vec2E C1(dot(E1,N1),dot(E1,N2));
-                            vec2E C2(dot(E2,N1),dot(E2,N2));
-                            
-                            vec2E B(
-                                dot(PP[3]-PP[0],N1),
-                                dot(PP[6]-PP[0],N2)
-                            );
+                                vec2E B(
+                                    dot(PP[3]-PP[0],N1),
+                                    dot(PP[6]-PP[0],N2)
+                                );
 
-                            expansion_nt d = det(C1,C2);
-                            geo_assert(d.sign() != ZERO);
-                            
-                            
-                            I_uv.x = rational_nt(det(B,C2),d);
-                            I_uv.y = rational_nt(det(C1,B),d);
+                                expansion_nt d = det(C1,C2);
+                                geo_assert(d.sign() != ZERO);
+
+                                I_uv.x = rational_nt(det(B,C2),d);
+                                I_uv.y = rational_nt(det(C1,B),d);
+                            } else {
+                                I_uv.x = I[u_];
+                                I_uv.y = I[v_];
+                            }
                             
                         } else {
                             std::cerr << "2D constraints intersection" << std::endl;
@@ -791,12 +859,10 @@ namespace {
                             geo_assert_not_reached;
                         }
                         
-                        
-
                         index_t x = add_vertex(Vertex(this,I,I_uv));
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
-
+                        
                         new_vertices_in_edge[e1].push_back(x);
                         new_vertices_in_edge[e2].push_back(x);
                     }
@@ -1105,15 +1171,6 @@ namespace {
                       << f1_ << "):" << std::endl;
         }
 
-        /*
-        vec2 project_approx(index_t i) const {
-            return vec2(
-                vertex_[i].point_exact[u_].estimate(),
-                vertex_[i].point_exact[v_].estimate()
-            );
-        }
-        */
-        
     private:
         Mesh& mesh_;
         index_t f1_;
@@ -1127,6 +1184,7 @@ namespace {
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
         std::map<trindex, index_t> t_v_table_;
         bool check_cnstr_;
+        bool barycentric_;
     };
 
     /***********************************************************************/
@@ -1277,7 +1335,7 @@ namespace {
         if(region_dim(R2) == 1 && region_dim(R1) == 0) {
             TriangleRegion v1,v2;
             get_edge_vertices(R2,v1,v2);
-            if(R1 == v1 || R2 == v2) {
+            if(R1 == v1 || R1 == v2) {
                 return true;
             }
         }
@@ -1285,14 +1343,22 @@ namespace {
     }
     
     bool planar_intersection_is_valid(const IsectInfo& II) {
-        return
+        bool result = 
             same_region(II.A_rgn_f1, II.B_rgn_f1) ||
             same_region(II.A_rgn_f2, II.B_rgn_f2) ;
+
+        /*
+        std::cerr << "valid ? " << std::make_pair(II.A_rgn_f1, II.A_rgn_f2)
+                  << " -- "     << std::make_pair(II.B_rgn_f1, II.B_rgn_f2)
+                  << "   :: "     << result
+                  << std::endl;
+        */
+        return result;
     }
     
     void intersect_surface_impl(
         Mesh& M, bool test_adjacent_facets, bool order_facets,
-        bool FPE, bool check_constraints
+        bool FPE, bool check_constraints, bool barycentric
     ) {
 
         // Set symbolic perturbation mode to lexicographic order
@@ -1339,6 +1405,7 @@ namespace {
                                     I[i2].first, I[i2].second
                                 };
                                 if(planar_intersection_is_valid(II)) {
+                                    // std::cerr << f1 << " " << f2 << " " << I[i1] << " " << I[i2] << std::endl;
                                     intersections.push_back(II);
                                     II.flip();
                                     intersections.push_back(II);
@@ -1373,7 +1440,9 @@ namespace {
             }
         );
 
-        MeshInTriangle TM(M,check_constraints);
+        MeshInTriangle TM(M);
+        TM.set_check_constraints(check_constraints);
+        TM.set_barycentric(barycentric);
         remesh_intersected_triangles(TM, intersections);
         
         vector<index_t> has_intersections(M.facets.nb(), 0);
@@ -1406,7 +1475,8 @@ namespace OGF {
         bool post_connect_facets,
         bool order_facets,
         bool FPE,
-        bool check_constraints
+        bool check_constraints,
+        bool barycentric
     ) {
         if(!mesh_grob()->facets.are_simplices()) {
             Logger::err("Intersect") << "Mesh is not triangulated"
@@ -1433,7 +1503,8 @@ namespace OGF {
         
         intersect_surface_impl(
             *mesh_grob(), test_neighboring_triangles,
-            order_facets, FPE, check_constraints
+            order_facets, FPE, check_constraints,
+            barycentric
         );
 
         if(post_connect_facets) {
