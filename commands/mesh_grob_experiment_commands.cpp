@@ -59,15 +59,12 @@ namespace {
     //
     // TODO: sort_uniq all edges to detect duplicated edges
 
-
-    
     /**
      * \brief Meshes a single triangle with the constraints that come from
      *  the intersections with the other triangles.
      */
     class MeshInTriangle {
     public:
-
 
         class Edge {
         public:
@@ -89,6 +86,7 @@ namespace {
                 index_t        f2;
                 TriangleRegion R2;
             } sym;
+            vector<index_t> vertices_in_edge;
         };
         
         class Vertex {
@@ -176,12 +174,12 @@ namespace {
                 mesh_vertex_index = NO_INDEX;
                 if(region_dim(sym.R1) == 0) {
                     mesh_vertex_index = mesh().facets.vertex(
-                        sym.f1, index_t(sym.R1)
+                        sym.f1, index_t(sym.R1)-index_t(T1_RGN_P0)
                     );
                 }
                 if(region_dim(sym.R2) == 0) {
                     mesh_vertex_index = mesh().facets.vertex(
-                        sym.f2, index_t(sym.R2)-3
+                        sym.f2, index_t(sym.R2)-index_t(T2_RGN_P0)
                     );
                 }
             }
@@ -479,7 +477,6 @@ namespace {
             edges_.push_back(Edge(1,2));
             edges_.push_back(Edge(2,0));
             edges_.push_back(Edge(0,1));
-            vertices_in_E_.resize(3);
             
             if(barycentric_) {
                 f1_orient_ = PCK::orient_2d(
@@ -505,11 +502,16 @@ namespace {
         ) {
             geo_debug_assert(f1_ != index_t(-1));
 
+            // If the same f2 comes more than twice, then
+            // we got a planar facet /\ facet intersection
+            // (and it is good to know it, see get_constraints())
             if(f2 != index_t(-1) && f2 == latest_f2_) {
                 ++latest_f2_count_;
                 if(latest_f2_count_ > 2) {
                     if(!has_planar_isect_) {
-                        std::cerr << f1_ << ":switching to planar isect mode" << std::endl;
+                        std::cerr << f1_
+                                  << ":switching to planar isect mode"
+                                  << std::endl;
                     }
                     has_planar_isect_ = true;
                 }
@@ -525,12 +527,9 @@ namespace {
             // an edge, add it to the list of edge's
             // vertices
             if(vertex_.size() > sz) {
-                if(R1 == T1_RGN_E0) {
-                    vertices_in_E_[0].push_back(v);
-                } else if(R1 == T1_RGN_E1) {
-                    vertices_in_E_[1].push_back(v);                
-                } else if(R1 == T1_RGN_E2) {
-                    vertices_in_E_[2].push_back(v);                
+                if(region_dim(R1) == 1) {
+                    index_t e = index_t(R1) - index_t(T1_RGN_E0);
+                    edges_[e].vertices_in_edge.push_back(v);
                 }
             }
             return v;
@@ -570,8 +569,6 @@ namespace {
             } else {
                 edges_.push_back(Edge(v1,v2,f2));                
             }
-
-            vertices_in_E_.resize(edges_.size());
         }
 
         void end_facet() {
@@ -690,6 +687,13 @@ namespace {
                 M.vertices.set_dimension(2);
                 for(index_t v=0; v<vertex_.size(); ++v) {
 		   vec2 p;
+
+                   // If barycentric coodinates are used and the facet
+                   // has a planar intersection, then we need to make sure
+                   // that the facet will be meshed the same way in other
+                   // places (that is, in the other facet with which it has
+                   // a planar intersection), thus we compute the (projected)
+                   // coordinates in the triangle (and pass them to Triangle).
 		   if(barycentric_ && has_planar_isect_) {
                        const vec2Q& uv = vertex_[v].UV_exact;
                        vec2 p1 = mesh_facet_vertex_project(f1_,0);
@@ -732,27 +736,6 @@ namespace {
             std::cerr << std::endl << std::endl << std::endl;
         }
 
-        /*
-        index_t common_facet(index_t v1, index_t v2) const {
-            const Vertex& V1 = vertex_[v1];
-            const Vertex& V2 = vertex_[v2];
-            index_t result = index_t(-1);
-            index_t nb = 0;
-            for(index_t f: V1.facets) {
-                if(V2.is_on_facet(f)) {
-                    result = f;
-                    ++nb;
-                }
-            }
-            if(nb > 1) {
-                std::cerr
-                    << "====> more than one facet common to edge extremities"
-                    << std::endl;
-            }
-            return result;
-        }
-        */
-        
         void compute_constraints_intersections() {
 
             // Step 1: Compute all intersections
@@ -779,9 +762,6 @@ namespace {
                         index_t f1 = f1_;
                         index_t f2 = edges_[e1].sym.f2; 
                         index_t f3 = edges_[e2].sym.f2; 
-                        //index_t f2 = common_facet(v1,v2);
-                        //index_t f3 = common_facet(w1,w2);
-                        
 
                         geo_assert(f1 != index_t(-1));
                         geo_assert(f2 != index_t(-1));
@@ -853,25 +833,46 @@ namespace {
                         index_t x = add_vertex(Vertex(this,I,I_uv));
                         //vertex_[x].facets.push_back(f2);
                         //vertex_[x].facets.push_back(f3);
-                        
-                        vertices_in_E_[e1].push_back(x);
-                        vertices_in_E_[e2].push_back(x);
+
+                        edges_[e1].vertices_in_edge.push_back(x);
+                        edges_[e2].vertices_in_edge.push_back(x);
                     }
                 }
             }
 
             // Step 2: sort intersections in edges
-            for(index_t e=0; e<edges_.size(); ++e) {
-                sort_vertices_along_edge(edges_[e], vertices_in_E_[e]);
+            for(Edge& E: edges_) {
+                vector<index_t>& V = E.vertices_in_edge;
+                index_t v_org = E.v1;
+                std::sort(
+                    V.begin(), V.end(),
+                    [&](index_t v1, index_t v2)->bool {
+                        // Supposed to be negative if
+                        // v1 is between v_org and v2 (what we want)
+                        Sign o_o12 = dot2d(v1,v_org,v2);
+                        if(o_o12 == ZERO) {
+                            std::cerr << "Duplicated vertex in edge"
+                                      << std::endl;
+                        }
+                        return (o_o12 == NEGATIVE);
+                    }
+                );
+                // There can be degenerate vertices if there is
+                // a triple point in the triangle (quadruple point
+                // in 3D) ... shit happens ! [Forrest Gump]
+                V.erase(
+                    std::unique(V.begin(), V.end()), V.end()
+                );
             }
 
             // Step 3: "remesh" the edges that have intersections
-            for(index_t e=0; e<vertices_in_E_.size(); ++e) {
+            index_t ne = edges_.size();
+            for(index_t e=0; e<ne; ++e) {
                 index_t prev_v = edges_[e].v1;
                 index_t last_v = edges_[e].v2;
-                vertices_in_E_[e].push_back(last_v);
-                for(index_t i=0; i<vertices_in_E_[e].size(); ++i) {
-                    index_t cur_v = vertices_in_E_[e][i];
+                edges_[e].vertices_in_edge.push_back(last_v);
+                for(index_t i=0; i<edges_[e].vertices_in_edge.size(); ++i) {
+                    index_t cur_v = edges_[e].vertices_in_edge[i];
                     if(i == 0) {
                         edges_[e].v2 = cur_v;
                     } else {
@@ -882,7 +883,7 @@ namespace {
             }
             
         }
-        
+
         bool check_constraints() const {
             Mesh debug_constraints;
             Attribute<bool> debug_vertex_show(
@@ -910,7 +911,7 @@ namespace {
             {
                 vector<int> on_macro_edge(vertex_.size(), -1);
                 for(index_t e=0; e<3; ++e) {
-                    for(index_t v: vertices_in_E_[e]) {
+                    for(index_t v: edges_[e].vertices_in_edge) {
                         on_macro_edge[v] = int(e);
                     }
                 }
@@ -1024,47 +1025,10 @@ namespace {
                 );
             }
 
-            if(!result) {
-                for(index_t e=0; e<3; ++e) {
-                    std::cerr << "MacroEdge " << e << " : ";
-                    for(index_t v: vertices_in_E_[e]) {
-                        std::cerr << v << " ";
-                    }
-                    std::cerr << std::endl;
-                }
-            }
-            
             return result;
         }
 
 
-        void sort_vertices_along_edge(
-            Edge E,
-            vector<index_t>& V
-        ) {
-            index_t v_org = E.v1;
-            std::sort(
-                V.begin(), V.end(),
-                [&](index_t v1, index_t v2)->bool {
-                    // Supposed to be negative if
-                    // v1 is between v_org and v2 (what we want)
-                    Sign o_o12 = dot2d(v1,v_org,v2);
-                    if(o_o12 == ZERO) {
-                        std::cerr << "Duplicated vertex in edge"
-                                  << std::endl;
-                    }
-                    return (o_o12 == NEGATIVE);
-                }
-            );
-            // There can be degenerate vertices if there is
-            // a triple point in the triangle (quadruple point
-            // in 3D) ... shit happens ! [Forrest Gump]
-            V.erase(
-                std::unique(V.begin(), V.end()), V.end()
-            );
-            // TODO: check intersections on edge extremities...
-        }
-        
         vec3 mesh_facet_vertex(index_t f, index_t lv) const {
             index_t v = mesh_.facets.vertex(f,lv);
             return vec3(mesh_.vertices.point_ptr(v));
@@ -1140,7 +1104,6 @@ namespace {
         void clear() {
             vertex_.resize(0);
             edges_.resize(0);
-            vertices_in_E_.resize(0);
             f1_ = index_t(-1);
         }
 
@@ -1176,7 +1139,6 @@ namespace {
         Sign f1_orient_;
         vector<Vertex> vertex_;
         vector<Edge> edges_;
-        vector<vector<index_t> > vertices_in_E_;
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
         std::map<trindex, index_t> t_v_table_;
         bool check_cnstr_;
