@@ -470,17 +470,27 @@ namespace {
         
         void begin_facet(index_t f) {
             f1_ = f;
+            
             vec3 p1 = mesh_facet_vertex(f,0);
             vec3 p2 = mesh_facet_vertex(f,1);
             vec3 p3 = mesh_facet_vertex(f,2);
+            
             f1_normal_axis_ = ::GEO::Geom::triangle_normal_axis(
                 p1,p2,p3
             );
+            
             u_ = coord_index_t((f1_normal_axis_ + 1) % 3);
             v_ = coord_index_t((f1_normal_axis_ + 2) % 3);
+            
             for(index_t lv=0; lv<3; ++lv) {
                 add_vertex(Vertex(this, f, lv));
             }
+
+            edges_.push_back(Edge(1,2));
+            edges_.push_back(Edge(2,0));
+            edges_.push_back(Edge(0,1));
+            vertices_in_E_.resize(3);
+            
             if(barycentric_) {
                 f1_orient_ = PCK::orient_2d(
                     vec2(0.0, 0.0),
@@ -494,6 +504,8 @@ namespace {
                     vec2(p3[u_],p3[v_])                    
                 );
             }
+            // Sanity check: the facet does not have zero area
+            geo_assert(f1_orient_ != ZERO);
         }
         
         index_t add_vertex(
@@ -553,33 +565,12 @@ namespace {
             } else {
                 edges_.push_back(Edge(v1,v2,f2));                
             }
+
+            vertices_in_E_.resize(edges_.size());
         }
 
         void end_facet() {
-            // Sanity check: the facet does not have zero area
-            geo_assert(f1_orient_ != ZERO);
             compute_constraints_intersections();
-            
-            // Sort vertices along macro-triangle's edges
-            for(index_t e=0; e<3; ++e) {
-                Edge E(
-                    (e+1)%3, (e+2)%3
-                );
-                sort_vertices_along_edge(E, vertices_in_E_[e]);
-            }
-
-            // Create edges along f1's edges, in MeshInTriangle data structure
-            for(index_t e=0; e<3; ++e) {
-                index_t v0 = (e+1)%3;
-                index_t v1 = (e+2)%3;
-                index_t prev = v0;
-                for(index_t v: vertices_in_E_[e]) {
-                    edges_.push_back(Edge(prev, v));
-                    prev = v;
-                }
-                edges_.push_back(Edge(prev, v1));
-            }
-
             commit();
             clear();
         }
@@ -711,9 +702,11 @@ namespace {
                 }
             }
             if(with_edges && M.edges.nb() == 0) {
+                index_t i=0;
                 for(const Edge& E: edges_) {
                     // std::cerr << E.v1 << "-" << E.v2 << " ";
-                    M.edges.create_edge(E.v1, E.v2);
+                    M.edges.create_edge(E.v1, E.v2); 
+                    ++i;
                 }
                 // std::cerr << std::endl;
             }
@@ -754,11 +747,9 @@ namespace {
         
         void compute_constraints_intersections() {
 
-            // I don't like to use vectors of vectors, but well...
-            vector<vector<index_t> > new_vertices_in_edge(edges_.size());
-
             // Step 1: Compute all intersections
-            for(index_t e1=0; e1<edges_.size(); ++e1) {
+            // (starting at 3, ignoring the 3 macro-edges)
+            for(index_t e1=3; e1<edges_.size(); ++e1) {
                 index_t v1 = edges_[e1].v1;
                 index_t v2 = edges_[e1].v2;
                 for(index_t e2=e1+1; e2<edges_.size(); ++e2) {
@@ -855,24 +846,24 @@ namespace {
                         vertex_[x].facets.push_back(f2);
                         vertex_[x].facets.push_back(f3);
                         
-                        new_vertices_in_edge[e1].push_back(x);
-                        new_vertices_in_edge[e2].push_back(x);
+                        vertices_in_E_[e1].push_back(x);
+                        vertices_in_E_[e2].push_back(x);
                     }
                 }
             }
 
             // Step 2: sort intersections in edges
             for(index_t e=0; e<edges_.size(); ++e) {
-                sort_vertices_along_edge(edges_[e], new_vertices_in_edge[e]);
+                sort_vertices_along_edge(edges_[e], vertices_in_E_[e]);
             }
 
             // Step 3: "remesh" the edges that have intersections
-            for(index_t e=0; e<new_vertices_in_edge.size(); ++e) {
+            for(index_t e=0; e<vertices_in_E_.size(); ++e) {
                 index_t prev_v = edges_[e].v1;
                 index_t last_v = edges_[e].v2;
-                new_vertices_in_edge[e].push_back(last_v);
-                for(index_t i=0; i<new_vertices_in_edge[e].size(); ++i) {
-                    index_t cur_v = new_vertices_in_edge[e][i];
+                vertices_in_E_[e].push_back(last_v);
+                for(index_t i=0; i<vertices_in_E_[e].size(); ++i) {
+                    index_t cur_v = vertices_in_E_[e][i];
                     if(i == 0) {
                         edges_[e].v2 = cur_v;
                     } else {
@@ -948,6 +939,7 @@ namespace {
             }
             
             // Test vertices on constrained edges
+            if(false) // TO BE ADAPTED
             for(index_t i=0; i<vertex_.size(); ++i) {
                 for(const Edge& E: edges_) {
                     if(
@@ -987,9 +979,7 @@ namespace {
                         // along an edge with an existing vertex.
                         continue;
                     }
-                    if(edge_edge_intersect(
-                           E1.v1, E1.v2, E2.v1, E2.v2
-                    )) {
+                    if(edge_edge_intersect(E1.v1, E1.v2, E2.v1, E2.v2)) {
                         result = false;
                         log_err();
                         std::cerr << "Intersecting edges !" << std::endl;
@@ -1136,9 +1126,7 @@ namespace {
         void clear() {
             vertex_.resize(0);
             edges_.resize(0);
-            for(index_t e=0; e<3; ++e) {
-                vertices_in_E_[e].resize(0);
-            }
+            vertices_in_E_.resize(0);
             f1_ = index_t(-1);
         }
 
@@ -1172,7 +1160,7 @@ namespace {
         Sign f1_orient_;
         vector<Vertex> vertex_;
         vector<Edge> edges_;
-        vector<index_t> vertices_in_E_[3];
+        vector<vector<index_t> > vertices_in_E_;
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
         std::map<trindex, index_t> t_v_table_;
         bool check_cnstr_;
