@@ -46,7 +46,7 @@ namespace GEO {
             tt*p1.z+t*p2.z
         );
     }
-    
+
     class vec3QLexicoCompare {
     public:
         bool operator()(const vec3Q& v1, const vec3Q& v2) const {
@@ -166,6 +166,19 @@ namespace GEO {
         return cross(
             make_vec3<VEC3>(p1,p2),
             make_vec3<VEC3>(p1,p3)
+        );
+    }
+
+    inline vec2Q u_P1P2_plus_v_P1P3(
+        rational_nt u, rational_nt v, const vec2& p1, const vec2& p2, const vec2& p3
+    ) {
+        vec2E E1 = make_vec2<vec2E>(p1,p2);
+        vec2E E2 = make_vec2<vec2E>(p1,p3);		      
+        vec2E Pnum = (u.num()*v.denom())*E1 + (v.num()*u.denom())*E2;
+        expansion_nt Pden = u.denom()*v.denom();
+        return vec2Q(
+            rational_nt(Pnum.x, Pden),
+            rational_nt(Pnum.y, Pden)
         );
     }
     

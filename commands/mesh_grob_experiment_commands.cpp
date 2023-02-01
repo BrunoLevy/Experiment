@@ -58,6 +58,8 @@ namespace {
     // TODO: figure out what happens for ~/three_cubes.obj
     //
     // TODO: sort_uniq all edges to detect duplicated edges
+
+
     
     /**
      * \brief Meshes a single triangle with the constraints that come from
@@ -160,15 +162,6 @@ namespace {
                 print(out);
                 return out.str();
             }
-
-            bool is_on_facet(index_t f) const {
-                for(index_t g: facets) {
-                    if(f == g) {
-                        return true;
-                    }
-                }
-                return false;
-            }
             
         protected:
 
@@ -190,9 +183,6 @@ namespace {
                     mesh_vertex_index = mesh().facets.vertex(
                         sym.f2, index_t(sym.R2)-3
                     );
-                }
-                if(f2 != NO_INDEX) {
-                    facets.push_back(f2);
                 }
             }
 
@@ -443,8 +433,6 @@ namespace {
                 index_t f1,f2;        // global facet indices in mesh
                 TriangleRegion R1,R2; // triangle regions
             } sym;
-            
-            vector<index_t> facets;   // all the facets that touch this vertex
         };
 
         
@@ -463,13 +451,15 @@ namespace {
         void set_barycentric(bool x) {
             barycentric_ = x;
         }
-        
+
         Mesh& mesh() {
             return mesh_;
         }
         
         void begin_facet(index_t f) {
             f1_ = f;
+            latest_f2_ = index_t(-1);
+            latest_f2_count_ = 0;
             
             vec3 p1 = mesh_facet_vertex(f,0);
             vec3 p2 = mesh_facet_vertex(f,1);
@@ -506,6 +496,7 @@ namespace {
             }
             // Sanity check: the facet does not have zero area
             geo_assert(f1_orient_ != ZERO);
+            has_planar_isect_ = false;
         }
         
         index_t add_vertex(
@@ -513,6 +504,20 @@ namespace {
             TriangleRegion R1, TriangleRegion R2
         ) {
             geo_debug_assert(f1_ != index_t(-1));
+
+            if(f2 != index_t(-1) && f2 == latest_f2_) {
+                ++latest_f2_count_;
+                if(latest_f2_count_ > 2) {
+                    if(!has_planar_isect_) {
+                        std::cerr << f1_ << ":switching to planar isect mode" << std::endl;
+                    }
+                    has_planar_isect_ = true;
+                }
+            } else {
+                latest_f2_ = f2;
+                latest_f2_count_ = 0;
+            }
+            
             Vertex V(this, f1_, f2, R1, R2);
             index_t sz = vertex_.size();
             index_t v = add_vertex(V);
@@ -578,26 +583,16 @@ namespace {
     protected:
 
         index_t add_vertex(const Vertex& V) {
-            // std::cerr << "Add vertex: " << V.to_string() << std::endl;
             // Test whether there is already a vertex at the same position
             for(index_t i=0; i<vertex_.size(); ++i) {
                 if(PCK::same_point(vertex_[i].UV_exact,V.UV_exact)) {
-                    // If the vertex already exist, update its list of
-                    // incident facets
-                    if(
-                        V.sym.f2 != index_t(-1) &&
-                        !vertex_[i].is_on_facet(V.sym.f2)) {
-                        vertex_[i].facets.push_back(V.sym.f2);
-                    }
                     // Return found vertex
-                    // std::cerr << "--> " << i << std::endl;
                     return i;
                 }
             }
             // There was no vertex at the same position, so add it
             // to the list of vertices
             vertex_.push_back(V);
-            // std::cerr << "--> " << vertex_.size()-1 << std::endl;
             return vertex_.size()-1;
         }
         
@@ -694,10 +689,21 @@ namespace {
             if(M.vertices.nb() == 0) {
                 M.vertices.set_dimension(2);
                 for(index_t v=0; v<vertex_.size(); ++v) {
-                    vec2 p(
-                        vertex_[v].UV_exact.x.estimate(),
-                        vertex_[v].UV_exact.y.estimate()
-                    );
+		   vec2 p;
+		   if(barycentric_ && has_planar_isect_) {
+                       const vec2Q& uv = vertex_[v].UV_exact;
+                       vec2 p1 = mesh_facet_vertex_project(f1_,0);
+                       vec2 p2 = mesh_facet_vertex_project(f1_,1);
+                       vec2 p3 = mesh_facet_vertex_project(f1_,2);
+                       vec2Q p_exact = u_P1P2_plus_v_P1P3(uv.x, uv.y, p1, p2, p3);
+                       p.x = p_exact.x.estimate();
+                       p.y = p_exact.y.estimate();
+                   } else {
+		       p = vec2(
+                           vertex_[v].UV_exact.x.estimate(),
+                           vertex_[v].UV_exact.y.estimate()
+                       );
+		    }
                     M.vertices.create_vertex(p.data());
                 }
             }
@@ -726,6 +732,7 @@ namespace {
             std::cerr << std::endl << std::endl << std::endl;
         }
 
+        /*
         index_t common_facet(index_t v1, index_t v2) const {
             const Vertex& V1 = vertex_[v1];
             const Vertex& V2 = vertex_[v2];
@@ -744,6 +751,7 @@ namespace {
             }
             return result;
         }
+        */
         
         void compute_constraints_intersections() {
 
@@ -843,8 +851,8 @@ namespace {
                         }
                         
                         index_t x = add_vertex(Vertex(this,I,I_uv));
-                        vertex_[x].facets.push_back(f2);
-                        vertex_[x].facets.push_back(f3);
+                        //vertex_[x].facets.push_back(f2);
+                        //vertex_[x].facets.push_back(f3);
                         
                         vertices_in_E_[e1].push_back(x);
                         vertices_in_E_[e2].push_back(x);
@@ -1061,7 +1069,13 @@ namespace {
             index_t v = mesh_.facets.vertex(f,lv);
             return vec3(mesh_.vertices.point_ptr(v));
         }
-        
+
+        vec2 mesh_facet_vertex_project(index_t f, index_t lv) const {
+            index_t v = mesh_.facets.vertex(f,lv);
+	    const double* p = mesh_.vertices.point_ptr(v);
+            return vec2(p[u_],p[v_]);
+        }
+       
         bool same_point(index_t i, index_t j) const {
             return PCK::same_point(
                 vertex_[i].UV_exact,
@@ -1154,6 +1168,8 @@ namespace {
     private:
         Mesh& mesh_;
         index_t f1_;
+        index_t latest_f2_;
+        index_t latest_f2_count_;
         coord_index_t f1_normal_axis_;
         coord_index_t u_; // = (f1_normal_axis_ + 1)%3
         coord_index_t v_; // = (f1_normal_axis_ + 2)%3
@@ -1165,6 +1181,7 @@ namespace {
         std::map<trindex, index_t> t_v_table_;
         bool check_cnstr_;
         bool barycentric_;
+        bool has_planar_isect_;
     };
 
     /***********************************************************************/
