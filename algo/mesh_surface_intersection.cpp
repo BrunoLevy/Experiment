@@ -1263,7 +1263,7 @@ namespace {
         return result;
     }
     
-    void intersect_surface_impl(Mesh& M, const MeshIntersectionParams& params) {
+    void intersect_surface_impl(Mesh& M, const MeshSurfaceIntersectionParams& params) {
 
         // Set symbolic perturbation mode to lexicographic order
         // on point coordinates instead of point indices only,
@@ -1367,7 +1367,7 @@ namespace {
 
 namespace GEO {
     
-    void mesh_intersect_surface(Mesh& M, const MeshIntersectionParams& params) {
+    void mesh_intersect_surface(Mesh& M, const MeshSurfaceIntersectionParams& params) {
         if(!M.facets.are_simplices()) {
             tessellate_facets(M,3);
         }

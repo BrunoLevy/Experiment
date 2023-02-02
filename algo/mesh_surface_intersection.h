@@ -12,7 +12,7 @@ namespace GEO {
 
     class Mesh;
     
-    struct MeshIntersectionParams {
+    struct MeshSurfaceIntersectionParams {
         /**
          * \brief detect and fix duplicated vertices in input 
          */
@@ -63,7 +63,7 @@ namespace GEO {
     };
 
     void Experiment_API mesh_intersect_surface(
-        Mesh& M, const MeshIntersectionParams& params
+        Mesh& M, const MeshSurfaceIntersectionParams& params
     );
 }
 

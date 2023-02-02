@@ -28,7 +28,7 @@
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
 
-#include <geogram/mesh/mesh_AABB.h>
+#include <geogram/mesh/mesh_reorder.h>
 #include <geogram/delaunay/delaunay.h>
 
 namespace OGF {
@@ -48,7 +48,7 @@ namespace OGF {
         bool check_constraints,
         bool barycentric
     ) {
-        MeshIntersectionParams params;
+        MeshSurfaceIntersectionParams params;
 
         params.pre_detect_duplicated_vertices = merge_vertices_and_facets;
         params.pre_detect_duplicated_facets = merge_vertices_and_facets;
@@ -66,7 +66,7 @@ namespace OGF {
     }
 
     void MeshGrobExperimentCommands::sort_facets() {
-        MeshFacetsAABB AABB(*mesh_grob()); // This sorts the facets
+        mesh_reorder(*mesh_grob(), MESH_ORDER_MORTON);
         mesh_grob()->update();
     }
     
