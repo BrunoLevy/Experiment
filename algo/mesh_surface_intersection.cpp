@@ -285,6 +285,7 @@ namespace {
                             sym.f1, 2
                         );
                         expansion_nt D = det(p2-p1,p3-p1);
+                        geo_debug_assert(D.sign() != ZERO);
                         UV_exact = vec2Q(
                             rational_nt(det(q-p1,p3-p1),D),
                             rational_nt(det(p2-p1,q-p1),D)
@@ -329,7 +330,7 @@ namespace {
                         vec3E N   = cross(E1,E2);
                     
                         expansion_nt d = -dot(D,N);
-                        geo_assert(d.sign() != ZERO);
+                        geo_debug_assert(d.sign() != ZERO);
                         rational_nt t(dot(AO,N),d);
                         point_exact = mix(t,q1,q2);
 
@@ -402,7 +403,7 @@ namespace {
                     vec2E D2 = make_vec2<vec2E>(q1,q2);
 
                     expansion_nt d = det(D1,D2);
-                    geo_assert(d.sign() != ZERO);
+                    geo_debug_assert(d.sign() != ZERO);
                     
                     vec2E AO = make_vec2<vec2E>(p1,q1);
                     vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
@@ -914,7 +915,7 @@ namespace {
                     dot(make_vec3<vec3E>(P[0],P[6]),N2)
                 );
                 expansion_nt d = det(C1,C2);
-                geo_assert(d.sign() != ZERO);
+                geo_debug_assert(d.sign() != ZERO);
                 UV.x = rational_nt(det(B,C2),d);
                 UV.y = rational_nt(det(C1,B),d);
             } else {
@@ -934,7 +935,7 @@ namespace {
             index_t le2 = index_t(E2.sym.R2)-index_t(T2_RGN_E0);
             geo_assert(le1 < 3);
             geo_assert(le2 < 3);
-            
+
             vec2 p1_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+1)%3);
             vec2 p2_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+2)%3);
             vec2 q1_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+1)%3);
@@ -944,7 +945,7 @@ namespace {
             vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
             
             expansion_nt d = det(C1,C2);
-            geo_assert(d.sign() != ZERO);
+            geo_debug_assert(d.sign() != ZERO);
             rational_nt t(det(B,C2),d);
             I = mix(
                 t,
@@ -952,9 +953,28 @@ namespace {
                 mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
             );
             
-            geo_assert(!barycentric_);
-            UV.x = I[u_];
-            UV.y = I[v_];
+            if(barycentric_) {
+                vec2 a1_uv = mesh_facet_vertex_project(f1_,0);
+                vec2 a2_uv = mesh_facet_vertex_project(f1_,1);
+                vec2 a3_uv = mesh_facet_vertex_project(f1_,2);
+                vec2E a12_uv = make_vec2<vec2E>(a1_uv, a2_uv);
+                vec2E a13_uv = make_vec2<vec2E>(a1_uv, a3_uv);
+                vec2E p12_uv = make_vec2<vec2E>(p1_uv, p2_uv);
+                vec2E q12_uv = make_vec2<vec2E>(q1_uv, q2_uv);
+                vec2E C1(det(a12_uv, p12_uv), det(a12_uv, q12_uv));
+                vec2E C2(det(a13_uv, p12_uv), det(a13_uv, q12_uv));
+                vec2E B(
+                    det(make_vec2<vec2E>(a1_uv, p1_uv), p12_uv),
+                    det(make_vec2<vec2E>(a1_uv, q1_uv), q12_uv)
+                );
+                expansion_nt d = det(C1,C2);
+                geo_debug_assert(d.sign() != ZERO);
+                UV.x = rational_nt(det(B,C2),d);
+                UV.y = rational_nt(det(C1,B),d);                
+            } else {
+                UV.x = I[u_];
+                UV.y = I[v_];
+            }
         }
         
         bool check_constraints() const {
