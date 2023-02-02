@@ -445,7 +445,7 @@ namespace {
             barycentric_ = x;
         }
 
-        Mesh& mesh() {
+        Mesh& mesh() const {
             return mesh_;
         }
         
@@ -614,8 +614,6 @@ namespace {
             Mesh constraints;
             get_constraints(constraints);
 
-            // std::cerr << " Nb edges=" << edges_.size() << std::endl;
-            
             if(!OK) {
                 std::cerr << "==============================>>>>"
                           << "There were errors, saving constraints..."
@@ -748,6 +746,7 @@ namespace {
 
                         vec3Q I;
                         vec2Q I_uv;
+                        bool twoD = false;
                         
                         if(
                             get_three_planes_intersection(
@@ -791,19 +790,61 @@ namespace {
                             }
                             
                         } else {
+                            twoD = true;
                             std::cerr << "2D constraints intersection"
                                       << std::endl;
 
+                            geo_assert(!barycentric_); 
+
+                            const Edge& E1 = edges_[e1];
+                            const Edge& E2 = edges_[e2];
+
+                            /*
                             std::cerr << edges_[e1].sym.f2 << "."
-                                      << region_to_string(edges_[e1].sym.R2)
+                                      << region_to_string(E1.sym.R2)
                                       << " /\\ "
                                       << edges_[e2].sym.f2 << "."
-                                      << region_to_string(edges_[e2].sym.R2)
+                                      << region_to_string(E2.sym.R2)
                                       << std::endl;
+
+                            std::cerr << vertex_[v1].to_string() << std::endl;
+                            std::cerr << vertex_[v2].to_string() << std::endl;
+                            std::cerr << vertex_[w1].to_string() << std::endl;
+                            std::cerr << vertex_[w2].to_string() << std::endl;                            
+                            */
                             
-                            geo_assert_not_reached;
+                            geo_assert(region_dim(E1.sym.R2) == 1);
+                            geo_assert(region_dim(E2.sym.R2) == 1);
+
+                            index_t le1 = index_t(E1.sym.R2) - index_t(T2_RGN_E0);
+                            index_t le2 = index_t(E2.sym.R2) - index_t(T2_RGN_E0);                            
+
+                            geo_assert(le1 < 3);
+                            geo_assert(le2 < 3);
+                            
+                            vec2 p1_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+1)%3);
+                            vec2 p2_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+2)%3);                            
+                            vec2 q1_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+1)%3);
+                            vec2 q2_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+2)%3);                            
+
+                            vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
+                            vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
+                            vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
+
+                            expansion_nt d = det(C1,C2);
+                            geo_assert(d.sign() != ZERO);
+                            rational_nt t(det(B,C2),d);
+
+                            I = mix(
+                                t,
+                                mesh_facet_vertex(E1.sym.f2,(le1+1)%3),
+                                mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
+                            );
+
+                            I_uv.x = I[u_];
+                            I_uv.y = I[v_];
                         }
-                        
+
                         index_t x = add_vertex(Vertex(this,I,I_uv));
                         edges_[e1].vertices_in_edge.push_back(x);
                         edges_[e2].vertices_in_edge.push_back(x);
@@ -999,17 +1040,39 @@ namespace {
             return result;
         }
 
-        vec3 mesh_facet_vertex(index_t f, index_t lv) const {
-            index_t v = mesh_.facets.vertex(f,lv);
-            return vec3(mesh_.vertices.point_ptr(v));
+        template <class VEC = vec3> VEC
+        mesh_vertex(index_t v) const {
+            typedef typename VEC::value_type value_type;
+            const double* p = mesh().vertices.point_ptr(v);
+            return VEC(
+                value_type(p[0]),
+                value_type(p[1]),
+                value_type(p[2])                    
+            );
         }
-
-        vec2 mesh_facet_vertex_project(index_t f, index_t lv) const {
-            index_t v = mesh_.facets.vertex(f,lv);
-	    const double* p = mesh_.vertices.point_ptr(v);
-            return vec2(p[u_],p[v_]);
+            
+        template <class VEC = vec3> VEC
+        mesh_facet_vertex(index_t f, index_t lv) const {
+            index_t v = mesh().facets.vertex(f,lv);
+            return mesh_vertex<VEC>(v);
         }
-       
+        
+        template <class VEC = vec2> VEC
+        mesh_vertex_project(index_t v) const {
+            typedef typename VEC::value_type value_type;
+            const double* p = mesh().vertices.point_ptr(v);
+            return VEC(
+                value_type(p[u_]),
+                value_type(p[v_])
+            );
+        }
+            
+        template <class VEC = vec2> VEC
+        mesh_facet_vertex_project(index_t f, index_t lv) const {
+            index_t v = mesh().facets.vertex(f,lv);
+            return mesh_vertex_project<VEC>(v);
+        }
+        
         bool same_point(index_t i, index_t j) const {
             return PCK::same_point(
                 vertex_[i].UV_exact,
@@ -1156,7 +1219,6 @@ namespace {
     bool mesh_facets_intersect(
         Mesh& M, index_t f1, index_t f2, vector<TriangleIsect>& I
     ) {
-        // cerr << "Intersect facets " << f1 << " /\\ " << f2 << std::endl;
         geo_debug_assert(M.facets.nb_vertices(f1) == 3);
         geo_debug_assert(M.facets.nb_vertices(f2) == 3);        
         vec3 p1(M.vertices.point_ptr(M.facets.vertex(f1,0)));
