@@ -48,7 +48,14 @@ namespace {
     public:
 
         /***************************************************************/
-        
+
+        /**
+         * \brief An edge of the mesh.
+         * \details It represents the constraints to be used by the
+         *  constrained triangulation to remesh the facet. It contains
+         *  a list of vertices coming from the intersection with other
+         *  constrained edge.
+         */
         class Edge {
         public:
             Edge(
@@ -63,17 +70,44 @@ namespace {
                 sym.f2 = f2;
                 sym.R2 = R2;
             }
+            
+            void add_vertex_in_edge(index_t v) {
+                if(v == v1 || v == v2) {
+                    return;
+                }
+                for(index_t w: vertices_in_edge) {
+                    if(w == v) {
+                        return;
+                    }
+                }
+                vertices_in_edge.push_back(v);
+            }
+
+            // The two extremities of the constraint.
             index_t v1;
             index_t v2;
+
+            // Symbolic information: this edge was generated
+            // by the intersection with f2's region R2.
             struct {
                 index_t        f2;
                 TriangleRegion R2;
             } sym;
+
+            // The indices of all vertices that fall in this edge.
             vector<index_t> vertices_in_edge;
         };
 
         /***************************************************************/
-        
+
+        /**
+         * \brief A vertex of the triangulation
+         * \details Stores geometric information in exact precision, both
+         *  in 3D and in local 2D coordinates. Local 2D coordinates can 
+         *  be either projected or barycentric, depending on MeshInTriangle's
+         *  barycentric_ flag. It also stores symbolic information, that is,
+         *  facet indices and regions that generated the vertex.
+         */
         class Vertex {
         public:
             enum { NO_INDEX = index_t(-1) };
@@ -83,6 +117,9 @@ namespace {
 
             /**
              * \brief Constructor for macro-triangle vertices.
+             * \param[in] f facet index, supposed to correspond to
+             *  MeshInTriangle's current facet
+             * \param[in] lv local vertex index in \p f
              */
             Vertex(MeshInTriangle* M, index_t f, index_t lv) {
                 geo_assert(f == M->f1_);
@@ -94,6 +131,9 @@ namespace {
 
             /**
              * \brief Constructor for intersections with other facets.
+             * \param[in] f1 , f2 the two facets. \p f1 is suposed to
+             *  correspond to MeshInTriangle's current facet
+             * \param[in] R1 , R2 the two facet regions.
              */
             Vertex(
                 MeshInTriangle* M,
@@ -109,6 +149,11 @@ namespace {
 
             /**
              * \brief Constructor for intersections between constraints.
+             * \param[in] point_exact_in exact 3D coordinates 
+             *   of the intersection
+             * \param[in] UV_exact_in exact 2D coordinates. They can be either
+             *   projected or barycentric, depending on MeshInTriangle's 
+             *   barycentric_ flag.
              */
             Vertex(
                 MeshInTriangle* M,
@@ -121,7 +166,10 @@ namespace {
                 mesh_in_triangle = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
             }
-            
+
+            /**
+             * \brief Default constructor
+             */
             Vertex() {
                 type = UNINITIALIZED;                
                 mesh_in_triangle = nullptr;
@@ -129,10 +177,19 @@ namespace {
                 mesh_vertex_index = NO_INDEX;
             }
 
+            /**
+             * \brief Gets the mesh
+             * \return a reference to the mesh
+             */
             Mesh& mesh() const {
                 return mesh_in_triangle->mesh();
             }
-            
+
+            /**
+             * \brief Prints this vertex
+             * \details Displays the combinatorial information
+             * \param[out] out an optional stream where to print
+             */
             void print(std::ostream& out=std::cerr) const {
                 if(sym.f1 != index_t(-1)) {
                     out << " ( ";
@@ -149,6 +206,11 @@ namespace {
                 }
             }
 
+            /**
+             * \brief Gets a string representation of this Vertex
+             * \return a string with the combinatorial information 
+             *  of this Vertex
+             */
             std::string to_string() const {
                 std::ostringstream out;
                 print(out);
@@ -157,6 +219,12 @@ namespace {
             
         protected:
 
+            /**
+             * \brief Initializes the symbolic information of this Vertex
+             * \param[in] f1 , f2 the two facets. \p f1 is suposed to
+             *  correspond to MeshInTriangle's current facet
+             * \param[in] R1 , R2 the two facet regions.
+             */
             void init_sym(
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
@@ -178,6 +246,11 @@ namespace {
                 }
             }
 
+            /**
+             * \brief Initializes the geometry of this vertex
+             * \details Computes the exact 3D and 2D position of this vertex
+             *  based on the mesh and the combinatorial information
+             */
             void init_geometry() {
 
                 static vec2 uv[3] = {
@@ -364,14 +437,28 @@ namespace {
                 geo_assert_not_reached;
             }
 
+            /**
+             * \brief Indicates whether barycentric or projected coordinates
+             *  are used.
+             * \retval true if barycentric coordinates are used
+             * \retval false otherwise
+             */
             bool barycentric() const {
                 return mesh_in_triangle->barycentric_;
             }
 
+            /**
+             * \brief Gets the coordinate used for the U axis
+             * \return one of 0,1,2
+             */
             coord_index_t u_coord() const {
                 return mesh_in_triangle->u_;
             }
 
+            /**
+             * \brief Gets the coordinate used for the V axis
+             * \return one of 0,1,2
+             */
             coord_index_t v_coord() const {
                 return mesh_in_triangle->v_;                
             }
@@ -503,11 +590,13 @@ namespace {
             if(f2 != index_t(-1) && f2 == latest_f2_) {
                 ++latest_f2_count_;
                 if(latest_f2_count_ > 2) {
+                    /*
                     if(!has_planar_isect_) {
                         std::cerr << f1_
                                   << ":switching to planar isect mode"
                                   << std::endl;
                     }
+                    */
                     has_planar_isect_ = true;
                 }
             } else {
@@ -529,7 +618,7 @@ namespace {
             if(vertex_.size() > sz) {
                 if(region_dim(R1) == 1) {
                     index_t e = index_t(R1) - index_t(T1_RGN_E0);
-                    edges_[e].vertices_in_edge.push_back(v);
+                    edges_[e].add_vertex_in_edge(v);
                 }
             }
             return v;
@@ -680,7 +769,7 @@ namespace {
                        vec2 p1 = mesh_facet_vertex_project(f1_,0);
                        vec2 p2 = mesh_facet_vertex_project(f1_,1);
                        vec2 p3 = mesh_facet_vertex_project(f1_,2);
-                       vec2Q p_exact = u_P1P2_plus_v_P1P3(uv.x, uv.y, p1, p2, p3);
+                       vec2Q p_exact = u_P1P2_plus_v_P1P3(uv.x,uv.y,p1,p2,p3);
                        p.x = p_exact.x.estimate();
                        p.y = p_exact.y.estimate();
                    } else {
@@ -703,6 +792,21 @@ namespace {
 
         void compute_constraints_intersections() {
 
+            // Note: intersections that fall exactly
+            // on vertices already present in this TriangleInMesh
+            // are properly handled by two mechanisms:
+            // - MeshInTriangle::add_vertex() compares the new
+            //   vertex with all previous ones (and returns the
+            //   existing vertex if one was found at the same position)
+            // - Edge::add_vertex_in_edge(v) compares v with edge extremities
+            //   and vertices already present in edge.
+            // These two mechanisms (and the two nested edge-edge loops) make
+            // the overall algorithm O(n^2). Not a big drama if what happens
+            // within a single triangle stays reasonable...
+            //
+            // (we could capture some of them earlier, using the orient2d()
+            //  computed by segment-segment intersection predicate).
+            
             // Step 1: Compute all intersections
             // (starting at 3, ignoring the 3 macro-edges)
             for(index_t e1=3; e1<edges_.size(); ++e1) {
@@ -718,136 +822,15 @@ namespace {
                         // along an edge with an existing vertex.
                         continue;
                     }
-                    // TODO: check whether intersection is one of the
-                    // vertices.
-                    // TODO: check co-linear edges
-
+                    
+                    // TODO: check and handle co-linear edges
                     if(edge_edge_intersect(v1,v2,w1,w2)) {
-
-                        index_t f1 = f1_;
-                        index_t f2 = edges_[e1].sym.f2; 
-                        index_t f3 = edges_[e2].sym.f2; 
-
-                        geo_assert(f1 != index_t(-1));
-                        geo_assert(f2 != index_t(-1));
-                        geo_assert(f3 != index_t(-1));                        
-
-                        vec3 P[9] = {
-                            mesh_facet_vertex(f1,0),
-                            mesh_facet_vertex(f1,1),
-                            mesh_facet_vertex(f1,2),
-                            mesh_facet_vertex(f2,0),
-                            mesh_facet_vertex(f2,1),
-                            mesh_facet_vertex(f2,2),
-                            mesh_facet_vertex(f3,0),
-                            mesh_facet_vertex(f3,1),
-                            mesh_facet_vertex(f3,2)                            
-                        };
-
                         vec3Q I;
-                        vec2Q I_uv;
-                        bool twoD = false;
-                        
-                        if(
-                            get_three_planes_intersection(
-                                I,
-                                P[0], P[1], P[2],
-                                P[3], P[4], P[5],
-                                P[6], P[7], P[8]
-                            )
-                        ) {
-                            // Barycentric mode:
-                            // compute (u,v) from 3D geometry (direct from
-                            // data, reduces degree of used expansions)
-                            if(barycentric_) {
-                                
-                                vec3E E1 = make_vec3<vec3E>(P[0],P[1]); 
-                                vec3E E2 = make_vec3<vec3E>(P[0],P[2]); 
-
-                                vec3E N1 = triangle_normal<vec3E>(
-                                    P[3],P[4],P[5]
-                                );
-                                vec3E N2 = triangle_normal<vec3E>(
-                                    P[6],P[7],P[8]
-                                );
-                                
-                                vec2E C1(dot(E1,N1),dot(E1,N2));
-                                vec2E C2(dot(E2,N1),dot(E2,N2));
-                            
-                                vec2E B(
-                                    dot(make_vec3<vec3E>(P[0],P[3]),N1),
-                                    dot(make_vec3<vec3E>(P[0],P[6]),N2)
-                                );
-
-                                expansion_nt d = det(C1,C2);
-                                geo_assert(d.sign() != ZERO);
-
-                                I_uv.x = rational_nt(det(B,C2),d);
-                                I_uv.y = rational_nt(det(C1,B),d);
-                            } else {
-                                I_uv.x = I[u_];
-                                I_uv.y = I[v_];
-                            }
-                            
-                        } else {
-                            twoD = true;
-                            std::cerr << "2D constraints intersection"
-                                      << std::endl;
-
-                            geo_assert(!barycentric_); 
-
-                            const Edge& E1 = edges_[e1];
-                            const Edge& E2 = edges_[e2];
-
-                            /*
-                            std::cerr << edges_[e1].sym.f2 << "."
-                                      << region_to_string(E1.sym.R2)
-                                      << " /\\ "
-                                      << edges_[e2].sym.f2 << "."
-                                      << region_to_string(E2.sym.R2)
-                                      << std::endl;
-
-                            std::cerr << vertex_[v1].to_string() << std::endl;
-                            std::cerr << vertex_[v2].to_string() << std::endl;
-                            std::cerr << vertex_[w1].to_string() << std::endl;
-                            std::cerr << vertex_[w2].to_string() << std::endl;                            
-                            */
-                            
-                            geo_assert(region_dim(E1.sym.R2) == 1);
-                            geo_assert(region_dim(E2.sym.R2) == 1);
-
-                            index_t le1 = index_t(E1.sym.R2) - index_t(T2_RGN_E0);
-                            index_t le2 = index_t(E2.sym.R2) - index_t(T2_RGN_E0);                            
-
-                            geo_assert(le1 < 3);
-                            geo_assert(le2 < 3);
-                            
-                            vec2 p1_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+1)%3);
-                            vec2 p2_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+2)%3);                            
-                            vec2 q1_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+1)%3);
-                            vec2 q2_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+2)%3);                            
-
-                            vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
-                            vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
-                            vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
-
-                            expansion_nt d = det(C1,C2);
-                            geo_assert(d.sign() != ZERO);
-                            rational_nt t(det(B,C2),d);
-
-                            I = mix(
-                                t,
-                                mesh_facet_vertex(E1.sym.f2,(le1+1)%3),
-                                mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
-                            );
-
-                            I_uv.x = I[u_];
-                            I_uv.y = I[v_];
-                        }
-
-                        index_t x = add_vertex(Vertex(this,I,I_uv));
-                        edges_[e1].vertices_in_edge.push_back(x);
-                        edges_[e2].vertices_in_edge.push_back(x);
+                        vec2Q UV;
+                        get_edge_edge_intersection(e1,e2,I,UV);
+                        index_t x = add_vertex(Vertex(this,I,UV));
+                        edges_[e1].add_vertex_in_edge(x);
+                        edges_[e2].add_vertex_in_edge(x);
                     }
                 }
             }
@@ -872,14 +855,20 @@ namespace {
                 // There can be degenerate vertices if there is
                 // a triple point in the triangle (quadruple point
                 // in 3D) ... shit happens ! [Forrest Gump]
+                //   Well, normally we already detected them when
+                // inserting the points in the edges
+                // (Edge::add_to_vertices_in_edge())
                 V.erase(
                     std::unique(V.begin(), V.end()), V.end()
                 );
             }
 
             // Step 3: "remesh" the edges that have intersections
-            index_t ne = edges_.size();
-            for(index_t e=0; e<ne; ++e) {
+            index_t nE = edges_.size();
+            for(index_t e=0; e<nE; ++e) {
+                if(edges_[e].vertices_in_edge.size() == 0) {
+                    continue;
+                }
                 index_t prev_v = edges_[e].v1;
                 index_t last_v = edges_[e].v2;
                 edges_[e].vertices_in_edge.push_back(last_v);
@@ -893,9 +882,96 @@ namespace {
                     prev_v = cur_v;
                 }
             }
-            
         }
 
+        void get_edge_edge_intersection(
+            index_t e1, index_t e2, vec3Q& I, vec2Q& UV
+        ) const {
+            index_t f1 = f1_;
+            index_t f2 = edges_[e1].sym.f2; 
+            index_t f3 = edges_[e2].sym.f2; 
+            
+            geo_assert(f1 != index_t(-1));
+            geo_assert(f2 != index_t(-1));
+            geo_assert(f3 != index_t(-1));                        
+            
+            vec3 P[9] = {
+                mesh_facet_vertex(f1,0), mesh_facet_vertex(f1,1),
+                mesh_facet_vertex(f1,2),
+                mesh_facet_vertex(f2,0), mesh_facet_vertex(f2,1),
+                mesh_facet_vertex(f2,2),
+                mesh_facet_vertex(f3,0), mesh_facet_vertex(f3,1),
+                mesh_facet_vertex(f3,2)
+            };
+
+            if(!get_three_planes_intersection(
+                    I,
+                    P[0], P[1], P[2],
+                    P[3], P[4], P[5],
+                    P[6], P[7], P[8]
+            )) {
+                get_edge_edge_intersection_2D(e1,e2,I,UV);
+                return;
+            }
+            
+            // Barycentric mode:
+            // compute (u,v) from 3D geometry (direct from
+            // data, reduces degree of used expansions)
+            if(barycentric_) {
+                vec3E E1 = make_vec3<vec3E>(P[0],P[1]); 
+                vec3E E2 = make_vec3<vec3E>(P[0],P[2]); 
+                vec3E N1 = triangle_normal<vec3E>(P[3],P[4],P[5]);
+                vec3E N2 = triangle_normal<vec3E>(P[6],P[7],P[8]);
+                vec2E C1(dot(E1,N1),dot(E1,N2));
+                vec2E C2(dot(E2,N1),dot(E2,N2));
+                vec2E B(
+                    dot(make_vec3<vec3E>(P[0],P[3]),N1),
+                    dot(make_vec3<vec3E>(P[0],P[6]),N2)
+                );
+                expansion_nt d = det(C1,C2);
+                geo_assert(d.sign() != ZERO);
+                UV.x = rational_nt(det(B,C2),d);
+                UV.y = rational_nt(det(C1,B),d);
+            } else {
+                UV.x = I[u_];
+                UV.y = I[v_];
+            }
+        }             
+
+        void get_edge_edge_intersection_2D(
+            index_t e1, index_t e2, vec3Q& I, vec2Q& UV
+        ) const {
+            const Edge& E1 = edges_[e1];
+            const Edge& E2 = edges_[e2];
+            geo_assert(region_dim(E1.sym.R2) == 1);
+            geo_assert(region_dim(E2.sym.R2) == 1);
+            index_t le1 = index_t(E1.sym.R2)-index_t(T2_RGN_E0);
+            index_t le2 = index_t(E2.sym.R2)-index_t(T2_RGN_E0);
+            geo_assert(le1 < 3);
+            geo_assert(le2 < 3);
+            
+            vec2 p1_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+1)%3);
+            vec2 p2_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+2)%3);
+            vec2 q1_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+1)%3);
+            vec2 q2_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+2)%3);
+            vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
+            vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
+            vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
+            
+            expansion_nt d = det(C1,C2);
+            geo_assert(d.sign() != ZERO);
+            rational_nt t(det(B,C2),d);
+            I = mix(
+                t,
+                mesh_facet_vertex(E1.sym.f2,(le1+1)%3),
+                mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
+            );
+            
+            geo_assert(!barycentric_);
+            UV.x = I[u_];
+            UV.y = I[v_];
+        }
+        
         bool check_constraints() const {
             Mesh debug_constraints;
             Attribute<bool> debug_vertex_show(
