@@ -635,13 +635,13 @@ namespace {
             // If both extremities are on the same edge of f1,
             // we do not add the edge, because it will be generating
             // when remeshing the edge of f1
-            if(region_dim(region_union(AR1,BR1)) == 1) {
+            if(region_dim(regions_convex_hull(AR1,BR1)) == 1) {
                 return;
             }
 
             // The combinatorial information of the edge indicates whether
             // both extremities are on the same edge of f2
-            edges_.push_back(Edge(v1,v2,f2,region_union(AR2,BR2)));
+            edges_.push_back(Edge(v1,v2,f2,regions_convex_hull(AR2,BR2)));
         }
 
         void end_facet() {
@@ -1232,7 +1232,6 @@ namespace {
         vector<Vertex> vertex_;
         vector<Edge> edges_;
         std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
-        std::map<trindex, index_t> t_v_table_;
         bool check_cnstr_;
         bool barycentric_;
         bool has_planar_isect_;
@@ -1368,10 +1367,10 @@ namespace {
                                 // or on the same edge of f2
                                 
                                 TriangleRegion AB1 =
-                                    region_union(II.A_rgn_f1, II.B_rgn_f1);
+                                  regions_convex_hull(II.A_rgn_f1, II.B_rgn_f1);
                                 
                                 TriangleRegion AB2 =
-                                    region_union(II.A_rgn_f2, II.B_rgn_f2);
+                                  regions_convex_hull(II.A_rgn_f2, II.B_rgn_f2);
                                 
                                 if(
                                     region_dim(AB1) == 1 ||
