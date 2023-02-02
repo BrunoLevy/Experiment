@@ -65,6 +65,10 @@ namespace GEO {
     void Experiment_API mesh_intersect_surface(
         Mesh& M, const MeshSurfaceIntersectionParams& params
     );
+
+    void Experiment_API mesh_classify_intersections(
+        Mesh& M, const std::string& expr
+    );
 }
 
 #endif

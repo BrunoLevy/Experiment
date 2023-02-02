@@ -65,6 +65,14 @@ namespace OGF {
         mesh_grob()->update();
     }
 
+    void MeshGrobExperimentCommands::classify_intersections(
+        const std::string& expr
+    ) {
+        mesh_classify_intersections(*mesh_grob(),expr);
+        show_attribute("facets.selection");
+        mesh_grob()->update();
+    }
+    
     void MeshGrobExperimentCommands::sort_facets() {
         mesh_reorder(*mesh_grob(), MESH_ORDER_MORTON);
         mesh_grob()->update();

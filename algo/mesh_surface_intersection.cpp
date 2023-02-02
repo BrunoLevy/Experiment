@@ -13,11 +13,13 @@
 #include <geogram/mesh/mesh_fill_holes.h>
 #include <geogram/mesh/index.h>
 #include <geogram/mesh/mesh_io.h>
+#include <geogram/mesh/mesh_geometry.h>
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/numerics/predicates.h>
 #include <geogram/numerics/expansion_nt.h>
 
 #include <sstream>
+#include <stack>
 
 namespace {
     using namespace GEO;
@@ -734,7 +736,9 @@ namespace {
                 if(flip) {
                     std::swap(i,j);
                 }
-                mesh_.facets.create_triangle(i,j,k);
+                index_t new_t = mesh_.facets.create_triangle(i,j,k);
+                // Copy all attributes from initial facet
+                mesh_.facets.attributes().copy_item(new_t, f1_);
             }
         }
         
@@ -1492,8 +1496,43 @@ namespace {
         }
         PCK::set_SOS_mode(SOS_bkp);
     }
-    
+
+    /*****************************************************************/
+
+    index_t compute_charts(Mesh& M) {
+        Attribute<index_t> chart(M.facets.attributes(), "chart");
+        for(index_t f: M.facets) {
+            chart[f] = index_t(-1);
+        }
+        std::stack<index_t> S;
+        index_t cur_chart = 0;
+        for(index_t f: M.facets) {
+            if(chart[f] == index_t(-1)) {
+                chart[f] = cur_chart;
+                S.push(f);
+                while(!S.empty()) {
+                    index_t g = S.top();
+                    S.pop();
+                    for(
+                        index_t le=0;
+                        le<M.facets.nb_vertices(g); ++le
+                    ) {
+                        index_t h = M.facets.adjacent(g,le);
+                        if(h != index_t(-1) && chart[h] == index_t(-1)) {
+                            chart[h] = cur_chart;
+                            S.push(h);
+                        }
+                    }
+                }
+                ++cur_chart;
+            }
+        }
+        return cur_chart;
+    }
 }
+
+
+
 
 namespace GEO {
     
@@ -1530,6 +1569,11 @@ namespace GEO {
         mesh_intersect_surface_compute_arrangement(M, params);
 
         if(params.post_connect_facets) {
+            /*
+            mesh_colocate_vertices_no_check(M);
+            mesh_remove_bad_facets_no_check(M);
+            mesh_connect_and_reorient_facets_no_check(M);
+            */
             mesh_repair(
                 M,
                 GEO::MeshRepairMode(
@@ -1549,4 +1593,130 @@ namespace GEO {
             }
         }
     }
+}
+
+namespace {
+    using namespace GEO;
+    
+    class BooleanExprParser {
+    public:
+        BooleanExprParser(
+            const std::string& expr
+        ) : expr_(expr) {
+        }
+
+        bool eval(index_t x) {
+            x_   = x;
+            ptr_ = expr_.begin();
+            return parse_or();
+        }
+
+    protected:
+        bool parse_or() {
+            bool left = parse_and();
+            while(*ptr_ == '|') {
+                inc_ptr();
+                bool right = parse_and();
+                left = left || right;
+            }
+            return left;
+        }
+
+        bool parse_and() {
+            bool left = parse_factor();
+            while(*ptr_ == '&') {
+                inc_ptr();
+                bool right = parse_factor();
+                left = left && right;
+            }
+            return left;
+        }
+
+        bool parse_factor() {
+            if(*ptr_ == '!') {
+                inc_ptr();
+                return !parse_factor();
+            }
+            if(*ptr_ == '(') {
+                inc_ptr();
+                bool result = parse_or();
+                if(*ptr_ != ')') {
+                    throw std::logic_error(
+                        std::string("Unmatched parenthesis: ")+*ptr_
+                    );
+                }
+                inc_ptr();
+                return result;
+            }
+            if(*ptr_ >= 'A' && *ptr_ <= 'Z') {
+                return parse_variable();
+            }
+            throw std::logic_error("Syntax error");
+        }
+
+        bool parse_variable() {
+            int bit = int(*ptr_) - int('A');
+            inc_ptr();
+            return ((x_ & (1 << bit)) != 0);
+        }
+
+        void inc_ptr() {
+            if(ptr_ == expr_.end()) {
+                throw std::logic_error("Unexpected end of string");
+            }
+            ptr_++;
+        }
+        
+    private:
+        std::string expr_;
+        std::string::iterator ptr_;
+        index_t x_;
+    };
+}
+
+namespace GEO {
+    
+    void mesh_classify_intersections(Mesh& M, const std::string& expr) {
+        BooleanExprParser eqn(expr);
+        MeshFacetsAABB AABB(M);
+        index_t nb_charts = compute_charts(M);
+        Attribute<index_t> chart(M.facets.attributes(), "chart");
+        Attribute<index_t> operand_bit(M.facets.attributes(), "operand_bit");
+        Attribute<bool> selection(M.facets.attributes(), "selection");
+        vector<index_t> chart_facet(nb_charts, index_t(-1));
+        for(index_t f: M.facets) {
+            index_t c = chart[f];
+            if(chart_facet[c] == index_t(-1)) {
+                chart_facet[c] = f;
+                index_t parity = 0;
+                vec3 D(
+                    Numeric::random_float64(),
+                    Numeric::random_float64(),
+                    Numeric::random_float64()
+                );
+                vec3 g = Geom::mesh_facet_center(M,f);
+                AABB.ray_all_intersections(
+                    Ray(g,D),
+                    [&](const MeshFacetsAABB::Intersection & I) {
+                        if(I.f != f) {
+                            parity = parity ^ operand_bit[I.f];
+                        }
+                    }
+                );
+                try {
+                    selection[f] =
+                        eqn.eval(parity | operand_bit[f]) !=
+                        eqn.eval(parity & ~operand_bit[f] ) ;
+                } catch(const std::logic_error& e) {
+                    Logger::err("Classify") << "Error while parsing expression:"
+                                            << e.what()
+                                            << std::endl;
+                    return;
+                }
+            } else {
+                selection[f] = selection[chart_facet[c]];
+            }
+        }
+    }
+    
 }

@@ -43,6 +43,7 @@
 #define H__OGF_EXPERIMENT_COMMANDS_MESH_GROB_EXPERIMENT_COMMANDS__H
 
 #include <OGF/Experiment/common/common.h>
+#include <OGF/Experiment/algo/mesh_surface_intersection.h>
 #include <OGF/mesh/commands/mesh_grob_commands.h>
 
 namespace OGF {
@@ -79,6 +80,8 @@ namespace OGF {
             bool barycentric=true
         );
 
+        void classify_intersections(const std::string& expr = "A|B");
+        
         /**
          * Sort facets with AABB.
          */
