@@ -3,22 +3,7 @@
  *
  */
 
-// BUG: PR10: generates several triangles several times (?) 
-// BUG: PR3:  generates several triangles several times (?)
-//            / misses isects ?
-//
-// TODO: can we treat the three edges of the macro-triangle and the
-// other edges the same way ? (that is, starting with the three edges,
-// and adding the intersections only when detecting them). It would be
-// a bit stupid, because we know already that they are in the three
-// edges...
-// TODO: each time a point is added, debug-check whether it is in
-// one of the three edges of the triangle
-//
-// TODO: figure out what happens for ~/three_cubes.obj
-//
-// TODO: sort_uniq all edges to detect duplicated edges
-
+// TODO: co-linear constraints intersections
 
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
 #include <OGF/Experiment/algo/exact_geometry.h>
