@@ -72,21 +72,23 @@ namespace OGF {
          */
         void intersect_surface(
             bool merge_vertices_and_facets = true,
-            bool check_neighboring_triangles = true,
+            bool check_neighboring_triangles = false,
             bool post_connect_facets=true,
             bool order_facets=true,
             bool FPE=true,
-            bool check_constraints=true,
+            bool check_constraints=false,
             bool barycentric=true
         );
 
         /**
          * \brief Classifies the charts from a computed mesh intersection
          * \param[in] expr a boolean expression. 
-         * \param[in] attribute an optional boolean facet attribute 
+         * \param[in] dry_run if set, just visualize the result
          */
         void classify_intersections(
-            const std::string& expr = "A|B", const std::string& attribute="filter"
+            const std::string& expr = "A|B",
+            bool dry_run=true,
+            bool reorder=false
         );
 
         /**

@@ -67,9 +67,10 @@ namespace OGF {
     }
 
     void MeshGrobExperimentCommands::classify_intersections(
-        const std::string& expr, const std::string& attribute
+        const std::string& expr, bool dry_run, bool reorder
     ) {
-        mesh_classify_intersections(*mesh_grob(),expr,attribute);
+        std::string attribute = dry_run ? "filter" : "";
+        mesh_classify_intersections(*mesh_grob(),expr,attribute,reorder);
         if(attribute == "" || attribute == "filter") {
             Shader* shd = mesh_grob()->get_shader();
             if(shd != nullptr) {

@@ -17,6 +17,7 @@
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/numerics/predicates.h>
 #include <geogram/numerics/expansion_nt.h>
+#include <geogram/basic/stopwatch.h>
 
 #include <sstream>
 #include <stack>
@@ -699,7 +700,7 @@ namespace {
                     constraints,
                     "constraints_" + String::to_string(f1_) + ".geogram"
                 );
-                abort();
+                // abort();
             }
                 
                 
@@ -712,6 +713,12 @@ namespace {
             // It is not normal because we have generated all
             // intersections before. 
             if(del->nb_vertices() > constraints.vertices.nb()) {
+                std::cerr << "Triangle detected intersected vertices"
+                          << std::endl;
+                mesh_save(
+                    constraints,
+                    "constraints_" + String::to_string(f1_) + ".geogram"
+                );
                 geo_assert_not_reached; // for now...
             }
                 
@@ -1338,145 +1345,171 @@ namespace {
         // -------------------------
         
         vector<IsectInfo> intersections;
-        MeshFacetsAABB AABB(M,!params.debug_do_not_order_facets);
-        vector<TriangleIsect> I;
-        AABB.compute_facet_bbox_intersections(
-            [&](index_t f1, index_t f2) {
+        {
+            Stopwatch W("Detect isect");
+            MeshFacetsAABB AABB(M,!params.debug_do_not_order_facets);
+            vector<std::pair<index_t, index_t> > FF;
 
-                // Needed (maybe I should change that in AABB class)
-                if(f1 == f2) {
-                    return;
+            // Get candidate pairs of intersecting facets
+            AABB.compute_facet_bbox_intersections(
+                [&](index_t f1, index_t f2) {
+                    // Needed (maybe I should change that in AABB class)
+                    if(f1 == f2) {
+                        return;
+                    }
+                    geo_assert(f1 < f2);
+
+                    // Optionally skip facet pairs that
+                    // share a vertex or an edge
+                    if(
+                        !params.detect_intersecting_neighbors && (
+                            (M.facets.find_adjacent(f1,f2)  != index_t(-1)) ||
+                            (M.facets.find_common_vertex(f1,f2) != index_t(-1))
+                        )
+                    ) {
+                        return;
+                    }
+
+                    FF.push_back(std::make_pair(f1,f2));
                 }
+            );
 
-                // Optionally skip facet pairs that share a vertex or an edge
-                if(
-                    !params.detect_intersecting_neighbors && (
-                        (M.facets.find_adjacent(f1,f2)      != index_t(-1)) ||
-                        (M.facets.find_common_vertex(f1,f2) != index_t(-1))
-                    )
-                ) {
-                    return;
-                }
-                
-                if(mesh_facets_intersect(M, f1, f2, I)) {
+            // Compute facet-facet intersections in parallel
+            Process::spinlock lock = GEOGRAM_SPINLOCK_INIT;
+            parallel_for_slice(
+                0,FF.size(), [&](index_t b, index_t e) {
+                    vector<TriangleIsect> I;
+                    for(index_t i=b; i<e; ++i){
+                        index_t f1 = FF[i].first;
+                        index_t f2 = FF[i].second;
+                        
+                        if(mesh_facets_intersect(M, f1, f2, I)) {
 
-                    if(I.size() > 2) {
-                        // Coplanar intersection: to generate the edges,
-                        // test validity of all possible pairs of vertices.
-                        for(index_t i1=0; i1< I.size(); ++i1) {
-                            for(index_t i2=0; i2<i1; ++i2) {
+                            Process::acquire_spinlock(lock);                            
+                            if(I.size() > 2) {
+                                // Coplanar intersection: to generate the edges,
+                                // test validity of all possible pairs of vertices.
+                                for(index_t i1=0; i1< I.size(); ++i1) {
+                                    for(index_t i2=0; i2<i1; ++i2) {
+                                        IsectInfo II = {
+                                            f1, f2,
+                                            I[i1].first, I[i1].second,
+                                            I[i2].first, I[i2].second
+                                        };
+
+                                        // Valid edges are the ones where both
+                                        // extremities are on the same edge of f1
+                                        // or on the same edge of f2
+                                    
+                                        TriangleRegion AB1 =
+                                            regions_convex_hull(II.A_rgn_f1,II.B_rgn_f1);
+                                        
+                                        TriangleRegion AB2 =
+                                            regions_convex_hull(II.A_rgn_f2, II.B_rgn_f2);
+                                        
+                                        if(
+                                            region_dim(AB1) == 1 ||
+                                            region_dim(AB2) == 1
+                                        ) {
+
+                                            intersections.push_back(II);
+                                            II.flip();
+                                            intersections.push_back(II);
+                                        } 
+                                    }
+                                }
+                            } else {
+                                // Intersection is either a segment
+                                // or a vertex of f2.
+                                TriangleRegion A_rgn_f1 = I[0].first;
+                                TriangleRegion A_rgn_f2 = I[0].second;
+                                
+                                TriangleRegion B_rgn_f1 = A_rgn_f1;
+                                TriangleRegion B_rgn_f2 = A_rgn_f2;
+                                
+                                if(I.size() == 2) {
+                                    B_rgn_f1 = I[1].first;
+                                    B_rgn_f2 = I[1].second;
+                                }
+                                
                                 IsectInfo II = {
                                     f1, f2,
-                                    I[i1].first, I[i1].second,
-                                    I[i2].first, I[i2].second
+                                    A_rgn_f1, A_rgn_f2,
+                                    B_rgn_f1, B_rgn_f2
                                 };
-
-                                // Valid edges are the ones where both
-                                // extremities are on the same edge of f1
-                                // or on the same edge of f2
-                                
-                                TriangleRegion AB1 =
-                                  regions_convex_hull(II.A_rgn_f1, II.B_rgn_f1);
-                                
-                                TriangleRegion AB2 =
-                                  regions_convex_hull(II.A_rgn_f2, II.B_rgn_f2);
-                                
-                                if(
-                                    region_dim(AB1) == 1 ||
-                                    region_dim(AB2) == 1
-                                ) {
-                                    intersections.push_back(II);
-                                    II.flip();
-                                    intersections.push_back(II);
-                                } 
+                                intersections.push_back(II);
+                                II.flip();
+                                intersections.push_back(II);
                             }
+                            Process::release_spinlock(lock);
                         }
-                    } else {
-                        // Intersection is either a segment
-                        // or a vertex of f2.
-                        TriangleRegion A_rgn_f1 = I[0].first;
-                        TriangleRegion A_rgn_f2 = I[0].second;
-                        
-                        TriangleRegion B_rgn_f1 = A_rgn_f1;
-                        TriangleRegion B_rgn_f2 = A_rgn_f2;
-                        
-                        if(I.size() == 2) {
-                            B_rgn_f1 = I[1].first;
-                            B_rgn_f2 = I[1].second;
-                        }
-                    
-                        IsectInfo II = {
-                            f1, f2,
-                            A_rgn_f1, A_rgn_f2,
-                            B_rgn_f1, B_rgn_f2
-                        };
-                        
-                        intersections.push_back(II);
-                        II.flip();
-                        intersections.push_back(II);
                     }
                 }
-            }
-        );
+            );
+        }
 
         // Step 3: Remesh intersected triangles
         // ------------------------------------
-
-        // The MeshInTriangle, that implements local triangulation
-        // in each intersected triangular facet. It also keeps a global map of 
-        // vertices, indexed by their exact geometry.         
-        MeshInTriangle TM(M);
-        TM.set_check_constraints(params.debug_check_constraints);
-        TM.set_barycentric(params.barycentric);
-
-        // Sort intersections by f1, so that all intersections between f1
-        // and another facet appear as a contiguous sequence.
-        std::sort(
-            intersections.begin(), intersections.end(),
-            [](const IsectInfo& a, const IsectInfo& b) -> bool {
-                return (a.f1 < b.f1) ? true  :
-                       (a.f1 > b.f1) ? false :
-                       (a.f2 < b.f2) ;
-            }
-        );
-
-        // Now iterate on all intersections, and identify the [b,e[ intervals
-        // that correspond to the same f1 facet.
-        index_t b=0;
-        while(b < intersections.size()) {
-            index_t e = b;
-            while(
-                e < intersections.size() &&
-                intersections[e].f1 == intersections[b].f1
-            ) {
-                ++e;
-            }
+        {
+            Stopwatch W("Remesh isect");
             
-            TM.begin_facet(intersections[b].f1);
-            for(index_t i=b; i<e; ++i) {
-                const IsectInfo& II = intersections[i];
+            // The MeshInTriangle, that implements local triangulation
+            // in each intersected triangular facet.
+            // It also keeps a global map of 
+            // vertices, indexed by their exact geometry.         
+            MeshInTriangle TM(M);
+            TM.set_check_constraints(params.debug_check_constraints);
+            TM.set_barycentric(params.barycentric);
 
-                // Each IsectIfo is either an individual vertex
-                // or a segment with two vertices.
-                // Each vertex is represented combinatorially.
-                // The MeshInTriangle knows how to compute the
-                // geometry from the combinatorial information.
-                
-                if(II.is_point()) {
-                    TM.add_vertex(
-                        II.f2,
-                        II.A_rgn_f1, II.A_rgn_f2
-                    );
-                } else {
-                    TM.add_edge(
-                        II.f2, 
-                        II.A_rgn_f1, II.A_rgn_f2,
-                        II.B_rgn_f1, II.B_rgn_f2
-                    );
+            // Sort intersections by f1, so that all intersections between f1
+            // and another facet appear as a contiguous sequence.
+            std::sort(
+                intersections.begin(), intersections.end(),
+                [](const IsectInfo& a, const IsectInfo& b) -> bool {
+                    return (a.f1 < b.f1) ? true  :
+                        (a.f1 > b.f1) ? false :
+                        (a.f2 < b.f2) ;
                 }
+            );
+
+            // Now iterate on all intersections, and identify
+            // the [b,e[ intervals that correspond to the same f1 facet.
+            index_t b=0;
+            while(b < intersections.size()) {
+                index_t e = b;
+                while(
+                    e < intersections.size() &&
+                    intersections[e].f1 == intersections[b].f1
+                ) {
+                    ++e;
+                }
+                
+                TM.begin_facet(intersections[b].f1);
+                for(index_t i=b; i<e; ++i) {
+                    const IsectInfo& II = intersections[i];
+                    
+                    // Each IsectIfo is either an individual vertex
+                    // or a segment with two vertices.
+                    // Each vertex is represented combinatorially.
+                    // The MeshInTriangle knows how to compute the
+                    // geometry from the combinatorial information.
+                    
+                    if(II.is_point()) {
+                        TM.add_vertex(
+                            II.f2,
+                            II.A_rgn_f1, II.A_rgn_f2
+                        );
+                    } else {
+                        TM.add_edge(
+                            II.f2, 
+                            II.A_rgn_f1, II.A_rgn_f2,
+                            II.B_rgn_f1, II.B_rgn_f2
+                        );
+                    }
+                }
+                TM.end_facet();
+                b = e;
             }
-            TM.end_facet();
-            b = e;
         }
 
         // Step 4: Epilogue
@@ -1747,9 +1780,11 @@ namespace {
 namespace GEO {
     
     void mesh_classify_intersections(
-        Mesh& M, std::function<bool(index_t)> eqn, const std::string& attribute
+        Mesh& M, std::function<bool(index_t)> eqn,
+        const std::string& attribute,
+        bool reorder
     ) {
-        MeshFacetsAABB AABB(M);
+        MeshFacetsAABB AABB(M,reorder);
         index_t nb_charts = get_surface_connected_components(M);
         Attribute<index_t> chart(M.facets.attributes(), "chart");
         Attribute<index_t> operand_bit(M.facets.attributes(), "operand_bit");
@@ -1847,7 +1882,7 @@ namespace GEO {
     }
 
     void mesh_classify_intersections(
-        Mesh& M, const std::string& expr, const std::string& attribute
+        Mesh& M, const std::string& expr, const std::string& attribute, bool reorder
     ) {
         BooleanExprParser eqn(expr);
         index_t operand_all_bits;
@@ -1877,7 +1912,8 @@ namespace GEO {
                         (expr == "intersection") ? (x == operand_all_bits) : 
                         eqn.eval(x);
                 },
-                attribute
+                attribute,
+                reorder
             );
         } catch(const std::logic_error& e) {
             Logger::err("Classify") << "Error while parsing expression:"
