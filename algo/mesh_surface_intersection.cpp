@@ -1597,7 +1597,16 @@ namespace GEO {
 
 namespace {
     using namespace GEO;
-    
+
+    /**
+     * \brief A simple parser for boolean expressions
+     * \details 
+     *  - Variables: A..Z or x0..x31 
+     *  - and:        '&' or '*'
+     *  - or:         '|' or '+'
+     *  - xor:        '^'
+     *  - difference: '-'
+     */
     class BooleanExprParser {
     public:
         BooleanExprParser(
@@ -1612,20 +1621,29 @@ namespace {
         }
 
     protected:
+
         bool parse_or() {
             bool left = parse_and();
-            while(*ptr_ == '|') {
-                inc_ptr();
+            while(
+                cur_char() == '|' ||
+                cur_char() == '^' ||
+                cur_char() == '+' ||
+                cur_char() == '-'
+            ) {
+                char op = cur_char();
+                next_char();
                 bool right = parse_and();
-                left = left || right;
+                left = (op == '-') ? (left && !right) :
+                       (op == '^') ? (left ^   right) :
+                                     (left ||  right) ;
             }
             return left;
         }
 
         bool parse_and() {
             bool left = parse_factor();
-            while(*ptr_ == '&') {
-                inc_ptr();
+            while(cur_char() == '&' || cur_char() == '*') {
+                next_char();
                 bool right = parse_factor();
                 left = left && right;
             }
@@ -1633,34 +1651,53 @@ namespace {
         }
 
         bool parse_factor() {
-            if(*ptr_ == '!') {
-                inc_ptr();
+            if(cur_char() == '!' || cur_char() == '~' || cur_char() == '-') {
+                next_char();
                 return !parse_factor();
             }
-            if(*ptr_ == '(') {
-                inc_ptr();
+            if(cur_char() == '(') {
+                next_char();
                 bool result = parse_or();
-                if(*ptr_ != ')') {
+                if(cur_char() != ')') {
                     throw std::logic_error(
-                        std::string("Unmatched parenthesis: ")+*ptr_
+                        std::string("Unmatched parenthesis: ")+cur_char()
                     );
                 }
-                inc_ptr();
+                next_char();
                 return result;
             }
-            if(*ptr_ >= 'A' && *ptr_ <= 'Z') {
+            if((cur_char() >= 'A' && cur_char() <= 'Z') || cur_char() == 'x') {
                 return parse_variable();
             }
             throw std::logic_error("Syntax error");
         }
 
         bool parse_variable() {
-            int bit = int(*ptr_) - int('A');
-            inc_ptr();
+            int bit = 0;
+            if(cur_char() >= 'A' && cur_char() <= 'Z') {
+                bit = int(cur_char()) - int('A');
+                next_char();
+            } else {
+                if(cur_char() != 'x') {
+                    throw std::logic_error("Syntax error in variable");
+                }
+                next_char();
+                while(cur_char() >= '0' && cur_char() <= '9') {
+                    bit = bit * 10 + (int(cur_char()) - '0');
+                    next_char();
+                }
+            }
+            if(bit > 31) {
+                throw std::logic_error("Bit larger than 31");
+            }
             return ((x_ & (1 << bit)) != 0);
         }
 
-        void inc_ptr() {
+        char cur_char() const {
+            return *ptr_;
+        }
+        
+        void next_char() {
             if(ptr_ == expr_.end()) {
                 throw std::logic_error("Unexpected end of string");
             }
@@ -1676,13 +1713,15 @@ namespace {
 
 namespace GEO {
     
-    void mesh_classify_intersections(Mesh& M, const std::string& expr) {
+    void mesh_classify_intersections(
+        Mesh& M, const std::string& expr, const std::string& attribute
+    ) {
         BooleanExprParser eqn(expr);
         MeshFacetsAABB AABB(M);
         index_t nb_charts = compute_charts(M);
         Attribute<index_t> chart(M.facets.attributes(), "chart");
         Attribute<index_t> operand_bit(M.facets.attributes(), "operand_bit");
-        Attribute<bool> selection(M.facets.attributes(), "selection");
+        Attribute<bool> selection(M.facets.attributes(), attribute);
         vector<index_t> chart_facet(nb_charts, index_t(-1));
         for(index_t f: M.facets) {
             index_t c = chart[f];

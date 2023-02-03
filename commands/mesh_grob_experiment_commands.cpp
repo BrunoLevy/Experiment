@@ -29,6 +29,7 @@
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
 
 #include <geogram/mesh/mesh_reorder.h>
+#include <geogram/mesh/mesh_repair.h>
 #include <geogram/delaunay/delaunay.h>
 
 namespace OGF {
@@ -66,10 +67,44 @@ namespace OGF {
     }
 
     void MeshGrobExperimentCommands::classify_intersections(
-        const std::string& expr
+        const std::string& expr, const std::string& attribute
     ) {
-        mesh_classify_intersections(*mesh_grob(),expr);
-        show_attribute("facets.selection");
+        mesh_classify_intersections(*mesh_grob(),expr,attribute);
+        if(attribute == "filter") {
+            Shader* shd = mesh_grob()->get_shader();
+            if(shd != nullptr) {
+                if(shd->has_property("facets_filter")) {
+                    shd->set_property("facets_filter", "true");
+                }
+            }
+        } else {
+            show_attribute("facets." + attribute);
+        }
+        mesh_grob()->update();
+    }
+
+    void MeshGrobExperimentCommands::commit_intersection() {
+        Attribute<bool> filter(mesh_grob()->facets.attributes(), "filter");
+        vector<index_t> delete_f(mesh_grob()->facets.nb());
+        for(index_t f: mesh_grob()->facets) {
+            delete_f[f] = !filter[f];
+        }
+        mesh_grob()->facets.delete_elements(delete_f);
+
+        mesh_repair(
+            *mesh_grob(),
+            GEO::MeshRepairMode(
+                GEO::MESH_REPAIR_COLOCATE | GEO::MESH_REPAIR_DUP_F
+            ),
+            0.0
+        );
+        
+        Shader* shd = mesh_grob()->get_shader();
+        if(shd != nullptr) {
+            if(shd->has_property("facets_filter")) {
+                shd->set_property("facets_filter", "false");
+            }
+        }
         mesh_grob()->update();
     }
     
@@ -100,7 +135,7 @@ namespace OGF {
         show_mesh();
         mesh_grob()->update();
     }
-    
+
     void MeshGrobExperimentCommands::floatify() {
         index_t N =
             mesh_grob()->vertices.nb() * mesh_grob()->vertices.dimension();

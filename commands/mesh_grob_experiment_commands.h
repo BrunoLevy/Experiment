@@ -80,7 +80,11 @@ namespace OGF {
             bool barycentric=true
         );
 
-        void classify_intersections(const std::string& expr = "A|B");
+        void classify_intersections(
+            const std::string& expr = "A|B", const std::string& attribute="filter"
+        );
+
+        void commit_intersection();
         
         /**
          * Sort facets with AABB.

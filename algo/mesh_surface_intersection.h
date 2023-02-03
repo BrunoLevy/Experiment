@@ -67,7 +67,7 @@ namespace GEO {
     );
 
     void Experiment_API mesh_classify_intersections(
-        Mesh& M, const std::string& expr
+        Mesh& M, const std::string& expr, const std::string& attribute
     );
 }
 
