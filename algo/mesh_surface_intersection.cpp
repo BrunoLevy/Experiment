@@ -1499,8 +1499,8 @@ namespace {
 
     /*****************************************************************/
 
-    index_t compute_charts(Mesh& M) {
-        Attribute<index_t> chart(M.facets.attributes(), "chart");
+    index_t compute_charts(Mesh& M, const std::string& attribute = "chart") {
+        Attribute<index_t> chart(M.facets.attributes(), attribute);
         for(index_t f: M.facets) {
             chart[f] = index_t(-1);
         }
@@ -1543,6 +1543,16 @@ namespace GEO {
             tessellate_facets(M,3);
         }
 
+        Attribute<index_t> operand_bit;
+        operand_bit.bind_if_is_defined(M.facets.attributes(), "operand_bit");
+        if(!operand_bit.is_bound()) {
+            compute_charts(M,"operand_bit");
+            operand_bit.bind(M.facets.attributes(), "operand_bit");
+            for(index_t f: M.facets) {
+                operand_bit[f] = (1 << operand_bit[f]);
+            }
+        }
+        
         if(params.pre_detect_duplicated_vertices) {
             mesh_colocate_vertices_no_check(M);
         }
@@ -1551,6 +1561,7 @@ namespace GEO {
             mesh_remove_bad_facets_no_check(M);
         }
 
+        
         const double SCALING = double(1ull << 20);
         const double INV_SCALING = 1.0/SCALING;
 
@@ -1714,9 +1725,8 @@ namespace {
 namespace GEO {
     
     void mesh_classify_intersections(
-        Mesh& M, const std::string& expr, const std::string& attribute
+        Mesh& M, std::function<bool(index_t)> eqn, const std::string& attribute
     ) {
-        BooleanExprParser eqn(expr);
         MeshFacetsAABB AABB(M);
         index_t nb_charts = compute_charts(M);
         Attribute<index_t> chart(M.facets.attributes(), "chart");
@@ -1744,8 +1754,8 @@ namespace GEO {
                 );
                 try {
                     selection[f] =
-                        eqn.eval(parity | operand_bit[f]) !=
-                        eqn.eval(parity & ~operand_bit[f] ) ;
+                        eqn(parity | operand_bit[f]) !=
+                        eqn(parity & ~operand_bit[f] ) ;
                 } catch(const std::logic_error& e) {
                     Logger::err("Classify") << "Error while parsing expression:"
                                             << e.what()
@@ -1757,5 +1767,45 @@ namespace GEO {
             }
         }
     }
-    
+
+    void mesh_classify_intersections(
+        Mesh& M, const std::string& expr, const std::string& attribute
+    ) {
+        BooleanExprParser eqn(expr);
+        index_t operand_all_bits;
+        {
+            index_t max_operand_bit = 0;
+            Attribute<index_t> operand_bit;
+            operand_bit.bind_if_is_defined(M.facets.attributes(),"operand_bit");
+            if(!operand_bit.is_bound()) {
+                Logger::err("Classify")
+                    << "operand_bit: no such facet attribute"
+                    << std::endl;
+                return;
+            }
+            for(index_t f: M.facets) {
+                max_operand_bit = std::max(max_operand_bit, operand_bit[f]);
+            }
+            operand_all_bits = (max_operand_bit << 1)-1;
+        }
+        
+        
+        try {
+            mesh_classify_intersections(
+                M,
+                [&](index_t x)->bool {
+                    return
+                        (expr == "union")        ? (x != 0)                :
+                        (expr == "intersection") ? (x == operand_all_bits) : 
+                        eqn.eval(x);
+                },
+                attribute
+            );
+        } catch(const std::logic_error& e) {
+            Logger::err("Classify") << "Error while parsing expression:"
+                                    << e.what()
+                                    << std::endl;
+            return;
+        }
+    }    
 }
