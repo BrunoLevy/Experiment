@@ -70,11 +70,15 @@ namespace OGF {
         const std::string& expr, const std::string& attribute
     ) {
         mesh_classify_intersections(*mesh_grob(),expr,attribute);
-        if(attribute == "filter") {
+        if(attribute == "" || attribute == "filter") {
             Shader* shd = mesh_grob()->get_shader();
             if(shd != nullptr) {
                 if(shd->has_property("facets_filter")) {
-                    shd->set_property("facets_filter", "true");
+                    if(attribute == "") {
+                        shd->set_property("facets_filter", "false");
+                    } else {
+                        shd->set_property("facets_filter", "true");                        
+                    }
                 }
             }
         } else {
@@ -83,31 +87,6 @@ namespace OGF {
         mesh_grob()->update();
     }
 
-    void MeshGrobExperimentCommands::commit_intersection() {
-        Attribute<bool> filter(mesh_grob()->facets.attributes(), "filter");
-        vector<index_t> delete_f(mesh_grob()->facets.nb());
-        for(index_t f: mesh_grob()->facets) {
-            delete_f[f] = !filter[f];
-        }
-        mesh_grob()->facets.delete_elements(delete_f);
-
-        mesh_repair(
-            *mesh_grob(),
-            GEO::MeshRepairMode(
-                GEO::MESH_REPAIR_COLOCATE | GEO::MESH_REPAIR_DUP_F
-            ),
-            0.0
-        );
-        
-        Shader* shd = mesh_grob()->get_shader();
-        if(shd != nullptr) {
-            if(shd->has_property("facets_filter")) {
-                shd->set_property("facets_filter", "false");
-            }
-        }
-        mesh_grob()->update();
-    }
-    
     void MeshGrobExperimentCommands::sort_facets() {
         mesh_reorder(*mesh_grob(), MESH_ORDER_MORTON);
         mesh_grob()->update();

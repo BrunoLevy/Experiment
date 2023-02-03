@@ -1499,7 +1499,13 @@ namespace {
 
     /*****************************************************************/
 
-    index_t compute_charts(Mesh& M, const std::string& attribute = "chart") {
+    /**
+     * \brief Enumerates the connected components in a facet attribute
+     * \param[in] M a reference to the mesh
+     * \param[in] attribute the name of the facet attribute
+     * \return the number of found connected components
+     */
+    index_t get_surface_connected_components(Mesh& M, const std::string& attribute = "chart") {
         Attribute<index_t> chart(M.facets.attributes(), attribute);
         for(index_t f: M.facets) {
             chart[f] = index_t(-1);
@@ -1546,7 +1552,7 @@ namespace GEO {
         Attribute<index_t> operand_bit;
         operand_bit.bind_if_is_defined(M.facets.attributes(), "operand_bit");
         if(!operand_bit.is_bound()) {
-            compute_charts(M,"operand_bit");
+            get_surface_connected_components(M,"operand_bit");
             operand_bit.bind(M.facets.attributes(), "operand_bit");
             for(index_t f: M.facets) {
                 operand_bit[f] = (1 << operand_bit[f]);
@@ -1720,6 +1726,22 @@ namespace {
         std::string::iterator ptr_;
         index_t x_;
     };
+
+    /**
+     * \brief Gets the number of bits set in
+     *  a 32 bits integer
+     * \param[in] x the integer
+     * \return the number of "ones" in the 
+     *  binary form of x
+     */
+    inline index_t nb_bits_set(index_t x) {
+        index_t result = 0;
+        for(index_t i=0; i<32; ++i) {
+            result += (x&1);
+            x = x >> 1;
+        }
+        return result;
+    }
 }
 
 namespace GEO {
@@ -1728,44 +1750,100 @@ namespace GEO {
         Mesh& M, std::function<bool(index_t)> eqn, const std::string& attribute
     ) {
         MeshFacetsAABB AABB(M);
-        index_t nb_charts = compute_charts(M);
+        index_t nb_charts = get_surface_connected_components(M);
         Attribute<index_t> chart(M.facets.attributes(), "chart");
         Attribute<index_t> operand_bit(M.facets.attributes(), "operand_bit");
-        Attribute<bool> selection(M.facets.attributes(), attribute);
-        vector<index_t> chart_facet(nb_charts, index_t(-1));
-        for(index_t f: M.facets) {
-            index_t c = chart[f];
-            if(chart_facet[c] == index_t(-1)) {
-                chart_facet[c] = f;
-                index_t parity = 0;
-                vec3 D(
-                    Numeric::random_float64(),
-                    Numeric::random_float64(),
-                    Numeric::random_float64()
-                );
-                vec3 g = Geom::mesh_facet_center(M,f);
-                AABB.ray_all_intersections(
-                    Ray(g,D),
-                    [&](const MeshFacetsAABB::Intersection & I) {
-                        if(I.f != f) {
-                            parity = parity ^ operand_bit[I.f];
-                        }
-                    }
-                );
-                try {
-                    selection[f] =
-                        eqn(parity | operand_bit[f]) !=
-                        eqn(parity & ~operand_bit[f] ) ;
-                } catch(const std::logic_error& e) {
-                    Logger::err("Classify") << "Error while parsing expression:"
-                                            << e.what()
-                                            << std::endl;
-                    return;
-                }
-            } else {
-                selection[f] = selection[chart_facet[c]];
-            }
+        Attribute<bool> selection;
+        vector<index_t> delete_f;
+        if(attribute != "") {
+            selection.bind(M.facets.attributes(), attribute);            
+        } else {
+            delete_f.assign(M.facets.nb(), 0);
         }
+
+        vector<index_t> chart_facet(nb_charts, index_t(-1));
+        try {
+            for(index_t f: M.facets) {
+                index_t c = chart[f];
+                if(chart_facet[c] == index_t(-1)) {
+                    bool f_is_selected = false;
+                    chart_facet[c] = f;
+                    vec3 g = Geom::mesh_facet_center(M,f);
+                    // Picking f's normal is not a good idea,
+                    // because for industrial parts it will
+                    // encounter many degenerate ray/triangle
+                    // intersections.
+                    // TODO: we need to detect them and launch
+                    // another ray whenever the ray intersects
+                    // the surface on a vertex or on an edge.
+                    vec3 D(
+                        Numeric::random_float64(),
+                        Numeric::random_float64(),
+                        Numeric::random_float64()
+                    );
+                    index_t parity = 0;
+                    AABB.ray_all_intersections(
+                        Ray(g,D),
+                        [&](const MeshFacetsAABB::Intersection & I) {
+                            if(I.f != f) {
+                                parity = parity ^ operand_bit[I.f];
+                            }
+                        }
+                    );
+                    if(nb_bits_set(operand_bit[f]) == 1) {
+                        // Facet f is on the boundary of the result if
+                        // crossing f changes the result of eqn,
+                        // in other words, if eqn gives a different
+                        // result with and without f's object bit set
+                        f_is_selected =
+                            eqn(parity |  operand_bit[f]) !=
+                            eqn(parity & ~operand_bit[f]) ;
+                    } else {
+                        // Now if f is on several objects (that is, has
+                        // several bit sets), then we determine whether
+                        // it is on the boundary of the result by raytracing
+                        // in two different directions, and seeing if eqn
+                        // gives a different result. 
+                        index_t parity2 = 0;
+                        AABB.ray_all_intersections(
+                            Ray(g,-D),
+                            [&](const MeshFacetsAABB::Intersection & I) {
+                                if(I.f != f) {
+                                    parity2 = parity2 ^ operand_bit[I.f];
+                                }
+                            }
+                        );
+                        f_is_selected = (eqn(parity) != eqn(parity2));
+                    }
+                    if(selection.is_bound()) {
+                        selection[f] = f_is_selected;
+                    } else {
+                        delete_f[f] = !f_is_selected;
+                    }
+                } else {
+                    if(selection.is_bound()) {
+                        selection[f] = selection[chart_facet[c]];
+                    } else {
+                        delete_f[f] = delete_f[chart_facet[c]];
+                    }
+                }
+            }
+        } catch(const std::logic_error& e) {
+            Logger::err("Classify") << "Error while parsing expression:"
+                                    << e.what()
+                                    << std::endl;
+            return;
+        }
+        if(!selection.is_bound()) {
+            M.facets.delete_elements(delete_f);
+        }
+        mesh_repair(
+            M,
+            GEO::MeshRepairMode(
+                GEO::MESH_REPAIR_COLOCATE | GEO::MESH_REPAIR_DUP_F
+            ),
+            0.0
+        );
     }
 
     void mesh_classify_intersections(

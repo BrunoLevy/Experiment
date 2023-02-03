@@ -67,11 +67,13 @@ namespace GEO {
     );
 
     void Experiment_API mesh_classify_intersections(
-        Mesh& M, std::function<bool(index_t)> eqn, const std::string& attribute
+        Mesh& M, std::function<bool(index_t)> eqn,
+        const std::string& attribute=""
     );
 
     void Experiment_API mesh_classify_intersections(
-        Mesh& M, const std::string& expr, const std::string& attribute
+        Mesh& M, const std::string& expr,
+        const std::string& attribute=""
     );
     
 }
