@@ -4,6 +4,14 @@
  */
 
 // TODO: co-linear constraints intersections
+// TODO: exact classification
+// TODO: make it faster: segment-segment intersection
+//       could use a sweep/sort algorithm
+//       (before then, benchmark !)
+// TODO: homogeneous coordinates ?
+// TODO: would be good to be able to do computations with
+//       points that have their coordinates stored in the
+//       stack.
 
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
 #include <OGF/Experiment/algo/exact_geometry.h>
@@ -388,17 +396,17 @@ namespace {
                     index_t e2 = index_t(sym.R2) - index_t(T2_RGN_E0);
                     geo_debug_assert(e2 < 3);
 
-                    vec2 p1 = mesh_facet_vertex_project<vec2>(
+                    vec2 p1 = mesh_facet_vertex_project(
                         sym.f1, (e1+1)%3
                     );
-                    vec2 p2 = mesh_facet_vertex_project<vec2>(
+                    vec2 p2 = mesh_facet_vertex_project(
                         sym.f1, (e1+2)%3
                     );
 
-                    vec2 q1 = mesh_facet_vertex_project<vec2>(
+                    vec2 q1 = mesh_facet_vertex_project(
                         sym.f2, (e2+1)%3
                     );
-                    vec2 q2 = mesh_facet_vertex_project<vec2>(
+                    vec2 q2 = mesh_facet_vertex_project(
                         sym.f2, (e2+2)%3
                     );
 
@@ -700,7 +708,7 @@ namespace {
                     constraints,
                     "constraints_" + String::to_string(f1_) + ".geogram"
                 );
-                // abort();
+                abort();
             }
                 
                 

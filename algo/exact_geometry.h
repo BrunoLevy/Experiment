@@ -50,22 +50,22 @@ namespace GEO {
     class vec3QLexicoCompare {
     public:
         bool operator()(const vec3Q& v1, const vec3Q& v2) const {
-            Sign s = (v2.x - v1.x).sign();
+            Sign s = v2.x.compare(v1.x);
             if(s == POSITIVE) {
                 return true;
             }
             if(s == NEGATIVE) {
                 return false;
             }
-            s = (v2.y - v1.y).sign();
+            s = v2.y.compare(v1.y);
             if(s == POSITIVE) {
                 return true;
             }
             if(s == NEGATIVE) {
                 return false;
             }
-            s = (v2.z - v1.z).sign();
-            return s == POSITIVE;
+            s = v2.z.compare(v1.z);
+            return (s == POSITIVE);
         }
     };
 
@@ -182,57 +182,141 @@ namespace GEO {
         );
     }
     
-    inline bool get_three_planes_intersection(
+    bool Experiment_API get_three_planes_intersection(
         vec3Q& result,
         const vec3& p1, const vec3& p2, const vec3& p3,
         const vec3& q1, const vec3& q2, const vec3& q3,
         const vec3& r1, const vec3& r2, const vec3& r3
-    ) {
+    );
 
-        vec3E N1 = triangle_normal<vec3E>(p1,p2,p3);
-        vec3E N2 = triangle_normal<vec3E>(q1,q2,q3);
-        vec3E N3 = triangle_normal<vec3E>(r1,r2,r3);
+    /*********************************************************************************/
 
-        vec3E B(
-            dot(N1,make_vec3<vec3E>(p1)),
-            dot(N2,make_vec3<vec3E>(q1)),
-            dot(N3,make_vec3<vec3E>(r1))
-        );
-        
-        expansion_nt Delta = det3x3(
-            N1.x, N1.y, N1.z,
-            N2.x, N2.y, N2.z,
-            N3.x, N3.y, N3.z
-        );
+    /**
+     * \brief 2D vector in homogeneous coordinates
+     *  with coordinates as arithmetic expansions.
+     */
+    struct vec2HE {
 
-        if(Delta.sign() == ZERO) {
-            return false;
+        vec2HE() :
+            x(expansion_nt::UNINITIALIZED),
+            y(expansion_nt::UNINITIALIZED),
+            w(expansion_nt::UNINITIALIZED)            
+        {
+        }
+
+        vec2HE(
+            const expansion_nt& x_in,
+            const expansion_nt& y_in,
+            const expansion_nt& w_in
+        ) : x(x_in), y(y_in), w(w_in) {
+        }
+
+        vec2HE(
+            expansion_nt&& x_in,
+            expansion_nt&& y_in,
+            expansion_nt&& w_in
+        ) : x(x_in), y(y_in), w(w_in) {
         }
         
-        expansion_nt X = det3x3(
-            B.x, N1.y, N1.z,
-            B.y, N2.y, N2.z,
-            B.z, N3.y, N3.z
-        );
+        vec2HE(const vec2HE& rhs) :
+            x(rhs.x), y(rhs.y), w(rhs.w) {
+        }
 
-        expansion_nt Y = det3x3(
-            N1.x, B.x, N1.z,
-            N2.x, B.y, N2.z,
-            N3.x, B.z, N3.z
-        );
+        vec2HE(vec2HE&& rhs) :
+            x(rhs.x), y(rhs.y), w(rhs.w) {
+        }
 
-        expansion_nt Z = det3x3(
-            N1.x, N1.y, B.x,
-            N2.x, N2.y, B.y,
-            N3.x, N3.y, B.z
-        );
+        vec2HE& operator=(const vec2HE& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                w=rhs.w;
+            }
+            return *this;
+        }
 
-        result.x=rational_nt(X,Delta);
-        result.y=rational_nt(Y,Delta);
-        result.z=rational_nt(Z,Delta);
+        vec2HE& operator=(vec2HE&& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                w=rhs.w;
+            }
+            return *this;
+        }
+        
+        expansion_nt x;
+        expansion_nt y;
+        expansion_nt w;
+    };
 
-        return true;
-    }
+    /**
+     * \brief 3D vector in homogeneous coordinates
+     *  with coordinates as arithmetic expansions.
+     */
+    struct vec3HE {
+        vec3HE() :
+            x(expansion_nt::UNINITIALIZED),
+            y(expansion_nt::UNINITIALIZED),
+            z(expansion_nt::UNINITIALIZED),
+            w(expansion_nt::UNINITIALIZED)            
+        {
+        }
+
+        vec3HE(
+            const expansion_nt& x_in,
+            const expansion_nt& y_in,
+            const expansion_nt& z_in,
+            const expansion_nt& w_in            
+        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
+        }
+
+        vec3HE(
+            expansion_nt&& x_in,
+            expansion_nt&& y_in,
+            expansion_nt&& z_in,
+            expansion_nt&& w_in
+        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
+        }
+        
+        vec3HE(const vec3HE& rhs) :
+            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
+        }
+
+        vec3HE(vec3HE&& rhs) :
+            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
+        }
+
+        vec3HE& operator=(const vec3HE& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                z=rhs.z;                
+                w=rhs.w;
+            }
+            return *this;
+        }
+
+        vec3HE& operator=(vec3HE&& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                z=rhs.z;                
+                w=rhs.w;
+            }
+            return *this;
+        }
+        
+        expansion_nt x;
+        expansion_nt y;
+        expansion_nt z;        
+        expansion_nt w;
+    };
+    
+    class Experiment_API vec3HELexicoCompare {
+    public:
+       bool operator()(const vec3HE& v1, const vec3HE& v2) const; 
+    };
+    
 }
 
 #endif
