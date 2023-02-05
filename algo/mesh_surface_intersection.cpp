@@ -35,6 +35,22 @@ namespace {
 
     /***********************************************************************/
 
+    inline vec3Q vec3Q_noinit() {
+        return vec3Q(
+            rational_nt(rational_nt::UNINITIALIZED),
+            rational_nt(rational_nt::UNINITIALIZED),
+            rational_nt(rational_nt::UNINITIALIZED)           
+        );
+    }
+
+    inline vec2Q vec2Q_noinit() {
+        return vec2Q(
+            rational_nt(rational_nt::UNINITIALIZED),
+            rational_nt(rational_nt::UNINITIALIZED)            
+        );
+    }
+    
+    /***********************************************************************/
 
     /**
      * \brief Meshes a single triangle with the constraints that come from
@@ -117,7 +133,12 @@ namespace {
              *  MeshInTriangle's current facet
              * \param[in] lv local vertex index in \p f
              */
-            Vertex(MeshInTriangle* M, index_t f, index_t lv) {
+            Vertex(
+                MeshInTriangle* M, index_t f, index_t lv
+            ) :
+                point_exact(vec3Q_noinit()),
+                UV_exact(vec2Q_noinit())
+            {
                 geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
                 mesh_in_triangle = M;
@@ -135,7 +156,10 @@ namespace {
                 MeshInTriangle* M,
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
-            ) {
+            ) :
+                point_exact(vec3Q_noinit()),
+                UV_exact(vec2Q_noinit())
+            {
                 geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
                 mesh_in_triangle = M;
@@ -166,7 +190,10 @@ namespace {
             /**
              * \brief Default constructor
              */
-            Vertex() {
+            Vertex() :
+                point_exact(vec3Q_noinit()),
+                UV_exact(vec2Q_noinit())
+            {
                 type = UNINITIALIZED;                
                 mesh_in_triangle = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
@@ -830,8 +857,8 @@ namespace {
                     
                     // TODO: check and handle co-linear edges
                     if(edge_edge_intersect(v1,v2,w1,w2)) {
-                        vec3Q I;
-                        vec2Q UV;
+                        vec3Q I = vec3Q_noinit();
+                        vec2Q UV = vec2Q_noinit();
                         get_edge_edge_intersection(e1,e2,I,UV);
                         index_t x = add_vertex(Vertex(this,I,UV));
                         edges_[e1].add_vertex_in_edge(x);

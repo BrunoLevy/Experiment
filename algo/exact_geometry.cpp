@@ -13,7 +13,7 @@ namespace {
      * \param[in] b_num , b_denom defines b = \p b_num / \p b_denom
      * \return the sign of a - b
      */
-    Sign ratio_compare(
+    inline Sign ratio_compare(
         const expansion_nt& a_num,
         const expansion_nt& a_denom,
         const expansion_nt& b_num,
@@ -40,6 +40,45 @@ namespace {
 
 namespace GEO {
     namespace PCK {
+        Sign orient_2d(
+            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
+        ) {
+
+            // Special case: per-point denominators are the same
+            // (homogeneous coordinates encoded in rational_nt)
+            if(
+                p0.x.denom() == p0.y.denom() &&
+                p1.x.denom() == p1.y.denom()
+            ) {
+                expansion& Delta = expansion_det3x3(
+                    p0.x.num().rep(), p0.y.num().rep(), p0.x.denom().rep(),
+                    p1.x.num().rep(), p1.y.num().rep(), p1.x.denom().rep(),
+                    p2.x.num().rep(), p2.y.num().rep(), p2.x.denom().rep()
+                );
+                return Sign(
+                    Delta.sign()*
+                    p0.x.denom().rep().sign()*
+                    p1.x.denom().rep().sign()*
+                    p2.x.denom().rep().sign()
+                );
+            }
+
+            // General case, using (slower) rational_nt type.
+            rational_nt a11 = p1.x - p0.x;
+            rational_nt a12 = p1.y - p0.y;
+            rational_nt a21 = p2.x - p0.x;
+            rational_nt a22 = p2.y - p0.y;
+            rational_nt Delta = det2x2(
+                a11,a12,
+                a21,a22
+            );
+            return Delta.sign();
+        }
+        
+        Sign dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2) {
+            return dot(p1-p0,p2-p0).sign();
+        }
+        
     }
 
     bool get_three_planes_intersection(

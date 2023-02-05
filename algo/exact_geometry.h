@@ -83,23 +83,11 @@ namespace GEO {
             return (v1.x == v2.x) && (v1.y == v2.y);
         }
 
-        inline Sign orient_2d(
+        Sign Experiment_API orient_2d(
             const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
-        ) {
-            rational_nt a11 = p1.x - p0.x;
-            rational_nt a12 = p1.y - p0.y;
-            rational_nt a21 = p2.x - p0.x;
-            rational_nt a22 = p2.y - p0.y;
-            rational_nt Delta = det2x2(
-                a11,a12,
-                a21,a22
-            );
-            return Delta.sign();
-        }
+        );
         
-        inline Sign dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2) {
-            return dot(p1-p0,p2-p0).sign();
-        }
+        Sign Experiment_API dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2);
         
     }
 
