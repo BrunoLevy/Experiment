@@ -1,0 +1,219 @@
+# vorpaline algo:delaunay=NN
+# vorpaline algo:hole_filling=loop_split
+# vorpaline algo:nn_search=BNN
+# vorpaline algo:parallel=true
+# vorpaline algo:predicates=fast
+# vorpaline algo:reconstruct=Co3Ne
+# vorpaline base_modules=luagrob;mesh;voxel
+# vorpaline batch=false
+# vorpaline biblio=false
+# vorpaline biblio:command_line=false
+# vorpaline co3ne=false
+# vorpaline co3ne:Psmooth_iter=0
+# vorpaline co3ne:T12=true
+# vorpaline co3ne:max_N_angle=60
+# vorpaline co3ne:max_hole_area=5%
+# vorpaline co3ne:max_hole_edges=500
+# vorpaline co3ne:min_comp_area=0.01%
+# vorpaline co3ne:min_comp_facets=10
+# vorpaline co3ne:nb_neighbors=30
+# vorpaline co3ne:radius=5%
+# vorpaline co3ne:repair=true
+# vorpaline co3ne:strict=false
+# vorpaline co3ne:use_normals=true
+# vorpaline debug=false
+# vorpaline gel=Lua
+# vorpaline gel:F10_script=
+# vorpaline gel:F1_script=
+# vorpaline gel:F2_script=
+# vorpaline gel:F3_script=
+# vorpaline gel:F4_script=
+# vorpaline gel:F5_script=
+# vorpaline gel:F6_script=
+# vorpaline gel:F7_script=
+# vorpaline gel:F8_script=
+# vorpaline gel:F9_script=
+# vorpaline gel:startup_files=/home/blevy/Programming/NEWREPO/GraphiteThree/lib/GraphitePoint.lua
+# vorpaline gfx:GLSL_tesselation=true
+# vorpaline gfx:GLSL_version=0
+# vorpaline gfx:GLUP_profile=auto
+# vorpaline gfx:GL_debug=false
+# vorpaline gfx:GL_profile=core
+# vorpaline gfx:GL_version=0
+# vorpaline gfx:default_full_screen_effect=Plain
+# vorpaline gfx:full_screen=false
+# vorpaline gfx:geometry=1024x1024
+# vorpaline gfx:keypress=
+# vorpaline gfx:no_decoration=false
+# vorpaline gfx:perspective=false
+# vorpaline gfx:transparent=false
+# vorpaline gui:font_size=14
+# vorpaline gui:keyboard_nav=false
+# vorpaline gui:module_Camera_visible=true
+# vorpaline gui:module_Console_visible=false
+# vorpaline gui:module_GraphitePoint_visible=false
+# vorpaline gui:module_Programs_visible=false
+# vorpaline gui:module_Properties_visible=true
+# vorpaline gui:module_Scene_visible=true
+# vorpaline gui:module_Statistics_visible=false
+# vorpaline gui:module_Toolbox_visible=true
+# vorpaline gui:presentation_mode=false
+# vorpaline gui:shaders_selector=true
+# vorpaline gui:state=[Window][DockSpace]	Pos=0,0	Size=1024,1009	Collapsed=0		[Window][Graphite]	Pos=0,23	Size=204,985	Collapsed=0	DockId=0x00000009,0		[Window][  Camera##module]	Pos=850,23	Size=174,490	Collapsed=0	DockId=0x00000006,0		[Window][  Toolbox##module]	Pos=850,515	Size=174,493	Collapsed=0	DockId=0x0000000B,0		[Window][  Console##module]	Pos=0,780	Size=1024,228	Collapsed=0	DockId=0x00000008,0		[Window][  GraphitePoint##module]	Pos=1732,32	Size=180,559	Collapsed=0	DockId=0x00000006,2		[Window][Debug##Default]	Pos=60,60	Size=400,400	Collapsed=0		[Window][  Preferences]	Pos=60,60	Size=405,485	Collapsed=0		[Window][  Properties##module]	Pos=850,23	Size=174,490	Collapsed=0	DockId=0x00000006,1		[Window][  Programs##module]	Pos=206,325	Size=642,453	Collapsed=0	DockId=0x0000000C,0		[Window][  Statistics##module]	Pos=0,392	Size=203,415	Collapsed=0	DockId=0x0000000A		[Window][##Status]	ViewportPos=16,954	ViewportId=0x21E05854	Size=991,38	Collapsed=0		[Window][Load...##0x557bce36c8d0]	Pos=60,60	Size=350,363	Collapsed=0		[Window][  Euler2d##dialog##points:OGF::MeshGrob:Euler2d]	Pos=86,480	Size=277,295	Collapsed=0		[Docking][Data]	DockSpace         ID=0x09EF459F Window=0x9A404470 Pos=0,23 Size=1024,985 Split=Y	  DockNode        ID=0x00000007 Parent=0x09EF459F SizeRef=1024,755 Split=X	    DockNode      ID=0x00000003 Parent=0x00000007 SizeRef=848,1010 Split=X	      DockNode    ID=0x00000001 Parent=0x00000003 SizeRef=204,1010 Split=Y Selected=0xC8E8EFC9	        DockNode  ID=0x00000009 Parent=0x00000001 SizeRef=203,366 HiddenTabBar=1 Selected=0x2325022F	        DockNode  ID=0x0000000A Parent=0x00000001 SizeRef=203,415 HiddenTabBar=1 Selected=0xFBA4A3C1	      DockNode    ID=0x00000002 Parent=0x00000003 SizeRef=642,1010 Split=Y Selected=0x2E191370	        DockNode  ID=0x00000005 Parent=0x00000002 SizeRef=642,379 CentralNode=1	        DockNode  ID=0x0000000C Parent=0x00000002 SizeRef=642,453 HiddenTabBar=1 Selected=0xBB4F1E3A	    DockNode      ID=0x00000004 Parent=0x00000007 SizeRef=174,1010 Split=Y Selected=0x6D12197B	      DockNode    ID=0x00000006 Parent=0x00000004 SizeRef=131,406 Selected=0x29AF8F84	      DockNode    ID=0x0000000B Parent=0x00000004 SizeRef=131,408 HiddenTabBar=1 Selected=0x6DF8D50C	  DockNode        ID=0x00000008 Parent=0x09EF459F SizeRef=1024,228 HiddenTabBar=1 Selected=0xB7ABC563		
+# vorpaline gui:style=Dark
+# vorpaline gui:tooltips=true
+# vorpaline gui:viewports=false
+# vorpaline hex=false
+# vorpaline hex:PGP_FF_fixed_topo=1
+# vorpaline hex:PGP_FF_free_topo=1
+# vorpaline hex:PGP_direct_solver=false
+# vorpaline hex:PGP_max_corr_prop=0.34999999999999998
+# vorpaline hex:algo=PGP3d
+# vorpaline hex:border_max_distance=20%
+# vorpaline hex:border_refine=false
+# vorpaline hex:constrained=true
+# vorpaline hex:frames_file=
+# vorpaline hex:keep_border=false
+# vorpaline hex:points_file=
+# vorpaline hex:prefer_seeds=true
+# vorpaline hex:prisms=false
+# vorpaline hex:pyramids=false
+# vorpaline hex:save_frames=false
+# vorpaline hex:save_points=false
+# vorpaline hex:save_surface=false
+# vorpaline hex:save_tets=false
+# vorpaline hex:tets_file=
+# vorpaline interactive=false
+# vorpaline log:features=*
+# vorpaline log:features_exclude=Init;ModuleMgr
+# vorpaline log:file_name=
+# vorpaline log:pretty=true
+# vorpaline log:quiet=false
+# vorpaline main=lib/graphite_imgui.lua
+# vorpaline modules=devel;Experiment
+# vorpaline nl:CUDA=false
+# vorpaline nl:MKL=false
+# vorpaline opt:Newton_m=7
+# vorpaline opt:nb_Lloyd_iter=5
+# vorpaline opt:nb_LpCVT_iter=30
+# vorpaline opt:nb_Newton_iter=30
+# vorpaline poisson:octree_depth=8
+# vorpaline post=true
+# vorpaline post:compute_normals=false
+# vorpaline post:isect=false
+# vorpaline post:max_deg3_dist=0.10000000000000001%
+# vorpaline post:max_hole_area=0%
+# vorpaline post:max_hole_edges=2000
+# vorpaline post:min_comp_area=0%
+# vorpaline post:repair=false
+# vorpaline pre=true
+# vorpaline pre:Nsmooth_iter=1
+# vorpaline pre:brutal_kill_borders=0
+# vorpaline pre:epsilon=0%
+# vorpaline pre:margin=0%
+# vorpaline pre:max_hole_area=0%
+# vorpaline pre:max_hole_edges=2000
+# vorpaline pre:min_comp_area=0%
+# vorpaline pre:repair=false
+# vorpaline pre:vcluster_bins=0
+# vorpaline profile=scan
+# vorpaline remesh=true
+# vorpaline remesh:Nfactor=5
+# vorpaline remesh:RVC_centroids=true
+# vorpaline remesh:anisotropy=0
+# vorpaline remesh:by_parts=false
+# vorpaline remesh:gradation=0
+# vorpaline remesh:lfs_samples=10000
+# vorpaline remesh:max_dist=0.20000000000000001
+# vorpaline remesh:multi_nerve=true
+# vorpaline remesh:nb_pts=30000
+# vorpaline remesh:refine=false
+# vorpaline remesh:sharp_edges=false
+# vorpaline shell=false
+# vorpaline skin=skin_imgui
+# vorpaline stat:sampling_step=0.5%
+# vorpaline sys:FPE=false
+# vorpaline sys:ascii=false
+# vorpaline sys:assert=abort
+# vorpaline sys:cancel=false
+# vorpaline sys:compression_level=3
+# vorpaline sys:lowmem=false
+# vorpaline sys:max_threads=16
+# vorpaline sys:multithread=true
+# vorpaline sys:stats=false
+# vorpaline sys:use_doubles=false
+# vorpaline tet=false
+# vorpaline tet:preprocess=true
+# vorpaline tet:quality=2
+# vorpaline tet:refine=true
+v 0.5756 -0.692592 0 
+v 0.5756 -0.692592 1 
+v 0.5756 0.307408 0 
+v 0.5756 0.307408 1 
+v 1.5756 -0.692592 0 
+v 1.5756 -0.692592 1 
+v 1.5756 0.307408 0 
+v 1.5756 0.307408 1 
+v 0.701951 0.124011 0 
+v 0.701951 0.124011 1 
+v 0.701951 1.12401 0 
+v 0.701951 1.12401 1 
+v 1.70195 0.124011 0 
+v 1.70195 0.124011 1 
+v 1.70195 1.12401 0 
+v 1.70195 1.12401 1 
+v -0.29482 -0.449249 0 
+v -0.29482 -0.449249 1 
+v -0.29482 0.550751 0 
+v -0.29482 0.550751 1 
+v 0.70518 -0.449249 0 
+v 0.70518 -0.449249 1 
+v 0.70518 0.550751 0 
+v 0.70518 0.550751 1 
+v 0.166129 0.119332 0 
+v 0.166129 0.119332 1 
+v 0.166129 1.11933 0 
+v 0.166129 1.11933 1 
+v 1.16613 0.119332 0 
+v 1.16613 0.119332 1 
+v 1.16613 1.11933 0 
+v 1.16613 1.11933 1 
+v 0.167475 -0.0991874 0.0698483 
+v 0.558383 -0.352255 0.954805 
+v 0.222606 0.866984 0.321787 
+v 0.613514 0.613917 1.20674 
+v 1.08625 -0.0494914 -0.321787 
+v 1.47716 -0.302559 0.563169 
+v 1.14138 0.91668 -0.0698483 
+v 1.53229 0.663613 0.815108 
+usemtl Material_0
+f 4 8 7 3 
+f 1 2 4 3 
+f 2 6 8 4 
+f 6 5 7 8 
+f 1 5 6 2 
+f 3 7 5 1 
+f 12 16 15 11 
+f 9 10 12 11 
+f 10 14 16 12 
+f 14 13 15 16 
+f 9 13 14 10 
+f 11 15 13 9 
+f 20 24 23 19 
+f 17 18 20 19 
+f 18 22 24 20 
+f 22 21 23 24 
+f 17 21 22 18 
+f 19 23 21 17 
+f 28 32 31 27 
+f 25 26 28 27 
+f 26 30 32 28 
+f 30 29 31 32 
+f 25 29 30 26 
+f 27 31 29 25 
+f 36 40 39 35 
+f 33 34 36 35 
+f 34 38 40 36 
+f 38 37 39 40 
+f 33 37 38 34 
+f 35 39 37 33 

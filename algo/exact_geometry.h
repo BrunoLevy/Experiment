@@ -13,8 +13,30 @@ namespace GEO {
     typedef vecng<3,expansion_nt> vec3E;    
     typedef vecng<3,rational_nt>  vec3Q;
 
+
+    /*
+    inline vec3Q mix(rational_nt t, const vec3& p1, const vec3& p2) {
+        expansion_nt d = t.denom() - t.num();
+        return vec3Q(
+            rational_nt(t.num()*p2.x+d*p1.x,t.denom()),
+            rational_nt(t.num()*p2.y+d*p1.y,t.denom()),
+            rational_nt(t.num()*p2.z+d*p1.z,t.denom())            
+        );
+    }
+
+    inline vec2Q mix(rational_nt t, const vec2& p1, const vec2& p2) {
+        expansion_nt d = t.denom() - t.num();
+        return vec2Q(
+            rational_nt(t.num()*p2.x+d*p1.x,t.denom()),
+            rational_nt(t.num()*p2.y+d*p1.y,t.denom())
+        );
+    }
+    */
+
+
     inline vec3Q mix(rational_nt t, const vec3& p1, const vec3& p2) {
         rational_nt tt = rational_nt(1.0)-t;
+        //rational_nt tt(t.denom()-t.num(),t.denom());
         return vec3Q(
             tt*rational_nt(p1.x)+t*rational_nt(p2.x),
             tt*rational_nt(p1.y)+t*rational_nt(p2.y),
@@ -24,12 +46,14 @@ namespace GEO {
 
     inline vec2Q mix(rational_nt t, const vec2& p1, const vec2& p2) {
         rational_nt tt = rational_nt(1.0)-t;
+        // rational_nt tt(t.denom()-t.num(),t.denom());        
         return vec2Q(
             tt*rational_nt(p1.x)+t*rational_nt(p2.x),
             tt*rational_nt(p1.y)+t*rational_nt(p2.y)
         );
     }
 
+    
     inline vec2Q mix(rational_nt t, const vec2Q& p1, const vec2Q& p2) {
         rational_nt tt = rational_nt(1.0)-t;
         return vec2Q(
