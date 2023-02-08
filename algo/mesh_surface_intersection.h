@@ -60,6 +60,12 @@ namespace GEO {
          *  option is projection onto the most normal axis.
          */
         bool barycentric = true;
+
+        /**
+         * \brief if set, assign an operand id to each connected component
+         *  of input.
+         */
+        bool per_component_ids = true;
     };
 
     void Experiment_API mesh_intersect_surface(

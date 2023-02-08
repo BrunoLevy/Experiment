@@ -47,7 +47,8 @@ namespace OGF {
         bool order_facets,
         bool FPE,
         bool check_constraints,
-        bool barycentric
+        bool barycentric,
+        bool per_component_ids
     ) {
         MeshSurfaceIntersectionParams params;
 
@@ -59,6 +60,7 @@ namespace OGF {
         params.debug_enable_FPE = FPE;
         params.debug_check_constraints = check_constraints;
         params.barycentric = barycentric;
+        params.per_component_ids = per_component_ids;
         
         GEO::mesh_intersect_surface(*mesh_grob(),params);
         

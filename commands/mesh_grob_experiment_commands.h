@@ -69,15 +69,18 @@ namespace OGF {
          *  intersections
          * \param[in] barycentric use barycentric coordinate for local
          *  triangle geometry
+         * \param[in] per_component_ids assign an operand id to each connected
+         *  component
          */
         void intersect_surface(
             bool merge_vertices_and_facets = true,
-            bool check_neighboring_triangles = false,
+            bool check_neighboring_triangles = true,
             bool post_connect_facets=true,
             bool order_facets=true,
             bool FPE=true,
             bool check_constraints=false,
-            bool barycentric=true
+            bool barycentric=false,
+            bool per_component_ids=true
         );
 
         /**
@@ -86,7 +89,7 @@ namespace OGF {
          * \param[in] dry_run if set, just visualize the result
          */
         void classify_intersections(
-            const std::string& expr = "A|B",
+            const std::string& expr = "union",
             bool dry_run=true,
             bool reorder=false
         );

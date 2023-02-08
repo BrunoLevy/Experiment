@@ -3,10 +3,7 @@
  *
  */
 
-// TODO: co-linear constraints intersections: cucube, cucube3, cucube4
-//       Detection: seems to be OK
-//       Processing: may generate duplicated intersection segments,
-//         we need to sort-uniq them (right after sort-split)
+// TODO: sort-uniq constrained edges
 //
 // TOOD: Seems that sometimes a duplicated point is generated (from constraints
 //         intersections, in cubes.lua).
@@ -18,10 +15,6 @@
 //              AND/OR
 //           - polygonal remesh + ear cutting
 //
-// TODO: intersection between a constraint edge yielded by triangle in same
-//         plane and a constraint edge yielded by triangle in other plane
-//       Example: bug_cucube_3_triangles.obj
-
 
 // TODO: exact classification
 
@@ -688,14 +681,15 @@ namespace {
             index_t v2 = add_vertex(f2, BR1, BR2);
 
             // If both extremities are on the same edge of f1,
-            // we do not add the edge, because it will be generating
+            // we do not add the edge, because it will be generated
             // when remeshing the edge of f1
             if(region_dim(regions_convex_hull(AR1,BR1)) == 1) {
                 return;
             }
 
-            // The combinatorial information of the edge indicates whether
-            // both extremities are on the same edge of f2
+            // Generate also the combinatorial information of the edge,
+            // that indicates whether both extremities are on the same
+            // edge of f2 (useful later to compute the intersections)
             edges_.push_back(Edge(v1,v2,f2,regions_convex_hull(AR2,BR2)));
             index_t e1 = edges_.size()-1;
             for(index_t e2=3; e2 < e1; ++e2) {
@@ -737,6 +731,11 @@ namespace {
                     }
                 } 
             }
+            // Note: there can be in the end duplicated edges (for instance,
+            // when there are two colinear intersecting edges, the overlapped
+            // segment will be generated twice). It would be possible to eliminate
+            // them (std::sort(), std::uniq()), but normally there are not really
+            // a problem.
         }
 
         void end_facet() {
@@ -1789,7 +1788,8 @@ namespace GEO {
             get_surface_connected_components(M,"operand_bit");
             operand_bit.bind(M.facets.attributes(), "operand_bit");
             for(index_t f: M.facets) {
-                operand_bit[f] = (1 << operand_bit[f]);
+                operand_bit[f] =
+                    params.per_component_ids ? (1 << operand_bit[f]) : 1;
             }
         }
         
@@ -1979,7 +1979,85 @@ namespace {
     }
 }
 
+namespace {
+    using namespace GEO;
+
+    // TODO: something less hacky...
+    bool facet_on_border(MeshFacetsAABB& AABB, index_t f) {
+        vec3 g = Geom::mesh_facet_center(*(AABB.mesh()),f);
+        for(index_t i=0; i<1000; ++i) {
+            vec3 D(
+                Numeric::random_float64(),
+                Numeric::random_float64(),
+                Numeric::random_float64()
+            );
+            
+            if(!AABB.ray_intersection(
+                   Ray(g,D), Numeric::max_float64(), f
+            )) {
+                return true;
+            }
+            if(!AABB.ray_intersection(
+                   Ray(g,-D), Numeric::max_float64(), f
+            )) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    void mesh_classify_union(
+        Mesh& M, 
+        const std::string& attribute,
+        bool reorder
+    ) {
+        MeshFacetsAABB AABB(M,reorder);
+        index_t nb_charts = get_surface_connected_components(M);        
+        Attribute<index_t> chart(M.facets.attributes(), "chart");
+        Attribute<bool> selection;
+        vector<index_t> delete_f;
+        if(attribute != "") {
+            selection.bind(M.facets.attributes(), attribute);            
+        } else {
+            delete_f.assign(M.facets.nb(), 0);
+        }
+
+        vector<index_t> chart_facet(nb_charts, index_t(-1));
+        for(index_t f: M.facets) {
+            index_t c = chart[f];
+            if(chart_facet[c] == index_t(-1)) {
+                bool f_is_selected = facet_on_border(AABB,f);
+                chart_facet[c] = f;
+                if(selection.is_bound()) {
+                    selection[f] = f_is_selected;
+                } else {
+                    delete_f[f] = !f_is_selected;
+                }
+            } else {
+                if(selection.is_bound()) {
+                    selection[f] = selection[chart_facet[c]];
+                } else {
+                    delete_f[f] = delete_f[chart_facet[c]];
+                }
+            }
+        } 
+        if(!selection.is_bound()) {
+            M.facets.delete_elements(delete_f);
+        }
+        mesh_repair(
+            M,
+            GEO::MeshRepairMode(
+                GEO::MESH_REPAIR_COLOCATE | GEO::MESH_REPAIR_DUP_F
+            ),
+            0.0
+        );
+    }
+    
+}
+
 namespace GEO {
+
+
     
     void mesh_classify_intersections(
         Mesh& M, std::function<bool(index_t)> eqn,
@@ -2105,6 +2183,10 @@ namespace GEO {
             operand_all_bits = (max_operand_bit << 1)-1;
         }
         
+        if(expr == "union") {
+            mesh_classify_union(M, attribute, reorder);
+            return;
+        }
         
         try {
             mesh_classify_intersections(
