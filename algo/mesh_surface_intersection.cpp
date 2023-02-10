@@ -175,6 +175,7 @@ namespace {
                 mesh_in_triangle = M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
                 init_geometry();
+                optimize();
             }
 
             /**
@@ -196,6 +197,7 @@ namespace {
                 mesh_in_triangle = M;
                 init_sym(f1,f2,R1,R2);
                 init_geometry();
+                optimize();                
             }
 
             /**
@@ -216,6 +218,7 @@ namespace {
                 type = SECONDARY_ISECT;                
                 mesh_in_triangle = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
+                optimize();                
             }
 
             /**
@@ -492,6 +495,14 @@ namespace {
                 geo_assert_not_reached;
             }
 
+            void optimize() {
+                point_exact.x.optimize();
+                point_exact.y.optimize();
+                point_exact.z.optimize();                
+                UV_exact.x.optimize();
+                UV_exact.y.optimize();
+            }
+            
             /**
              * \brief Indicates whether barycentric or projected coordinates
              *  are used.
@@ -793,6 +804,16 @@ namespace {
                 }
             }
 
+
+            if(false) {
+                for(const Edge& E: edges_) {
+                    index_t v1 = vertex_[E.v1].mesh_vertex_index;
+                    index_t v2 = vertex_[E.v2].mesh_vertex_index;
+                    mesh().edges.create_edge(v1,v2);
+                }
+                return;
+            }
+            
             // Create a 2D constrained Delaunay triangulation
             Mesh constraints;
             get_constraints(constraints);
@@ -1103,8 +1124,8 @@ namespace {
                     // of the extremities of the segment in the macro-triangle,
                     // then linearly combine them with t...
                     // ... I think I'm going to give up barycentric mode, does
-                    // not gain anything in terms of degree if there is this type
-                    // of configuration.
+                    // not gain anything in terms of degree
+                    // if there is this type of configuration.
                     
                     vec2E q1 = mesh_facet_vertex_project<vec2E>(
                         f2, (e+1)%3
@@ -1379,7 +1400,7 @@ namespace {
                     insert_v[0] || insert_v[1] || insert_v[2] || insert_v[3]
                 );
                 
-                if(result) {
+                if(false && result) {
                     std::cerr << "Isect in co-linear edges" << std::endl;
 
                     std::cerr << vertex_[i].to_string() << "  ---  "
@@ -1672,6 +1693,8 @@ namespace {
                 }
             );
 
+            index_t nf = M.facets.nb();
+            
             // Now iterate on all intersections, and identify
             // the [b,e[ intervals that correspond to the same f1 facet.
             index_t b=0;
@@ -1683,7 +1706,13 @@ namespace {
                 ) {
                     ++e;
                 }
-                
+
+                /*
+                std::cerr << "Isects in " << intersections[b].f1
+                          << " / " << nf                    
+                          << "    : " << (e-b)
+                          << std::endl;
+                */
                 TM.begin_facet(intersections[b].f1);
                 for(index_t i=b; i<e; ++i) {
                     const IsectInfo& II = intersections[i];

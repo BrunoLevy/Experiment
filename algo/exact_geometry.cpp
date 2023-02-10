@@ -36,9 +36,105 @@ namespace {
 	    diff_num.sign() * a_denom.sign() * b_denom.sign()
 	);
     }
+
+    inline rational_nt one_minus_t(const rational_nt& t) {
+        // Next line equivalent to: return rational_nt(1.0)-t;
+        return rational_nt(
+            t.denom()-t.num(),
+            t.denom() 
+        );
+    }
 }
 
 namespace GEO {
+
+    vec3Q mix(const rational_nt& t, const vec3& p1, const vec3& p2) {
+        rational_nt tt = one_minus_t(t);
+        return vec3Q(
+            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
+            tt*rational_nt(p1.y)+t*rational_nt(p2.y),
+            tt*rational_nt(p1.z)+t*rational_nt(p2.z)
+        );
+    }
+
+    vec2Q mix(const rational_nt& t, const vec2& p1, const vec2& p2) {
+        rational_nt tt = one_minus_t(t);
+        return vec2Q(
+            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
+            tt*rational_nt(p1.y)+t*rational_nt(p2.y)
+        );
+    }
+
+    
+    vec2Q mix(const rational_nt& t, const vec2Q& p1, const vec2Q& p2) {
+        rational_nt tt = one_minus_t(t);
+        return vec2Q(
+            tt*p1.x+t*p2.x,
+            tt*p1.y+t*p2.y
+        );
+    }
+
+    vec3Q mix(const rational_nt& t, const vec3Q& p1, const vec3Q& p2) {
+        rational_nt tt = one_minus_t(t);
+        return vec3Q(
+            tt*p1.x+t*p2.x,
+            tt*p1.y+t*p2.y,
+            tt*p1.z+t*p2.z
+        );
+    }
+
+
+    template<> expansion_nt det(const vec2E& v1, const vec2E& v2) {
+        expansion* result = expansion::new_expansion_on_heap(
+            expansion::det2x2_capacity(
+                v1.x.rep(), v1.y.rep(),
+                v2.x.rep(), v2.y.rep()
+            )
+        );
+        result->assign_det2x2(
+            v1.x.rep(), v1.y.rep(),
+            v2.x.rep(), v2.y.rep()
+        );
+        return expansion_nt(result);
+    }
+
+    template<> expansion_nt dot(const vec2E& v1, const vec2E& v2) {
+        const expansion& m1 = expansion_product(v1.x.rep(), v2.x.rep());
+        const expansion& m2 = expansion_product(v1.y.rep(), v2.y.rep());
+        return expansion_nt(expansion_nt::SUM, m1, m2);
+    }
+
+    template<> expansion_nt dot(const vec3E& v1, const vec3E& v2) {
+        const expansion& m1 = expansion_product(v1.x.rep(), v2.x.rep());
+        const expansion& m2 = expansion_product(v1.y.rep(), v2.y.rep());
+        const expansion& m3 = expansion_product(v1.z.rep(), v2.z.rep());
+        return expansion_nt(expansion_nt::SUM,m1,m2,m3);
+    }
+
+    template <> vec3E triangle_normal<vec3E>(
+        const vec3& p1, const vec3& p2, const vec3& p3
+    ) {
+        const expansion& Ux = expansion_diff(p2.x,p1.x);
+        const expansion& Uy = expansion_diff(p2.y,p1.y);
+        const expansion& Uz = expansion_diff(p2.z,p1.z);
+        const expansion& Vx = expansion_diff(p3.x,p1.x);
+        const expansion& Vy = expansion_diff(p3.y,p1.y);
+        const expansion& Vz = expansion_diff(p3.z,p1.z);
+        expansion* Nx = expansion::new_expansion_on_heap(
+            expansion::det2x2_capacity(Uy,Uz,Vy,Vz)
+        );
+        Nx->assign_det2x2(Uy,Uz,Vy,Vz);
+        expansion* Ny = expansion::new_expansion_on_heap(
+            expansion::det2x2_capacity(Uz,Ux,Vz,Vx)
+        );
+        Ny->assign_det2x2(Uz,Ux,Vz,Vx);
+        expansion* Nz = expansion::new_expansion_on_heap(
+            expansion::det2x2_capacity(Ux,Uy,Vx,Vy)
+        );
+        Nz->assign_det2x2(Ux,Uy,Vx,Vy);
+        return vec3E(expansion_nt(Nx), expansion_nt(Ny), expansion_nt(Nz));
+    }
+    
     namespace PCK {
         Sign orient_2d(
             const vec2Q& p0, const vec2Q& p1, const vec2Q& p2

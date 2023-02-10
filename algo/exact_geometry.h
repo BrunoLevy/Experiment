@@ -13,64 +13,37 @@ namespace GEO {
     typedef vecng<3,expansion_nt> vec3E;    
     typedef vecng<3,rational_nt>  vec3Q;
 
+    vec3Q Experiment_API mix(
+        const rational_nt& t, const vec3& p1, const vec3& p2
+    );
 
-    /*
-    inline vec3Q mix(rational_nt t, const vec3& p1, const vec3& p2) {
-        expansion_nt d = t.denom() - t.num();
-        return vec3Q(
-            rational_nt(t.num()*p2.x+d*p1.x,t.denom()),
-            rational_nt(t.num()*p2.y+d*p1.y,t.denom()),
-            rational_nt(t.num()*p2.z+d*p1.z,t.denom())            
-        );
-    }
+    vec2Q Experiment_API mix(
+        const rational_nt& t, const vec2& p1, const vec2& p2
+    );
 
-    inline vec2Q mix(rational_nt t, const vec2& p1, const vec2& p2) {
-        expansion_nt d = t.denom() - t.num();
-        return vec2Q(
-            rational_nt(t.num()*p2.x+d*p1.x,t.denom()),
-            rational_nt(t.num()*p2.y+d*p1.y,t.denom())
-        );
-    }
-    */
+    vec2Q Experiment_API mix(
+        const rational_nt& t, const vec2Q& p1, const vec2Q& p2
+    );
 
+    vec3Q Experiment_API mix(
+        const rational_nt& t, const vec3Q& p1, const vec3Q& p2
+    );
 
-    inline vec3Q mix(rational_nt t, const vec3& p1, const vec3& p2) {
-        rational_nt tt = rational_nt(1.0)-t;
-        //rational_nt tt(t.denom()-t.num(),t.denom());
-        return vec3Q(
-            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
-            tt*rational_nt(p1.y)+t*rational_nt(p2.y),
-            tt*rational_nt(p1.z)+t*rational_nt(p2.z)
-        );
-    }
+    /**
+     * \brief Specialization optimized using low-level API
+     */
+    template<> expansion_nt Experiment_API det(const vec2E& v1, const vec2E& v2);
 
-    inline vec2Q mix(rational_nt t, const vec2& p1, const vec2& p2) {
-        rational_nt tt = rational_nt(1.0)-t;
-        // rational_nt tt(t.denom()-t.num(),t.denom());        
-        return vec2Q(
-            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
-            tt*rational_nt(p1.y)+t*rational_nt(p2.y)
-        );
-    }
+    /**
+     * \brief Specialization optimized using low-level API
+     */
+    template<> expansion_nt Experiment_API dot(const vec2E& v1, const vec2E& v2);
 
+    /**
+     * \brief Specialization optimized using low-level API
+     */
+    template<> expansion_nt Experiment_API dot(const vec3E& v1, const vec3E& v2);
     
-    inline vec2Q mix(rational_nt t, const vec2Q& p1, const vec2Q& p2) {
-        rational_nt tt = rational_nt(1.0)-t;
-        return vec2Q(
-            tt*p1.x+t*p2.x,
-            tt*p1.y+t*p2.y
-        );
-    }
-
-    inline vec3Q mix(rational_nt t, const vec3Q& p1, const vec3Q& p2) {
-        rational_nt tt = rational_nt(1.0)-t;
-        return vec3Q(
-            tt*p1.x+t*p2.x,
-            tt*p1.y+t*p2.y,
-            tt*p1.z+t*p2.z
-        );
-    }
-
     class vec3QLexicoCompare {
     public:
         bool operator()(const vec3Q& v1, const vec3Q& v2) const {
@@ -98,12 +71,14 @@ namespace GEO {
         template <class T> inline bool same_point(
             const vecng<3,T>& v1, const vecng<3,T>& v2
         ) {
+            // operator== is well optimized for expansion_nt and rational_nt
             return (v1.x == v2.x) && (v1.y == v2.y) && (v2.z == v1.z);
         }
 
         template <class T> inline bool same_point(
             const vecng<2,T>& v1, const vecng<2,T>& v2
         ) {
+            // operator== is well optimized for expansion_nt and rational_nt
             return (v1.x == v2.x) && (v1.y == v2.y);
         }
 
@@ -111,8 +86,9 @@ namespace GEO {
             const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
         );
         
-        Sign Experiment_API dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2);
-        
+        Sign Experiment_API dot_2d(
+            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
+        );
     }
 
     /**
@@ -144,6 +120,18 @@ namespace GEO {
             value_type(p2.z) - value_type(p1.z)
         );
     }
+
+    /**
+     * \brief Specialization for vec3E
+     */
+    template <>
+    inline vec3E make_vec3<vec3E>(const vec3& p1, const vec3& p2) {
+        return vec3E(
+            expansion_nt(expansion_nt::DIFF, p2.x, p1.x),
+            expansion_nt(expansion_nt::DIFF, p2.y, p1.y),
+            expansion_nt(expansion_nt::DIFF, p2.z, p1.z)            
+        );
+    }
     
     /**
      * \brief Creates a vector with coordinates of arbitrary type
@@ -164,6 +152,17 @@ namespace GEO {
     }
 
     /**
+     * \brief Specialization for vec2E
+     */
+    template <>
+    inline vec2E make_vec2<vec2E>(const vec2& p1, const vec2& p2) {
+        return vec2E(
+            expansion_nt(expansion_nt::DIFF, p2.x, p1.x),
+            expansion_nt(expansion_nt::DIFF, p2.y, p1.y)
+        );
+    }
+    
+    /**
      * \brief Computes the normal to a triangle from its three
      *  vertices 
      * \param[in] p1 , p2 , p3 the three vertices of the triangle
@@ -181,8 +180,18 @@ namespace GEO {
         );
     }
 
+    template <>
+    Experiment_API vec3E triangle_normal<vec3E>(
+        const vec3& p1, const vec3& p2, const vec3& p3
+    );
+
+    /**
+     * \brief Interpolates a point linearly in a triangle
+     * \return \p p1 + \p u * (\p p2 - \p p1) + \p v * (\p p3 - \p p1) 
+     */
     inline vec2Q u_P1P2_plus_v_P1P3(
-        rational_nt u, rational_nt v, const vec2& p1, const vec2& p2, const vec2& p3
+        rational_nt u, rational_nt v,
+        const vec2& p1, const vec2& p2, const vec2& p3
     ) {
         vec2E E1 = make_vec2<vec2E>(p1,p2);
         vec2E E2 = make_vec2<vec2E>(p1,p3);		      
@@ -201,7 +210,7 @@ namespace GEO {
         const vec3& r1, const vec3& r2, const vec3& r3
     );
 
-    /*********************************************************************************/
+    /************************************************************************/
 
     /**
      * \brief 2D vector in homogeneous coordinates
