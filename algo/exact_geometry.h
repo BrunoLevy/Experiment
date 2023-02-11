@@ -7,26 +7,214 @@
 
 namespace GEO {
 
-    typedef vecng<2,expansion_nt> vec2E;    
-    typedef vecng<2,rational_nt>  vec2Q;
-    
-    typedef vecng<3,expansion_nt> vec3E;    
-    typedef vecng<3,rational_nt>  vec3Q;
 
-    vec3Q Experiment_API mix(
+    /**
+     * \brief vec2 with coordinates as expansions
+     * \details Coordinates support +,-,*
+     */
+    typedef vecng<2,expansion_nt> vec2E;
+
+    /**
+     * \brief vec3 with coordinates as expansions
+     * \details Coordinates support +,-,*
+     */
+    typedef vecng<3,expansion_nt> vec3E;    
+
+    /**
+     * \brief 2D vector in homogeneous coordinates
+     *  with coordinates as arithmetic expansions
+     * \details Coordinates support +,-,* and / by
+     *  multiplying w.
+     */
+    struct vec2HE {
+
+        vec2HE() :
+            x(expansion_nt::UNINITIALIZED),
+            y(expansion_nt::UNINITIALIZED),
+            w(expansion_nt::UNINITIALIZED)            
+        {
+        }
+
+        vec2HE(
+            const expansion_nt& x_in,
+            const expansion_nt& y_in,
+            const expansion_nt& w_in
+        ) : x(x_in), y(y_in), w(w_in) {
+        }
+
+        vec2HE(
+            expansion_nt&& x_in,
+            expansion_nt&& y_in,
+            expansion_nt&& w_in
+        ) : x(x_in), y(y_in), w(w_in) {
+        }
+        
+        vec2HE(const vec2HE& rhs) :
+            x(rhs.x), y(rhs.y), w(rhs.w) {
+        }
+
+        vec2HE(vec2HE&& rhs) :
+            x(rhs.x), y(rhs.y), w(rhs.w) {
+        }
+
+        vec2HE& operator=(const vec2HE& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                w=rhs.w;
+            }
+            return *this;
+        }
+
+        vec2HE& operator=(vec2HE&& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                w=rhs.w;
+            }
+            return *this;
+        }
+
+        expansion_nt* data() {
+            return &x;
+        }
+
+        const expansion_nt* data() const {
+            return &x;
+        }
+        
+        expansion_nt& operator[](coord_index_t i) {
+            geo_debug_assert(i < 2);
+            return data()[i];
+        }
+
+        const expansion_nt& operator[](coord_index_t i) const {
+            geo_debug_assert(i < 2);
+            return data()[i];
+        }
+        
+        expansion_nt x;
+        expansion_nt y;
+        expansion_nt w;
+    };
+
+    /**
+     * \brief 3D vector in homogeneous coordinates
+     *  with coordinates as arithmetic expansions.
+     * \details Coordinates support +,-,* and / by
+     *  multiplying w.
+     */
+    struct vec3HE {
+        vec3HE() :
+            x(expansion_nt::UNINITIALIZED),
+            y(expansion_nt::UNINITIALIZED),
+            z(expansion_nt::UNINITIALIZED),
+            w(expansion_nt::UNINITIALIZED)            
+        {
+        }
+
+        vec3HE(
+            const expansion_nt& x_in,
+            const expansion_nt& y_in,
+            const expansion_nt& z_in,
+            const expansion_nt& w_in            
+        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
+        }
+
+        vec3HE(
+            expansion_nt&& x_in,
+            expansion_nt&& y_in,
+            expansion_nt&& z_in,
+            expansion_nt&& w_in
+        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
+        }
+        
+        vec3HE(const vec3HE& rhs) :
+            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
+        }
+
+        vec3HE(vec3HE&& rhs) :
+            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
+        }
+
+        vec3HE& operator=(const vec3HE& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                z=rhs.z;                
+                w=rhs.w;
+            }
+            return *this;
+        }
+
+        vec3HE& operator=(vec3HE&& rhs) {
+            if(&rhs != this) {
+                x=rhs.x;
+                y=rhs.y;
+                z=rhs.z;                
+                w=rhs.w;
+            }
+            return *this;
+        }
+
+        expansion_nt* data() {
+            return &x;
+        }
+
+        const expansion_nt* data() const {
+            return &x;
+        }
+        
+        expansion_nt& operator[](coord_index_t i) {
+            geo_debug_assert(i < 3);
+            return data()[i];
+        }
+
+        const expansion_nt& operator[](coord_index_t i) const {
+            geo_debug_assert(i < 3);
+            return data()[i];
+        }
+        
+        expansion_nt x;
+        expansion_nt y;
+        expansion_nt z;        
+        expansion_nt w;
+    };
+
+    vec2HE Experiment_API operator-(const vec2HE& p1, const vec2HE& p2);
+    
+    vec3HE Experiment_API operator-(const vec3HE& p1, const vec3HE& p2);
+
+    
+    /**
+     * \brief Comparator class for vec3HE
+     * \detail Used to create maps indexed by vec3HE
+     */
+    class Experiment_API vec3HELexicoCompare {
+    public:
+       /**
+        * \brief Compares two vec3HE
+        * \retval true if \p v1 is before \p v2 in the lexicographic
+        *  order
+        * \retval false otherwise
+        */
+       bool operator()(const vec3HE& v1, const vec3HE& v2) const; 
+    };
+
+    vec3HE Experiment_API mix(
         const rational_nt& t, const vec3& p1, const vec3& p2
     );
 
-    vec2Q Experiment_API mix(
+    vec2HE Experiment_API mix(
         const rational_nt& t, const vec2& p1, const vec2& p2
     );
 
-    vec2Q Experiment_API mix(
-        const rational_nt& t, const vec2Q& p1, const vec2Q& p2
+    vec2HE Experiment_API mix(
+        const rational_nt& t, const vec2HE& p1, const vec2HE& p2
     );
 
-    vec3Q Experiment_API mix(
-        const rational_nt& t, const vec3Q& p1, const vec3Q& p2
+    vec3HE Experiment_API mix(
+        const rational_nt& t, const vec3HE& p1, const vec3HE& p2
     );
 
     /**
@@ -44,28 +232,6 @@ namespace GEO {
      */
     template<> expansion_nt Experiment_API dot(const vec3E& v1, const vec3E& v2);
     
-    class vec3QLexicoCompare {
-    public:
-        bool operator()(const vec3Q& v1, const vec3Q& v2) const {
-            Sign s = v2.x.compare(v1.x);
-            if(s == POSITIVE) {
-                return true;
-            }
-            if(s == NEGATIVE) {
-                return false;
-            }
-            s = v2.y.compare(v1.y);
-            if(s == POSITIVE) {
-                return true;
-            }
-            if(s == NEGATIVE) {
-                return false;
-            }
-            s = v2.z.compare(v1.z);
-            return (s == POSITIVE);
-        }
-    };
-
     namespace PCK {
 
         template <class T> inline bool same_point(
@@ -82,12 +248,16 @@ namespace GEO {
             return (v1.x == v2.x) && (v1.y == v2.y);
         }
 
+        bool Experiment_API same_point(const vec2HE& v1, const vec2HE& v2);
+        
+        bool Experiment_API same_point(const vec3HE& v1, const vec3HE& v2);        
+        
         Sign Experiment_API orient_2d(
-            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
+            const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
         );
         
         Sign Experiment_API dot_2d(
-            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
+            const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
         );
     }
 
@@ -180,8 +350,10 @@ namespace GEO {
         );
     }
 
-    template <>
-    Experiment_API vec3E triangle_normal<vec3E>(
+    /**
+     * \brief Specialization for vec3E
+     */
+    template <> Experiment_API vec3E triangle_normal<vec3E>(
         const vec3& p1, const vec3& p2, const vec3& p3
     );
 
@@ -189,7 +361,7 @@ namespace GEO {
      * \brief Interpolates a point linearly in a triangle
      * \return \p p1 + \p u * (\p p2 - \p p1) + \p v * (\p p3 - \p p1) 
      */
-    inline vec2Q u_P1P2_plus_v_P1P3(
+    inline vec2HE u_P1P2_plus_v_P1P3(
         rational_nt u, rational_nt v,
         const vec2& p1, const vec2& p2, const vec2& p3
     ) {
@@ -197,14 +369,15 @@ namespace GEO {
         vec2E E2 = make_vec2<vec2E>(p1,p3);		      
         vec2E Pnum = (u.num()*v.denom())*E1 + (v.num()*u.denom())*E2;
         expansion_nt Pden = u.denom()*v.denom();
-        return vec2Q(
-            rational_nt(Pnum.x, Pden),
-            rational_nt(Pnum.y, Pden)
+        return vec2HE(
+            Pnum.x,
+            Pnum.y,
+            Pden
         );
     }
     
     bool Experiment_API get_three_planes_intersection(
-        vec3Q& result,
+        vec3HE& result,
         const vec3& p1, const vec3& p2, const vec3& p3,
         const vec3& q1, const vec3& q2, const vec3& q3,
         const vec3& r1, const vec3& r2, const vec3& r3
@@ -212,131 +385,6 @@ namespace GEO {
 
     /************************************************************************/
 
-    /**
-     * \brief 2D vector in homogeneous coordinates
-     *  with coordinates as arithmetic expansions.
-     */
-    struct vec2HE {
-
-        vec2HE() :
-            x(expansion_nt::UNINITIALIZED),
-            y(expansion_nt::UNINITIALIZED),
-            w(expansion_nt::UNINITIALIZED)            
-        {
-        }
-
-        vec2HE(
-            const expansion_nt& x_in,
-            const expansion_nt& y_in,
-            const expansion_nt& w_in
-        ) : x(x_in), y(y_in), w(w_in) {
-        }
-
-        vec2HE(
-            expansion_nt&& x_in,
-            expansion_nt&& y_in,
-            expansion_nt&& w_in
-        ) : x(x_in), y(y_in), w(w_in) {
-        }
-        
-        vec2HE(const vec2HE& rhs) :
-            x(rhs.x), y(rhs.y), w(rhs.w) {
-        }
-
-        vec2HE(vec2HE&& rhs) :
-            x(rhs.x), y(rhs.y), w(rhs.w) {
-        }
-
-        vec2HE& operator=(const vec2HE& rhs) {
-            if(&rhs != this) {
-                x=rhs.x;
-                y=rhs.y;
-                w=rhs.w;
-            }
-            return *this;
-        }
-
-        vec2HE& operator=(vec2HE&& rhs) {
-            if(&rhs != this) {
-                x=rhs.x;
-                y=rhs.y;
-                w=rhs.w;
-            }
-            return *this;
-        }
-        
-        expansion_nt x;
-        expansion_nt y;
-        expansion_nt w;
-    };
-
-    /**
-     * \brief 3D vector in homogeneous coordinates
-     *  with coordinates as arithmetic expansions.
-     */
-    struct vec3HE {
-        vec3HE() :
-            x(expansion_nt::UNINITIALIZED),
-            y(expansion_nt::UNINITIALIZED),
-            z(expansion_nt::UNINITIALIZED),
-            w(expansion_nt::UNINITIALIZED)            
-        {
-        }
-
-        vec3HE(
-            const expansion_nt& x_in,
-            const expansion_nt& y_in,
-            const expansion_nt& z_in,
-            const expansion_nt& w_in            
-        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
-        }
-
-        vec3HE(
-            expansion_nt&& x_in,
-            expansion_nt&& y_in,
-            expansion_nt&& z_in,
-            expansion_nt&& w_in
-        ) : x(x_in), y(y_in), z(z_in), w(w_in) {
-        }
-        
-        vec3HE(const vec3HE& rhs) :
-            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
-        }
-
-        vec3HE(vec3HE&& rhs) :
-            x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
-        }
-
-        vec3HE& operator=(const vec3HE& rhs) {
-            if(&rhs != this) {
-                x=rhs.x;
-                y=rhs.y;
-                z=rhs.z;                
-                w=rhs.w;
-            }
-            return *this;
-        }
-
-        vec3HE& operator=(vec3HE&& rhs) {
-            if(&rhs != this) {
-                x=rhs.x;
-                y=rhs.y;
-                z=rhs.z;                
-                w=rhs.w;
-            }
-            return *this;
-        }
-        
-        expansion_nt x;
-        expansion_nt y;
-        expansion_nt z;        
-        expansion_nt w;
-    };
-    
-    class Experiment_API vec3HELexicoCompare {
-    public:
-       bool operator()(const vec3HE& v1, const vec3HE& v2) const; 
-    };
     
 }
 

@@ -36,53 +36,181 @@ namespace {
 	    diff_num.sign() * a_denom.sign() * b_denom.sign()
 	);
     }
-
-    inline rational_nt one_minus_t(const rational_nt& t) {
-        // Next line equivalent to: return rational_nt(1.0)-t;
-        return rational_nt(
-            t.denom()-t.num(),
-            t.denom() 
-        );
-    }
 }
 
 namespace GEO {
-
-    vec3Q mix(const rational_nt& t, const vec3& p1, const vec3& p2) {
-        rational_nt tt = one_minus_t(t);
-        return vec3Q(
-            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
-            tt*rational_nt(p1.y)+t*rational_nt(p2.y),
-            tt*rational_nt(p1.z)+t*rational_nt(p2.z)
+    
+    vec2HE operator-(const vec2HE& p1, const vec2HE& p2) {
+        if(p1.w == p2.w) {
+            return vec2HE(
+                expansion_nt(expansion_nt::DIFF, p2.x.rep(), p1.x.rep()),
+                expansion_nt(expansion_nt::DIFF, p2.y.rep(), p1.y.rep()),
+                p1.w
+            );
+        }
+        expansion& x1 = expansion_product(p1.x.rep(), p2.w.rep());
+        expansion& y1 = expansion_product(p1.y.rep(), p2.w.rep());        
+        expansion& x2 = expansion_product(p2.x.rep(), p1.w.rep());
+        expansion& y2 = expansion_product(p2.y.rep(), p1.w.rep());
+        return vec2HE(
+            expansion_nt(expansion_nt::DIFF, x2, x1),
+            expansion_nt(expansion_nt::DIFF, y2, y1),
+            expansion_nt(expansion_nt::PRODUCT, p1.w.rep(), p2.w.rep())
         );
     }
-
-    vec2Q mix(const rational_nt& t, const vec2& p1, const vec2& p2) {
-        rational_nt tt = one_minus_t(t);
-        return vec2Q(
-            tt*rational_nt(p1.x)+t*rational_nt(p2.x),
-            tt*rational_nt(p1.y)+t*rational_nt(p2.y)
+    
+    vec3HE operator-(const vec3HE& p1, const vec3HE& p2) {
+        if(p1.w == p2.w) {
+            return vec3HE(
+                expansion_nt(expansion_nt::DIFF, p2.x.rep(), p1.x.rep()),
+                expansion_nt(expansion_nt::DIFF, p2.y.rep(), p1.y.rep()),
+                expansion_nt(expansion_nt::DIFF, p2.z.rep(), p1.z.rep()),
+                p1.w
+            );
+        }
+        expansion& x1 = expansion_product(p1.x.rep(), p2.w.rep());
+        expansion& y1 = expansion_product(p1.y.rep(), p2.w.rep());
+        expansion& z1 = expansion_product(p1.z.rep(), p2.w.rep());                
+        expansion& x2 = expansion_product(p2.x.rep(), p1.w.rep());
+        expansion& y2 = expansion_product(p2.y.rep(), p1.w.rep());
+        expansion& z2 = expansion_product(p2.z.rep(), p1.w.rep());
+        return vec3HE(
+            expansion_nt(expansion_nt::DIFF, x2, x1),
+            expansion_nt(expansion_nt::DIFF, y2, y1),
+            expansion_nt(expansion_nt::DIFF, z2, z1),            
+            expansion_nt(expansion_nt::PRODUCT, p1.w.rep(), p2.w.rep())
         );
     }
 
     
-    vec2Q mix(const rational_nt& t, const vec2Q& p1, const vec2Q& p2) {
-        rational_nt tt = one_minus_t(t);
-        return vec2Q(
-            tt*p1.x+t*p2.x,
-            tt*p1.y+t*p2.y
+    bool vec3HELexicoCompare::operator()(const vec3HE& v1, const vec3HE& v2) const {
+        Sign s = ratio_compare(v2.x, v2.w, v1.x, v1.w);
+        if(s == POSITIVE) {
+            return true;
+        }
+        if(s == NEGATIVE) {
+            return false;
+        }
+
+        s = ratio_compare(v2.y, v2.w, v1.y, v1.w);
+        if(s == POSITIVE) {
+            return true;
+        }
+        if(s == NEGATIVE) {
+            return false;
+        }
+        
+        s = ratio_compare(v2.z, v2.w, v1.z, v1.w);
+        return (s == POSITIVE);
+    }
+            
+
+    vec3HE mix(const rational_nt& t, const vec3& p1, const vec3& p2) {
+        expansion& st_d = const_cast<expansion&>(t.denom().rep());
+        st_d.optimize();
+        expansion& t_n  = const_cast<expansion&>(t.num().rep());
+        t_n.optimize();
+        const expansion& s_n  = expansion_diff(st_d, t_n);
+        const expansion& sx   = expansion_product(s_n, p1.x);
+        const expansion& tx   = expansion_product(t_n, p2.x);
+        const expansion& sy   = expansion_product(s_n, p1.y);
+        const expansion& ty   = expansion_product(t_n, p2.y);
+        const expansion& sz   = expansion_product(s_n, p1.z);
+        const expansion& tz   = expansion_product(t_n, p2.z);
+        return vec3HE(
+            expansion_nt(expansion_nt::SUM, sx,tx),
+            expansion_nt(expansion_nt::SUM, sy,ty),
+            expansion_nt(expansion_nt::SUM, sz,tz),
+            expansion_nt(st_d)
         );
     }
 
-    vec3Q mix(const rational_nt& t, const vec3Q& p1, const vec3Q& p2) {
-        rational_nt tt = one_minus_t(t);
-        return vec3Q(
-            tt*p1.x+t*p2.x,
-            tt*p1.y+t*p2.y,
-            tt*p1.z+t*p2.z
+    vec2HE mix(const rational_nt& t, const vec2& p1, const vec2& p2) {
+        expansion& st_d = const_cast<expansion&>(t.denom().rep());
+        st_d.optimize();
+        expansion& t_n  = const_cast<expansion&>(t.num().rep());
+        t_n.optimize();
+        const expansion& s_n  = expansion_diff(st_d, t_n);
+        const expansion& sx   = expansion_product(s_n, p1.x);
+        const expansion& tx   = expansion_product(t_n, p2.x);
+        const expansion& sy   = expansion_product(s_n, p1.y);
+        const expansion& ty   = expansion_product(t_n, p2.y);
+        return vec2HE(
+            expansion_nt(expansion_nt::SUM, sx,tx),
+            expansion_nt(expansion_nt::SUM, sy,ty),
+            expansion_nt(st_d)
+        );
+    }
+    
+    vec2HE mix(const rational_nt& t, const vec2HE& p1, const vec2HE& p2) {
+        expansion& st_d = expansion_product(t.denom().rep(),p1.w.rep());
+        st_d.optimize();
+        expansion& t_n  = const_cast<expansion&>(t.num().rep());
+        t_n.optimize();
+        const expansion& s_n  = expansion_diff(st_d, t_n);
+        if(p1.w == p2.w) {
+            const expansion& sx   = expansion_product(s_n, p1.x.rep());
+            const expansion& tx   = expansion_product(t_n, p2.x.rep());
+            const expansion& sy   = expansion_product(s_n, p1.y.rep());
+            const expansion& ty   = expansion_product(t_n, p2.y.rep());
+            return vec2HE(
+                expansion_nt(expansion_nt::SUM, sx,tx),
+                expansion_nt(expansion_nt::SUM, sy,ty),
+                expansion_nt(st_d)
+            );
+        }
+        expansion& st_d_2 = expansion_product(st_d, p2.w.rep());
+        st_d_2.optimize();
+        const expansion& t_n_2  = expansion_product(t_n, p1.w.rep());
+        const expansion& s_n_2  = expansion_product(s_n, p2.w.rep());
+        const expansion& sx   = expansion_product(s_n_2, p1.x.rep());
+        const expansion& tx   = expansion_product(t_n_2, p2.x.rep());
+        const expansion& sy   = expansion_product(s_n_2, p1.y.rep());
+        const expansion& ty   = expansion_product(t_n_2, p2.y.rep());
+        return vec2HE(
+            expansion_nt(expansion_nt::SUM, sx,tx),
+            expansion_nt(expansion_nt::SUM, sy,ty),
+            expansion_nt(st_d_2)
         );
     }
 
+    vec3HE mix(const rational_nt& t, const vec3HE& p1, const vec3HE& p2) {
+        expansion& st_d = expansion_product(t.denom().rep(),p1.w.rep());
+        st_d.optimize();
+        expansion& t_n  = const_cast<expansion&>(t.num().rep());
+        t_n.optimize();
+        const expansion& s_n  = expansion_diff(st_d, t_n);
+        if(p1.w == p2.w) {
+            const expansion& sx   = expansion_product(s_n, p1.x.rep());
+            const expansion& tx   = expansion_product(t_n, p2.x.rep());
+            const expansion& sy   = expansion_product(s_n, p1.y.rep());
+            const expansion& ty   = expansion_product(t_n, p2.y.rep());
+            const expansion& sz   = expansion_product(s_n, p1.z.rep());
+            const expansion& tz   = expansion_product(t_n, p2.z.rep());
+            return vec3HE(
+                expansion_nt(expansion_nt::SUM, sx,tx),
+                expansion_nt(expansion_nt::SUM, sy,ty),
+                expansion_nt(expansion_nt::SUM, sz,tz),
+                expansion_nt(st_d)
+            );
+        }
+        expansion& st_d_2 = expansion_product(st_d, p2.w.rep());
+        st_d_2.optimize();
+        const expansion& t_n_2  = expansion_product(t_n, p1.w.rep());
+        const expansion& s_n_2  = expansion_product(s_n, p2.w.rep());
+        const expansion& sx   = expansion_product(s_n_2, p1.x.rep());
+        const expansion& tx   = expansion_product(t_n_2, p2.x.rep());
+        const expansion& sy   = expansion_product(s_n_2, p1.y.rep());
+        const expansion& ty   = expansion_product(t_n_2, p2.y.rep());
+        const expansion& sz   = expansion_product(s_n_2, p1.z.rep());
+        const expansion& tz   = expansion_product(t_n_2, p2.z.rep());
+        return vec3HE(
+            expansion_nt(expansion_nt::SUM, sx,tx),
+            expansion_nt(expansion_nt::SUM, sy,ty),
+            expansion_nt(expansion_nt::SUM, sz,tz),
+            expansion_nt(st_d_2)
+        );
+    }
 
     template<> expansion_nt det(const vec2E& v1, const vec2E& v2) {
         expansion* result = expansion::new_expansion_on_heap(
@@ -136,49 +264,50 @@ namespace GEO {
     }
     
     namespace PCK {
-        Sign orient_2d(
-            const vec2Q& p0, const vec2Q& p1, const vec2Q& p2
-        ) {
 
-            // Special case: per-point denominators are the same
-            // (homogeneous coordinates encoded in rational_nt)
-            if(
-                p0.x.denom() == p0.y.denom() &&
-                p1.x.denom() == p1.y.denom()
-            ) {
-                expansion& Delta = expansion_det3x3(
-                    p0.x.num().rep(), p0.y.num().rep(), p0.x.denom().rep(),
-                    p1.x.num().rep(), p1.y.num().rep(), p1.x.denom().rep(),
-                    p2.x.num().rep(), p2.y.num().rep(), p2.x.denom().rep()
-                );
-                return Sign(
-                    Delta.sign()*
-                    p0.x.denom().rep().sign()*
-                    p1.x.denom().rep().sign()*
-                    p2.x.denom().rep().sign()
-                );
-            }
-
-            // General case, using (slower) rational_nt type.
-            rational_nt a11 = p1.x - p0.x;
-            rational_nt a12 = p1.y - p0.y;
-            rational_nt a21 = p2.x - p0.x;
-            rational_nt a22 = p2.y - p0.y;
-            rational_nt Delta = det2x2(
-                a11,a12,
-                a21,a22
+        bool same_point(const vec2HE& v1, const vec2HE& v2) {
+            return (
+                ratio_compare(v1.x, v1.w, v2.x, v2.w) == ZERO &&
+                ratio_compare(v1.y, v1.w, v2.y, v2.w) == ZERO
             );
-            return Delta.sign();
+        }
+
+        bool same_point(const vec3HE& v1, const vec3HE& v2) {
+            return (
+                ratio_compare(v1.x, v1.w, v2.x, v2.w) == ZERO &&
+                ratio_compare(v1.y, v1.w, v2.y, v2.w) == ZERO &&
+                ratio_compare(v1.z, v1.w, v2.z, v2.w) == ZERO 
+            );
         }
         
-        Sign dot_2d(const vec2Q& p0, const vec2Q& p1, const vec2Q& p2) {
-            return dot(p1-p0,p2-p0).sign();
+        Sign orient_2d(
+            const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
+        ) {
+            expansion& Delta = expansion_det3x3(
+                p0.x.rep(), p0.y.rep(), p0.w.rep(),
+                p1.x.rep(), p1.y.rep(), p1.w.rep(),
+                p2.x.rep(), p2.y.rep(), p2.w.rep()
+            );
+            return Sign(
+                Delta.sign()*
+                p0.w.rep().sign()*
+                p1.w.rep().sign()*
+                p2.w.rep().sign()
+            );
         }
         
+        Sign dot_2d(const vec2HE& p0, const vec2HE& p1, const vec2HE& p2) {
+            vec2HE U = p1 - p0;
+            vec2HE V = p2 - p0;
+            const expansion& x1x2 = expansion_product(U.x.rep(), V.x.rep());
+            const expansion& y1y2 = expansion_product(U.y.rep(), V.y.rep());
+            const expansion& S = expansion_sum(x1x2, y1y2);
+            return Sign(S.sign()*U.w.sign()*V.w.sign());
+        }
     }
 
     bool get_three_planes_intersection(
-        vec3Q& result,
+        vec3HE& result,
         const vec3& p1, const vec3& p2, const vec3& p3,
         const vec3& q1, const vec3& q2, const vec3& q3,
         const vec3& r1, const vec3& r2, const vec3& r3
@@ -194,61 +323,36 @@ namespace GEO {
             dot(N3,make_vec3<vec3E>(r1))
         );
         
-        expansion_nt Delta = det3x3(
+        result.w = det3x3(
             N1.x, N1.y, N1.z,
             N2.x, N2.y, N2.z,
             N3.x, N3.y, N3.z
         );
 
-        if(Delta.sign() == ZERO) {
+        if(result.w.sign() == ZERO) {
             return false;
         }
         
-        expansion_nt X = det3x3(
+        result.x = det3x3(
             B.x, N1.y, N1.z,
             B.y, N2.y, N2.z,
             B.z, N3.y, N3.z
         );
 
-        expansion_nt Y = det3x3(
+        result.y = det3x3(
             N1.x, B.x, N1.z,
             N2.x, B.y, N2.z,
             N3.x, B.z, N3.z
         );
 
-        expansion_nt Z = det3x3(
+        result.z = det3x3(
             N1.x, N1.y, B.x,
             N2.x, N2.y, B.y,
             N3.x, N3.y, B.z
         );
 
-        result.x=rational_nt(X,Delta);
-        result.y=rational_nt(Y,Delta);
-        result.z=rational_nt(Z,Delta);
-
         return true;
     }
 
-    bool vec3HELexicoCompare::operator()(const vec3HE& v1, const vec3HE& v2) const {
-        Sign s = ratio_compare(v2.x, v2.w, v1.x, v1.w);
-        if(s == POSITIVE) {
-            return true;
-        }
-        if(s == NEGATIVE) {
-            return false;
-        }
-
-        s = ratio_compare(v2.y, v2.w, v1.y, v1.w);
-        if(s == POSITIVE) {
-            return true;
-        }
-        if(s == NEGATIVE) {
-            return false;
-        }
-        
-        s = ratio_compare(v2.z, v2.w, v1.z, v1.w);
-        return (s == POSITIVE);
-    }
-            
 }
 

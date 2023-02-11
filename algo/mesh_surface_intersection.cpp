@@ -50,18 +50,20 @@ namespace {
 
     /***********************************************************************/
 
-    inline vec3Q vec3Q_noinit() {
-        return vec3Q(
-            rational_nt(rational_nt::UNINITIALIZED),
-            rational_nt(rational_nt::UNINITIALIZED),
-            rational_nt(rational_nt::UNINITIALIZED)           
+    inline vec3HE vec3HE_noinit() {
+        return vec3HE(
+            expansion_nt(expansion_nt::UNINITIALIZED),
+            expansion_nt(expansion_nt::UNINITIALIZED),
+            expansion_nt(expansion_nt::UNINITIALIZED),
+            expansion_nt(expansion_nt::UNINITIALIZED)                       
         );
     }
 
-    inline vec2Q vec2Q_noinit() {
-        return vec2Q(
-            rational_nt(rational_nt::UNINITIALIZED),
-            rational_nt(rational_nt::UNINITIALIZED)            
+    inline vec2HE vec2HE_noinit() {
+        return vec2HE(
+            expansion_nt(expansion_nt::UNINITIALIZED),
+            expansion_nt(expansion_nt::UNINITIALIZED),
+            expansion_nt(expansion_nt::UNINITIALIZED)                        
         );
     }
     
@@ -167,8 +169,8 @@ namespace {
             Vertex(
                 MeshInTriangle* M, index_t f, index_t lv
             ) :
-                point_exact(vec3Q_noinit()),
-                UV_exact(vec2Q_noinit())
+                point_exact(vec3HE_noinit()),
+                UV_exact(vec2HE_noinit())
             {
                 geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
@@ -189,8 +191,8 @@ namespace {
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
             ) :
-                point_exact(vec3Q_noinit()),
-                UV_exact(vec2Q_noinit())
+                point_exact(vec3HE_noinit()),
+                UV_exact(vec2HE_noinit())
             {
                 geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
@@ -210,8 +212,8 @@ namespace {
              */
             Vertex(
                 MeshInTriangle* M,
-                const vec3Q& point_exact_in,
-                const vec2Q& UV_exact_in
+                const vec3HE& point_exact_in,
+                const vec2HE& UV_exact_in
             ) : point_exact(point_exact_in),
                 UV_exact(UV_exact_in)
             {
@@ -225,8 +227,8 @@ namespace {
              * \brief Default constructor
              */
             Vertex() :
-                point_exact(vec3Q_noinit()),
-                UV_exact(vec2Q_noinit())
+                point_exact(vec3HE_noinit()),
+                UV_exact(vec2HE_noinit())
             {
                 type = UNINITIALIZED;                
                 mesh_in_triangle = nullptr;
@@ -323,12 +325,13 @@ namespace {
                     index_t lv = index_t(sym.R1);
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f1,lv);
-                    point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
+                    point_exact = mesh_vertex_vec3HE(mesh_vertex_index);
                     if(barycentric()) {
-                        UV_exact.x = rational_nt(uv[lv].x);
-                        UV_exact.y = rational_nt(uv[lv].y);
+                        UV_exact.x = expansion_nt(uv[lv].x);
+                        UV_exact.y = expansion_nt(uv[lv].y);
+                        UV_exact.w = expansion_nt(1.0);
                     } else {
-                        UV_exact = mesh_vertex_project<vec2Q>(
+                        UV_exact = mesh_vertex_project_vec2HE(
                             mesh_vertex_index
                         );
                     }
@@ -342,7 +345,7 @@ namespace {
                     index_t lv = index_t(sym.R2)-3;
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f2, lv);
-                    point_exact = mesh_vertex<vec3Q>(mesh_vertex_index);
+                    point_exact = mesh_vertex_vec3HE(mesh_vertex_index);
                     if(barycentric()) {
                         vec2E q  = mesh_facet_vertex_project<vec2E>(
                             sym.f2, lv
@@ -358,12 +361,13 @@ namespace {
                         );
                         expansion_nt D = det(p2-p1,p3-p1);
                         geo_debug_assert(D.sign() != ZERO);
-                        UV_exact = vec2Q(
-                            rational_nt(det(q-p1,p3-p1),D),
-                            rational_nt(det(p2-p1,q-p1),D)
+                        UV_exact = vec2HE(
+                            det(q-p1,p3-p1),
+                            det(p2-p1,q-p1),
+                            D
                         );
                     } else {
-                        UV_exact = mesh_vertex_project<vec2Q>(
+                        UV_exact = mesh_vertex_project_vec2HE(
                             mesh_vertex_index
                         );
                     }
@@ -375,7 +379,6 @@ namespace {
                     (region_dim(sym.R1) == 2 || region_dim(sym.R1) == 1) &&
                      region_dim(sym.R2) == 1
                 ) {
-                    
                     // Compute u,v,t using Moller & Trumbore's algorithm
                     // see: https://stackoverflow.com/questions/42740765/
                     //  intersection-between-line-and-triangle-in-3d
@@ -408,11 +411,13 @@ namespace {
 
                         if(barycentric()) {
                             vec3E DAO = cross(AO,D);
-                            UV_exact.x = rational_nt( dot(E2,DAO),d);
-                            UV_exact.y = rational_nt(-dot(E1,DAO),d);
+                            UV_exact.x =  dot(E2,DAO);
+                            UV_exact.y = -dot(E1,DAO);
+                            UV_exact.w = d;
                         } else {
                             UV_exact.x = point_exact[u_coord()];
                             UV_exact.y = point_exact[v_coord()];
+                            UV_exact.w = point_exact.w;
                         }
                         return;
                     }
@@ -445,13 +450,13 @@ namespace {
                     } else {
                         UV_exact.x = point_exact[u_coord()];
                         UV_exact.y = point_exact[v_coord()];
+                        UV_exact.w = point_exact.w;
                     }
                     return;
                 }
 
                 // case 5: f1 edge /\ f2 edge in 2D
                 if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 1) {
-
                     index_t e1 = index_t(sym.R1) - index_t(T1_RGN_E0);
                     geo_debug_assert(e1 < 3);
                     index_t e2 = index_t(sym.R2) - index_t(T2_RGN_E0);
@@ -487,6 +492,7 @@ namespace {
                     } else {
                         UV_exact.x = point_exact[u_coord()];
                         UV_exact.y = point_exact[v_coord()];
+                        UV_exact.w = point_exact.w;
                     }
                     return;
                 }
@@ -498,9 +504,11 @@ namespace {
             void optimize() {
                 point_exact.x.optimize();
                 point_exact.y.optimize();
-                point_exact.z.optimize();                
+                point_exact.z.optimize();
+                point_exact.w.optimize();
                 UV_exact.x.optimize();
                 UV_exact.y.optimize();
+                UV_exact.w.optimize();
             }
             
             /**
@@ -539,6 +547,16 @@ namespace {
                     value_type(p[2])                    
                 );
             }
+
+            vec3HE mesh_vertex_vec3HE(index_t v) const {
+                const double* p = mesh().vertices.point_ptr(v);
+                return vec3HE(
+                    expansion_nt(p[0]),
+                    expansion_nt(p[1]),
+                    expansion_nt(p[2]),
+                    expansion_nt(1.0)
+                );
+            }
             
             template <class VEC = vec3> VEC
             mesh_facet_vertex(index_t f, index_t lv) const {
@@ -555,6 +573,15 @@ namespace {
                     value_type(p[v_coord()])
                 );
             }
+
+            vec2HE mesh_vertex_project_vec2HE(index_t v) const {
+                const double* p = mesh().vertices.point_ptr(v);
+                return vec2HE(
+                    expansion_nt(p[u_coord()]),
+                    expansion_nt(p[v_coord()]),
+                    expansion_nt(1.0)
+                );
+            }
             
             template <class VEC = vec2> VEC
             mesh_facet_vertex_project(index_t f, index_t lv) const {
@@ -565,8 +592,8 @@ namespace {
         public:
             MeshInTriangle* mesh_in_triangle;
 
-            vec3Q point_exact;
-            vec2Q UV_exact;
+            vec3HE point_exact;
+            vec2HE UV_exact;
 
             Type type;
             
@@ -733,8 +760,8 @@ namespace {
                             edges_[e1].add_vertex_in_edge(w2);
                         }
                     } else {
-                        vec3Q I = vec3Q_noinit();
-                        vec2Q UV = vec2Q_noinit();
+                        vec3HE I = vec3HE_noinit();
+                        vec2HE UV = vec2HE_noinit();
                         get_edge_edge_intersection(e1,e2,I,UV);
                         index_t x = add_vertex(Vertex(this,I,UV));
                         edges_[e1].add_vertex_in_edge(x);
@@ -785,7 +812,7 @@ namespace {
                 }
 
                 // Use exact geometry as key
-                const vec3Q& K = vertex_[i].point_exact;
+                const vec3HE& K = vertex_[i].point_exact;
                 auto it = g_v_table_.find(K);
                 if(it != g_v_table_.end()) {
                     // Vertex alreay exists in target mesh
@@ -793,10 +820,11 @@ namespace {
                 } else {
                     // Vertex does not exist in target mesh,
                     // create it and update table
+                    double w = vertex_[i].point_exact.w.estimate();
                     vec3 p(
-                        vertex_[i].point_exact.x.estimate(),
-                        vertex_[i].point_exact.y.estimate(),
-                        vertex_[i].point_exact.z.estimate()
+                        vertex_[i].point_exact.x.estimate() / w,
+                        vertex_[i].point_exact.y.estimate() / w,
+                        vertex_[i].point_exact.z.estimate() / w
                     );
                     index_t v = mesh_.vertices.create_vertex(p.data());
                     vertex_[i].mesh_vertex_index = v;
@@ -888,17 +916,23 @@ namespace {
                    // a planar intersection), thus we compute the (projected)
                    // coordinates in the triangle (and pass them to Triangle).
 		   if(barycentric_ && has_planar_isect_) {
-                       const vec2Q& uv = vertex_[v].UV_exact;
+                       const vec2HE& uv = vertex_[v].UV_exact;
                        vec2 p1 = mesh_facet_vertex_project(f1_,0);
                        vec2 p2 = mesh_facet_vertex_project(f1_,1);
                        vec2 p3 = mesh_facet_vertex_project(f1_,2);
-                       vec2Q p_exact = u_P1P2_plus_v_P1P3(uv.x,uv.y,p1,p2,p3);
-                       p.x = p_exact.x.estimate();
-                       p.y = p_exact.y.estimate();
+                       vec2HE p_exact = u_P1P2_plus_v_P1P3(
+                           rational_nt(uv.x,uv.w),
+                           rational_nt(uv.y,uv.w),
+                           p1,p2,p3
+                       );
+                       double w = p_exact.w.estimate();
+                       p.x = p_exact.x.estimate() / w;
+                       p.y = p_exact.y.estimate() / w;
                    } else {
+                       double w = vertex_[v].UV_exact.w.estimate();
 		       p = vec2(
-                           vertex_[v].UV_exact.x.estimate(),
-                           vertex_[v].UV_exact.y.estimate()
+                           vertex_[v].UV_exact.x.estimate() / w,
+                           vertex_[v].UV_exact.y.estimate() / w
                        );
 		    }
                     M.vertices.create_vertex(p.data());
@@ -981,7 +1015,7 @@ namespace {
         }
 
         void get_edge_edge_intersection(
-            index_t e1, index_t e2, vec3Q& I, vec2Q& UV
+            index_t e1, index_t e2, vec3HE& I, vec2HE& UV
         ) const {
             index_t f1 = f1_;
             index_t f2 = edges_[e1].sym.f2; 
@@ -1026,16 +1060,18 @@ namespace {
                 );
                 expansion_nt d = det(C1,C2);
                 geo_debug_assert(d.sign() != ZERO);
-                UV.x = rational_nt(det(B,C2),d);
-                UV.y = rational_nt(det(C1,B),d);
+                UV.x = det(B,C2);
+                UV.y = det(C1,B);
+                UV.w = d;
             } else {
                 UV.x = I[u_];
                 UV.y = I[v_];
+                UV.w = I.w;
             }
         }             
 
         void get_edge_edge_intersection_2D(
-            index_t e1, index_t e2, vec3Q& I, vec2Q& UV
+            index_t e1, index_t e2, vec3HE& I, vec2HE& UV
         ) const {
             const Edge& E1 = edges_[e1];
             const Edge& E2 = edges_[e2];
@@ -1082,11 +1118,13 @@ namespace {
                     );
                     expansion_nt d = det(C1,C2);
                     geo_debug_assert(d.sign() != ZERO);
-                    UV.x = rational_nt(det(B,C2),d);
-                    UV.y = rational_nt(det(C1,B),d);                
+                    UV.x = det(B,C2);
+                    UV.y = det(C1,B);
+                    UV.w = d;
                 } else {
                     UV.x = I[u_];
                     UV.y = I[v_];
+                    UV.w = I.w;
                 }
             } else {
                 geo_assert(region_dim(E1.sym.R2) == 1 || region_dim(E2.sym.R2) == 1);
@@ -1148,19 +1186,22 @@ namespace {
                     expansion_nt D = det(p2-p1,p3-p1);
                     geo_debug_assert(D.sign() != ZERO);
 
-                    vec2Q q1_UV(
-                        rational_nt(det(q1-p1,p3-p1),D),
-                        rational_nt(det(p2-p1,q1-p1),D)
+                    vec2HE q1_UV(
+                        det(q1-p1,p3-p1),
+                        det(p2-p1,q1-p1),
+                        D
                     );
 
-                    vec2Q q2_UV(
-                        rational_nt(det(q2-p1,p3-p1),D),
-                        rational_nt(det(p2-p1,q2-p1),D)
+                    vec2HE q2_UV(
+                        det(q2-p1,p3-p1),
+                        det(p2-p1,q2-p1),
+                        D
                     );
                     UV = mix(t,q1_UV,q2_UV);
                 } else {
                     UV.x = I[u_];
                     UV.y = I[v_];
+                    UV.w = I.w;
                 }
                 return;
             }
@@ -1468,7 +1509,7 @@ namespace {
         Sign f1_orient_;
         vector<Vertex> vertex_;
         vector<Edge> edges_;
-        std::map<vec3Q, index_t, vec3QLexicoCompare> g_v_table_;
+        std::map<vec3HE, index_t, vec3HELexicoCompare> g_v_table_;
         bool check_cnstr_;
         bool barycentric_;
         bool has_planar_isect_;
