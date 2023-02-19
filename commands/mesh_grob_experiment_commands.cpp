@@ -27,6 +27,7 @@
  
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
+#include <OGF/Experiment/algo/CDT.h>
 
 #include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh_repair.h>
@@ -48,7 +49,9 @@ namespace OGF {
         bool FPE,
         bool check_constraints,
         bool barycentric,
-        bool per_component_ids
+        bool per_component_ids,
+        bool use_halfedges,
+        bool verbose
     ) {
         MeshSurfaceIntersectionParams params;
 
@@ -61,6 +64,8 @@ namespace OGF {
         params.debug_check_constraints = check_constraints;
         params.barycentric = barycentric;
         params.per_component_ids = per_component_ids;
+        params.use_halfedges = use_halfedges;
+        params.verbose = verbose;
         
         GEO::mesh_intersect_surface(*mesh_grob(),params);
         
@@ -80,7 +85,7 @@ namespace OGF {
                     if(attribute == "") {
                         shd->set_property("facets_filter", "false");
                     } else {
-                        shd->set_property("facets_filter", "true");                        
+                        shd->set_property("facets_filter", "true");
                     }
                 }
             }
@@ -95,24 +100,40 @@ namespace OGF {
         mesh_grob()->update();
     }
     
-    void MeshGrobExperimentCommands::constrained_delaunay_2d() {
+    void MeshGrobExperimentCommands::constrained_delaunay_2d(bool use_my_code) {
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
         }
 
-        Delaunay_var del = Delaunay::create(2, "triangle");
-        del->set_constraints(mesh_grob());
-        del->set_vertices(0, nullptr);
-
-        // For each triangle of the Delaunay triangulation,
-        // create a triangle in the mesh (and flip if need be).
-        for(index_t t=0; t<del->nb_cells(); ++t) {
-            index_t i = index_t(del->cell_vertex(t,0));
-            index_t j = index_t(del->cell_vertex(t,1));
-            index_t k = index_t(del->cell_vertex(t,2));
-            mesh_grob()->facets.create_triangle(i,j,k);
+        if(use_my_code) {
+            CDT cdt;
+            for(index_t v: mesh_grob()->vertices) {
+                const double* p = mesh_grob()->vertices.point_ptr(v);
+                cdt.insert(vec2(p));
+            }
+            for(index_t e: mesh_grob()->edges) {
+                cdt.insert_constraint(
+                    mesh_grob()->edges.vertex(e,0),
+                    mesh_grob()->edges.vertex(e,1)                    
+                );
+            }
+            for(index_t t=0; t<cdt.nT(); ++t) {
+                index_t i = cdt.Tv(t,0);
+                index_t j = cdt.Tv(t,1);
+                index_t k = cdt.Tv(t,2);
+                mesh_grob()->facets.create_triangle(i,j,k);
+            }
+        } else {
+            Delaunay_var del = Delaunay::create(2, "triangle");
+            del->set_constraints(mesh_grob());
+            del->set_vertices(0, nullptr);
+            for(index_t t=0; t<del->nb_cells(); ++t) {
+                index_t i = index_t(del->cell_vertex(t,0));
+                index_t j = index_t(del->cell_vertex(t,1));
+                index_t k = index_t(del->cell_vertex(t,2));
+                mesh_grob()->facets.create_triangle(i,j,k);
+            }
         }
-
         mesh_grob()->facets.connect();
         show_mesh();
         mesh_grob()->update();

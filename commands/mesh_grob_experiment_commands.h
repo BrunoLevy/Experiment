@@ -80,7 +80,9 @@ namespace OGF {
             bool FPE=true,
             bool check_constraints=false,
             bool barycentric=false,
-            bool per_component_ids=true
+            bool per_component_ids=true,
+            bool use_halfedges=false,
+            bool verbose=false
         );
 
         /**
@@ -103,7 +105,7 @@ namespace OGF {
          * Computes a constrained Delaunay triangulation using the vertices
          *  and the edges of the mesh as constraints.
          */
-        void constrained_delaunay_2d();
+        void constrained_delaunay_2d(bool use_my_code);
 
 
         /**

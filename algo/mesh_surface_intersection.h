@@ -66,6 +66,16 @@ namespace GEO {
          *  of input.
          */
         bool per_component_ids = true;
+
+        /**
+         * \brief Display information while computing the intersection
+         */
+        bool verbose = true;
+
+        /**
+         * \brief Alternative triangle remesher (under test)
+         */
+        bool use_halfedges = false;
     };
 
     void Experiment_API mesh_intersect_surface(

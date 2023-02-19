@@ -70,7 +70,7 @@ namespace GEO {
         }
         expansion& x1 = expansion_product(p1.x.rep(), p2.w.rep());
         expansion& y1 = expansion_product(p1.y.rep(), p2.w.rep());
-        expansion& z1 = expansion_product(p1.z.rep(), p2.w.rep());                
+        expansion& z1 = expansion_product(p1.z.rep(), p2.w.rep());   
         expansion& x2 = expansion_product(p2.x.rep(), p1.w.rep());
         expansion& y2 = expansion_product(p2.y.rep(), p1.w.rep());
         expansion& z2 = expansion_product(p2.z.rep(), p1.w.rep());
@@ -83,7 +83,9 @@ namespace GEO {
     }
 
     
-    bool vec3HELexicoCompare::operator()(const vec3HE& v1, const vec3HE& v2) const {
+    bool vec3HELexicoCompare::operator()(
+        const vec3HE& v1, const vec3HE& v2
+    ) const {
         Sign s = ratio_compare(v2.x, v2.w, v1.x, v1.w);
         if(s == POSITIVE) {
             return true;
@@ -304,6 +306,42 @@ namespace GEO {
             const expansion& S = expansion_sum(x1x2, y1y2);
             return Sign(S.sign()*U.w.sign()*V.w.sign());
         }
+
+        Sign in_circle_2d(
+            const vec2HE& p0, const vec2HE& p1, const vec2HE& p2,
+            const vec2HE& p3
+        ) {
+            vec2HE U = p0-p3;
+            vec2HE V = p1-p3;
+            vec2HE W = p2-p3;
+
+            expansion& Uxw = expansion_product(U.x.rep(), U.w.rep());
+            expansion& Uyw = expansion_product(U.x.rep(), U.w.rep());
+            expansion& Ux2 = expansion_square(U.x.rep());
+            expansion& Uy2 = expansion_square(U.y.rep());
+            expansion& Ul  = expansion_sum(Ux2,Uy2);
+
+            expansion& Vxw = expansion_product(V.x.rep(), V.w.rep());
+            expansion& Vyw = expansion_product(V.x.rep(), V.w.rep());
+            expansion& Vx2 = expansion_square(V.x.rep());
+            expansion& Vy2 = expansion_square(V.y.rep());
+            expansion& Vl  = expansion_sum(Vx2,Vy2);
+            
+            expansion& Wxw = expansion_product(W.x.rep(), W.w.rep());
+            expansion& Wyw = expansion_product(W.x.rep(), W.w.rep());
+            expansion& Wx2 = expansion_square(W.x.rep());
+            expansion& Wy2 = expansion_square(W.y.rep());
+            expansion& Wl  = expansion_sum(Wx2,Wy2);
+
+            expansion& D = expansion_det3x3(
+                Uxw, Uyw, Ul,
+                Vxw, Vyw, Vl,
+                Wxw, Wyw, Wl
+            );
+
+            return D.sign();
+        }
+        
     }
 
     bool get_three_planes_intersection(

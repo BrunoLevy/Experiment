@@ -21,7 +21,11 @@
 // TODO: make it faster: segment-segment intersection
 //       could use a sweep/sort algorithm
 //       (before then, benchmark !)
-// TODO: homogeneous coordinates ?
+//
+// TODO: expansion::optimize(), when do we need to call it ?
+//       Would be better to call it internally when needed.
+//       Influence on performance is important.
+//
 // TODO: would be good to be able to do computations with
 //       points that have their coordinates stored in the
 //       stack.
@@ -48,25 +52,6 @@
 namespace {
     using namespace GEO;
 
-    /***********************************************************************/
-
-    inline vec3HE vec3HE_noinit() {
-        return vec3HE(
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED)                       
-        );
-    }
-
-    inline vec2HE vec2HE_noinit() {
-        return vec2HE(
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED)                        
-        );
-    }
-    
     /***********************************************************************/
 
     void remove_linear_triangles(Mesh& M) {
@@ -613,7 +598,8 @@ namespace {
             mesh_(M),
             f1_(index_t(-1)),
             check_cnstr_(true),
-            barycentric_(true)
+            barycentric_(true),
+            use_halfedges_(false)
         {
         }
 
@@ -625,6 +611,10 @@ namespace {
             barycentric_ = x;
         }
 
+        void set_use_halfedges(bool x) {
+            use_halfedges_ = x;
+        }
+        
         Mesh& mesh() const {
             return mesh_;
         }
@@ -797,51 +787,154 @@ namespace {
             vertex_.push_back(V);
             return vertex_.size()-1;
         }
-        
+
         void commit() {
+            create_vertices();
+            // remesh_with_edges();
+            if(use_halfedges_) {
+                remesh_with_halfedges();
+            } else {
+                remesh_with_Triangle();
+            }
+        }
+        
+        struct Halfedge {
+            Halfedge(
+                index_t v_in      = index_t(-1),
+                index_t opp_in    = index_t(-1),
+                index_t next_in   = index_t(-1),
+                index_t marked_in = false
+            ) :
+                v(v_in),
+                opposite(opp_in),
+                next(next_in),
+                marked(marked_in)
+            {
+            }
+            index_t v;
+            index_t opposite;
+            index_t next;
+            bool marked;
+        };
 
-            // Sanity check
-            bool OK = check_cnstr_ ? check_constraints() : true;
+        // Under development ...
+        void remesh_with_halfedges() {
+
+            // Remove duplicated edges
+            vector<std::pair<index_t, index_t>> edges;
+            for(const Edge& E: edges_) {
+                edges.push_back(
+                    std::make_pair(std::min(E.v1,E.v2),std::max(E.v1,E.v2))
+                );
+            }
+            sort_unique(edges);
+            vector<Halfedge> halfedges(edges.size()*2);
+
+            // Create halfedges
+            for(index_t e=0; e<edges_.size(); ++e) {
+                Halfedge& h1 = halfedges[2*e];
+                Halfedge& h2 = halfedges[2*e+1];
+                h1.opposite = 2*e+1;
+                h2.opposite = 2*e;
+                h1.v = edges[e].second;                
+                h2.v = edges[e].first;
+            }
+
+            // Create linked lists of halfedges starting from vertices
+            vector<index_t> vtoh(vertex_.size(),index_t(-1));
+            vector<index_t> next_around_v(halfedges.size(), index_t(-1));
+            for(index_t h=0; h<halfedges.size(); ++h) {
+                const Halfedge& H = halfedges[h];
+                index_t v = halfedges[H.opposite].v;
+                next_around_v[h] = vtoh[v];
+                vtoh[v] = h;
+            }
+
+            // Sort halfedges around vertices
+            vector<index_t> h_around_v;
+            for(index_t v=0; v<vertex_.size(); ++v) {
+                h_around_v.resize(0);
+                for(index_t h = vtoh[v]; h!=index_t(-1); h = next_around_v[h]) {
+                    h_around_v.push_back(h);
+                }
+                std::sort(
+                    h_around_v.begin(), h_around_v.end(),
+                    [&](index_t h1, index_t h2)->bool {
+                        index_t v1 = halfedges[h1].v;
+                        index_t v2 = halfedges[h2].v;                        
+                        Sign s = orient2d(v,v1,v2);
+                        return (s == POSITIVE || s == ZERO); // TODO ? How can we disambiguate ?
+                    }
+                );
+
+                for(index_t i=0; i<h_around_v.size(); ++i) {
+                    index_t j = (i+1)%h_around_v.size();
+                    index_t he1 = h_around_v[i];
+                    index_t he2 = h_around_v[j];
+                    halfedges[halfedges[he1].opposite].next = he2;
+                }
+            }
+
+            // TODO: handle "islands" and "holes"
             
-            // Create all vertices (or find them if they already exist)
-            for(index_t i=0; i<vertex_.size(); ++i) {
-
-                // Vertex already exists in this MeshInTriangle
-                if(vertex_[i].mesh_vertex_index != index_t(-1)) {
+            // Create facets
+            for(index_t h=0; h<halfedges.size(); ++h) {
+                if(halfedges[h].marked) {
                     continue;
                 }
+                index_t facet_size = 0; // number of vertices in facet
+                index_t test_123   = 0; // facet passes through first three vertices
+                index_t hh = h;
+                do {
+                    halfedges[hh].marked = true;
+                    ++facet_size;
+                    if(halfedges[hh].v < 3) {
+                        test_123 = test_123 | (1 << halfedges[hh].v);
+                    }
+                    hh = halfedges[hh].next;
+                } while(hh != h);
 
-                // Use exact geometry as key
-                const vec3HE& K = vertex_[i].point_exact;
-                auto it = g_v_table_.find(K);
-                if(it != g_v_table_.end()) {
-                    // Vertex alreay exists in target mesh
-                    vertex_[i].mesh_vertex_index = it->second;
-                } else {
-                    // Vertex does not exist in target mesh,
-                    // create it and update table
-                    double w = vertex_[i].point_exact.w.estimate();
-                    vec3 p(
-                        vertex_[i].point_exact.x.estimate() / w,
-                        vertex_[i].point_exact.y.estimate() / w,
-                        vertex_[i].point_exact.z.estimate() / w
+                // If facet passes through first three vertices and does
+                // not pass through all the halfedges, then discard it
+                // (it is the big facet around everything)
+                if((test_123 == 7) && (facet_size < halfedges.size())) {
+                    continue;
+                }
+                
+                index_t f = mesh().facets.create_polygon(facet_size);
+                hh = h;
+                index_t lv=0;
+                do {
+                    mesh().facets.set_vertex(
+                        f,lv,
+                        vertex_[halfedges[hh].v].mesh_vertex_index
                     );
-                    index_t v = mesh_.vertices.create_vertex(p.data());
-                    vertex_[i].mesh_vertex_index = v;
-                    g_v_table_[K] = v;
-                }
+                    hh = halfedges[hh].next;
+                    ++lv;
+                } while(hh != h);
             }
+        }
 
-
-            if(false) {
-                for(const Edge& E: edges_) {
-                    index_t v1 = vertex_[E.v1].mesh_vertex_index;
-                    index_t v2 = vertex_[E.v2].mesh_vertex_index;
-                    mesh().edges.create_edge(v1,v2);
-                }
-                return;
+        
+        /**
+         * \brief Just creates the new edges in the target mesh,
+         *  but does not create any facet.
+         */
+        void remesh_with_edges() {
+            for(const Edge& E: edges_) {
+                index_t v1 = vertex_[E.v1].mesh_vertex_index;
+                index_t v2 = vertex_[E.v2].mesh_vertex_index;
+                mesh().edges.create_edge(v1,v2);
             }
-            
+        }
+
+        /**
+         * \brief Creates the triangles using Shewchuk's "Triangle".
+         */
+        void remesh_with_Triangle() {
+
+            bool OK = check_cnstr_ ? check_constraints() : true;
+
             // Create a 2D constrained Delaunay triangulation
             Mesh constraints;
             get_constraints(constraints);
@@ -856,7 +949,6 @@ namespace {
                 );
                 abort();
             }
-                
                 
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(&constraints);
@@ -900,6 +992,39 @@ namespace {
                 index_t new_t = mesh_.facets.create_triangle(i,j,k);
                 // Copy all attributes from initial facet
                 mesh_.facets.attributes().copy_item(new_t, f1_);
+            }
+        }
+
+        /**
+         * \brief Creates the vertices in the target mesh or
+         *  finds them if they already exist.
+         */
+        void create_vertices() {
+            for(index_t i=0; i<vertex_.size(); ++i) {
+                // Vertex already exists in this MeshInTriangle
+                if(vertex_[i].mesh_vertex_index != index_t(-1)) {
+                    continue;
+                }
+
+                // Use exact geometry as key
+                const vec3HE& K = vertex_[i].point_exact;
+                auto it = g_v_table_.find(K);
+                if(it != g_v_table_.end()) {
+                    // Vertex alreay exists in target mesh
+                    vertex_[i].mesh_vertex_index = it->second;
+                } else {
+                    // Vertex does not exist in target mesh,
+                    // create it and update table
+                    double w = vertex_[i].point_exact.w.estimate();
+                    vec3 p(
+                        vertex_[i].point_exact.x.estimate() / w,
+                        vertex_[i].point_exact.y.estimate() / w,
+                        vertex_[i].point_exact.z.estimate() / w
+                    );
+                    index_t v = mesh_.vertices.create_vertex(p.data());
+                    vertex_[i].mesh_vertex_index = v;
+                    g_v_table_[K] = v;
+                }
             }
         }
         
@@ -946,7 +1071,7 @@ namespace {
                 }
             }
         }
-
+        
         void compute_constraints_intersections() {
 
             // Note: intersections that fall exactly
@@ -1486,6 +1611,25 @@ namespace {
                 vertex_[v3].UV_exact
             );
         }
+
+        /**
+         * \brief Tests the relative position of a point with respect
+         *  to the circumscribed circle of a triangle
+         * \param[in] v1 , v2 , v3 the three vertices of the triangle
+         *  oriented anticlockwise
+         * \param[in] v4 the point to be tested
+         * \retval POSITIVE if the point is inside the circle
+         * \retval ZERO if the point is on the circle
+         * \retval NEGATIVE if the point is outside the circle
+         */
+        Sign incircle(index_t v1,index_t v2,index_t v3,index_t v4) const {
+            return PCK::in_circle_2d(
+                vertex_[v1].UV_exact,
+                vertex_[v2].UV_exact,
+                vertex_[v3].UV_exact,
+                vertex_[v4].UV_exact
+            );
+        }
         
         void clear() {
             vertex_.resize(0);
@@ -1513,6 +1657,7 @@ namespace {
         bool check_cnstr_;
         bool barycentric_;
         bool has_planar_isect_;
+        bool use_halfedges_;
     };
 
     /***********************************************************************/
@@ -1722,6 +1867,7 @@ namespace {
             MeshInTriangle TM(M);
             TM.set_check_constraints(params.debug_check_constraints);
             TM.set_barycentric(params.barycentric);
+            TM.set_use_halfedges(params.use_halfedges);
 
             // Sort intersections by f1, so that all intersections between f1
             // and another facet appear as a contiguous sequence.
@@ -1748,12 +1894,15 @@ namespace {
                     ++e;
                 }
 
-                /*
-                std::cerr << "Isects in " << intersections[b].f1
-                          << " / " << nf                    
-                          << "    : " << (e-b)
-                          << std::endl;
-                */
+
+                if(params.verbose) {
+                    std::cerr << "Isects in " << intersections[b].f1
+                              << " / " << nf                    
+                              << "    : " << (e-b)
+                              << std::endl;
+                }
+
+                
                 TM.begin_facet(intersections[b].f1);
                 for(index_t i=b; i<e; ++i) {
                     const IsectInfo& II = intersections[i];
