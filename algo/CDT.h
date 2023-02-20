@@ -152,7 +152,7 @@ namespace GEO {
             index_t v1,   index_t v2,   index_t v3,
             index_t adj1, index_t adj2, index_t adj3
         ) {
-            geo_assert(t < nT());
+            geo_debug_assert(t < nT());
             T_[3*t  ]    = v1;
             T_[3*t+1]    = v2;
             T_[3*t+2]    = v3;                        
@@ -172,7 +172,7 @@ namespace GEO {
          * \param[in] lv local vertex index in 0,1,2
          */
         void Trot(index_t t, index_t lv) {
-            geo_assert(t < nT());
+            geo_debug_assert(t < nT());
             index_t i = 3*t+(lv%3);
             index_t j = 3*t+((lv+1)%3);
             index_t k = 3*t+((lv+2)%3);        
@@ -191,9 +191,9 @@ namespace GEO {
          *  accross \p le
          */
         void Tadj_set(index_t t, index_t le, index_t adj) {
-            geo_assert(t < nT());
-            geo_assert(adj < nT());
-            geo_assert(le < 3);
+            geo_debug_assert(t < nT());
+            geo_debug_assert(adj < nT());
+            geo_debug_assert(le < 3);
             Tadj_[3*t+le] = adj;
         }
 
@@ -207,9 +207,9 @@ namespace GEO {
             if(t == index_t(-1)) {
                 return;
             }
-            geo_assert(t < nT());
-            geo_assert(t1 < nT());
-            geo_assert(t2 < nT());
+            geo_debug_assert(t < nT());
+            geo_debug_assert(t1 < nT());
+            geo_debug_assert(t2 < nT());
             index_t le = Tadj_find(t,t1);
             Tadj_set(t, le, t2);
         }
