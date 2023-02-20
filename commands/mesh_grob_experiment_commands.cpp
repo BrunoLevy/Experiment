@@ -100,13 +100,17 @@ namespace OGF {
         mesh_grob()->update();
     }
     
-    void MeshGrobExperimentCommands::constrained_delaunay_2d(bool use_my_code) {
+    void MeshGrobExperimentCommands::constrained_delaunay_2d(
+        bool use_my_code,
+        bool Delaunay
+    ) {
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
         }
 
         if(use_my_code) {
             CDT cdt;
+            cdt.set_delaunay(Delaunay);
             for(index_t v: mesh_grob()->vertices) {
                 const double* p = mesh_grob()->vertices.point_ptr(v);
                 cdt.insert(vec2(p));
@@ -135,6 +139,7 @@ namespace OGF {
             }
         }
         mesh_grob()->facets.connect();
+        mesh_grob()->vertices.set_dimension(3);
         show_mesh();
         mesh_grob()->update();
     }
