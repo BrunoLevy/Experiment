@@ -5,6 +5,7 @@
 #include <OGF/Experiment/algo/CDT.h>
 #include <geogram/mesh/mesh.h>
 #include <geogram/mesh/mesh_io.h>
+#include <geogram/basic/algorithm.h>
 
 #include <stack>
 #include <deque>
@@ -18,16 +19,10 @@
 // 6) can we avoid computing o ? (stored in Tflags)
 
 
-// #define CDT_DEBUG
-#ifdef CDT_DEBUG
-#define LOG(X) std::cerr << X << std::endl
-#else
-#define LOG(X)
-#endif
-
 namespace GEO {
 
     index_t CDT::insert(const vec2& P) {
+        CDT_LOG("insert");
         index_t v = point_.size();
         point_.push_back(P);
         v2T_.push_back(index_t(-1));
@@ -49,7 +44,7 @@ namespace GEO {
 
         // Duplicated vertex
         if(nb_z == 2) {
-            LOG("======> duplicated vertex");
+            CDT_LOG("======> duplicated vertex");
             if(o1 != ZERO) {
                 v = Tv(t1,0);
             } else if(o2 != ZERO) {
@@ -82,7 +77,7 @@ namespace GEO {
             index_t t1_adj3 = Tadj(t1,(le1+2)%3);
                 
             if(t2 != index_t(-1)) {
-                LOG("on edge");
+                CDT_LOG("on edge");
                     
                 // New vertex is on an edge of t1 and t1 has a neighbor
                 // accross that edge. Discard the two triangles t1 and t2
@@ -117,7 +112,7 @@ namespace GEO {
                 S.push(t4);
                     
             } else {
-                LOG("on border edge");
+                CDT_LOG("on border edge");
                     
                 // New vertex is on an edge of t1 and t1 has no neighbor
                 // accross that edge. Discard t1 and replace it with two
@@ -157,10 +152,15 @@ namespace GEO {
             S.push(t3);
         }
 
+        CDT_LOG("inserted, check consistency");
+        check_consistency();
+        
         if(!delaunay_) {
             return v;
         }
 
+        CDT_LOG("Delaunay-ize");
+        
         // Phase 3: Delaunay (by edge flipping)
         while(S.size() != 0) {
             index_t t1 = S.top();
@@ -178,34 +178,193 @@ namespace GEO {
                 S.push(t2);                    
             }
         }
+
+        CDT_LOG("check consistency");
+        
+        check_consistency();
+
+        CDT_LOG("insert OK");
+        
         return v;
     }
 
     void CDT::swap_edge(index_t t1) {
+        CDT_LOG("swap edge");
         index_t v1 = Tv(t1,0);
         index_t v2 = Tv(t1,1);
         index_t v3 = Tv(t1,2);                        
         index_t t1_adj2 = Tadj(t1,1);
         index_t t1_adj3 = Tadj(t1,2);
-
         index_t t2 = Tadj(t1,0);
         index_t le2 = Tadj_find(t2,t1);
         index_t v4 = Tv(t2,le2);
         geo_debug_assert(Tv(t2,(le2+1)%3) == v3);
         geo_debug_assert(Tv(t2,(le2+2)%3) == v2);
+        Tcheck(t1);
+        Tcheck(t2);
         index_t t2_adj2 = Tadj(t2,(le2+1)%3);
         index_t t2_adj3 = Tadj(t2,(le2+2)%3);
         Tset(t1,v1,v4,v3,t2_adj3,t1_adj2,t2);
         Tset(t2,v1,v2,v4,t2_adj2,t1,t1_adj3);
         Tadj_replace(t1_adj3, t1, t2);
         Tadj_replace(t2_adj3, t2, t1);
+        Tcheck(t1);
+        Tcheck(t2);        
+        CDT_LOG("swapped edge");        
     }
 
     void CDT::insert_constraint(index_t i, index_t j) {
-        LOG("Insert constraint " << i << " " << j);
+        // insert_constraint_simple(i,j);
+        insert_constraint_optimized(i,j);
+    }
+        
+    void CDT::insert_constraint_simple(index_t i, index_t j) {
+        std::deque< Edge > Q; // Queue of edges to constrain        
+        vector< Edge > N;     // New edges to re-Delaunize
+
+        // Step 1: detect intersected edges
+        CDT_LOG("Detect intersected edges");
+        {
+            index_t t_prev = index_t(-1);
+            index_t t = vT(i);
+            index_t le = index_t(-1);
+            bool finished = false;
+            for_each_T_around_v(
+                i, [&](index_t t_in, index_t le_in) {
+                    CDT_LOG("Testing " << t_in);
+                    index_t v1 = Tv(t_in, (le_in + 1)%3);
+                    index_t v2 = Tv(t_in, (le_in + 2)%3);
+                    if(v1 == j || v2 == j) {
+                        finished = true;
+                        return true;
+                    }
+                    if(seg_seg_intersect(i,j,v1,v2)) {
+                        CDT_LOG("Found intersection : " << v1 << " " << v2);
+                        t  = t_in;
+                        le = le_in;
+                        Trot(t,le);
+                        Q.push_back(std::make_pair(Tv(t,1), Tv(t,2)));
+                        return true;
+                    }
+                    return false;
+                }
+            );
+            
+            while(!finished) {
+                t_prev = t;
+                t = Tadj(t,0);
+                CDT_LOG("Testing " << t);
+                if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
+                    CDT_LOG("Finished");
+                    finished = true;
+                } else {
+                    for(le = 0; le<3; ++le) {
+                        if(Tadj(t,le) == t_prev) {
+                            continue;
+                        }
+                        index_t v1 = Tv(t, (le + 1)%3);
+                        index_t v2 = Tv(t, (le + 2)%3);
+                        if(seg_seg_intersect(i,j,v1,v2)) {
+                            CDT_LOG("Found intersection : " << v1 << " " << v2);
+                            Trot(t,le);
+                            Q.push_back(std::make_pair(Tv(t,1), Tv(t,2)));                            
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 2: constrain edges
+#ifdef CDT_DEBUG        
+        save("CDT_0.geogram");
+#endif        
+        index_t step = 1;
+        while(Q.size() != 0) {
+            Edge E = Q.back();
+            Q.pop_back();
+            if(!is_convex_quad(eT(E.first, E.second))) {
+                if(Q.size() == 0) {
+                    CDT_LOG("... infinite iteration");
+#ifdef CDT_DEBUG                    
+                    save("last_CDT.geogram");
+#endif                    
+                    abort();
+                }
+                Q.push_front(E);
+            } else {
+                CDT_LOG("Swap");
+                swap_edge(E);
+                if(seg_seg_intersect(i,j,E.first,E.second)) {
+                    Q.push_front(E);
+                } else {
+                    N.push_back(E);
+                }
+            }
+#ifdef CDT_DEBUG            
+            save("CDT_"+String::to_string(step)+".geogram");
+#endif            
+            step += 1;
+        }
+
+        if(!delaunay_) {
+            return;
+        }
+
+        CDT_LOG("check consistency before re-Delaunize swapped edges");
+        check_consistency();
+        
+        step = 0;
+        save("CDT2_"+String::to_string(step)+".geogram");        
+
+        std::cerr << "N=";
+        for(auto E: N) {
+            std::cerr << "(" << E.first << "," << E.second << ") ";
+        }
+        std::cerr << std::endl;
+
+        // Step 3: restore Delaunay, version using edges
+        bool swap_occured = true;
+        while(swap_occured) {
+            swap_occured = false;
+            for(Edge& E: N) {
+                index_t v1 = E.first;
+                index_t v2 = E.second;
+                CDT_LOG("Test edge " << v1 << "-" << v2);                
+                if(
+                    (v1 == i && v2 == j) ||
+                    (v2 == i && v1 == j)
+                ) {
+                    CDT_LOG("  ... is the constrained edge (skipping)");
+                    continue;
+                }
+                index_t t1 = eT(v1,v2);
+                index_t v0 = Tv(t1,0);
+                index_t t2 = Tadj(t1,0);
+                index_t e2 = Tadj_find(t2,t1);
+                index_t v3 = Tv(t2,e2);
+                CDT_LOG("Test trgls " << t1 << "," << t2);
+                if(
+                    (incircle(v0,v1,v2,v3) || incircle(v3,v2,v1,v0)) &&
+                    is_convex_quad(t1)
+                ) {
+                    std::cerr << "Swap" << std::endl;
+                    swap_edge(t1);
+                    E.first  = Tv(t1,1);
+                    E.second = Tv(t1,2);                    
+                    ++step;
+                    save("CDT2_"+String::to_string(step)+".geogram");                            
+                    swap_occured = true;
+                }
+            }
+        }
+    }
+    
+    void CDT::insert_constraint_optimized(index_t i, index_t j) {
+        CDT_LOG("Insert constraint " << i << " " << j);
 
         std::deque<index_t> Q; // Queue of edges to constrain
-        vector<index_t> N;     // New triangles to re-Delaunay-ize
+        vector<index_t> N; // New triangles to re-Delaunize
 
         // Step 1: find all the edges that have an intersection 
         // with the constraint [i,j], enqueue them in Q.
@@ -214,7 +373,7 @@ namespace GEO {
         //        per segment...)
         //       -handle corner-cases (constraint passes through existing vrtx)
 
-        LOG("Detect intersected edges");
+        CDT_LOG("Detect intersected edges");
 
         {
             index_t t_prev = index_t(-1);
@@ -223,7 +382,7 @@ namespace GEO {
             bool finished = false;
             for_each_T_around_v(
                 i, [&](index_t t_in, index_t le_in) {
-                    LOG("Testing " << t_in);
+                    CDT_LOG("Testing " << t_in);
                     index_t v1 = Tv(t_in, (le_in + 1)%3);
                     index_t v2 = Tv(t_in, (le_in + 2)%3);
                     if(v1 == j || v2 == j) {
@@ -231,7 +390,7 @@ namespace GEO {
                         return true;
                     }
                     if(seg_seg_intersect(i,j,v1,v2)) {
-                        LOG("Found intersection : " << v1 << " " << v2);
+                        CDT_LOG("Found intersection : " << v1 << " " << v2);
                         t  = t_in;
                         le = le_in;
                         Trot(t,le);
@@ -246,9 +405,9 @@ namespace GEO {
             while(!finished) {
                 t_prev = t;
                 t = Tadj(t,0);
-                LOG("Testing " << t);
+                CDT_LOG("Testing " << t);
                 if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
-                    LOG("Finished");
+                    CDT_LOG("Finished");
                     finished = true;
                 } else {
                     for(le = 0; le<3; ++le) {
@@ -258,7 +417,7 @@ namespace GEO {
                         index_t v1 = Tv(t, (le + 1)%3);
                         index_t v2 = Tv(t, (le + 2)%3);
                         if(seg_seg_intersect(i,j,v1,v2)) {
-                            LOG("Found intersection : " << v1 << " " << v2);
+                            CDT_LOG("Found intersection : " << v1 << " " << v2);
                             Trot(t,le);
                             Q.push_back(t);
                             Tmark(t);
@@ -268,34 +427,28 @@ namespace GEO {
                 }
             }
         }
-        
+
+                
         // Step 2: constrain edges
+        // Version using triangle-as-edges
 #ifdef CDT_DEBUG        
         save("CDT_0.geogram");
 #endif        
         index_t step = 1;
         while(Q.size() != 0) {
-            LOG("========== STEP " << step);
-#ifdef CDT_DEBUG            
-            std::cerr << "Q= ";
-            for(index_t q : Q) {
-                std::cerr << q
-                          << (Tis_marked(q) ? ' ' : '*')
-                          << " ";
-            }
-            std::cerr << std::endl;
-#endif            
+            CDT_LOG("========== STEP " << step);
+            debug_show_triangles(Q,"Q");
             index_t t1 = Q.back();
             Q.pop_back();
-            LOG("Examining " << t1 << "," << Tadj(t1,0));
+            CDT_LOG("Examining " << t1 << "," << Tadj(t1,0));
             if(!Tis_marked(t1)) {
-                LOG("   Not marked");
+                CDT_LOG("   Not marked");
                 continue;
             }
             if(!is_convex_quad(t1)) {
-                LOG("   Not convex");
+                CDT_LOG("   Not convex");
                 if(Q.size() == 0) {
-                    LOG("... infinite iteration");
+                    CDT_LOG("... infinite iteration");
 #ifdef CDT_DEBUG                    
                     save("last_CDT.geogram");
 #endif                    
@@ -303,42 +456,48 @@ namespace GEO {
                 }
                 Q.push_front(t1);
             } else {
-                LOG("Swap");
+                CDT_LOG("Swap");
                 index_t t2 = Tadj(t1,0);
 
-                bool no_isect    = !Tis_marked(t2);
-                index_t v0 = Tv(t1,0);
+                bool no_isect  = !Tis_marked(t2);
+                index_t v0     = Tv(t1,0);
                 bool t2v0_t1v2 = (Tis_marked(t2) && Tv(t2,0) == Tv(t1,2));
                 bool t2v0_t1v1 = (Tis_marked(t2) && Tv(t2,0) == Tv(t1,1));
                 
                 swap_edge(t1);
                 if(no_isect) {
-                    LOG("   OK (no isect)");
+                    CDT_LOG("   OK (no isect)");
                     Tunmark(t1);
+                    Trot(t1,2); // so that new edge is edge 0
                     N.push_back(t1);
+                    CDT_LOG("New edge: " << t1 << "->(" << Tv(t1,1) << "," << Tv(t1,2) << ")");
                 } else {
                     Sign o = orient2d(i,j,v0);
                     if(t2v0_t1v2) {
-                        Trot(t1,2);
                         if(o >= 0) {
-                            LOG(t1 << ":no isect  " << t2 << ":isect");
+                            CDT_LOG(t1 << ":no isect  " << t2 << ":isect");
                             Tunmark(t1);
+                            Trot(t1,2); // so that new edge is edge 0                            
                             N.push_back(t1);
+                            CDT_LOG("New edge: " << t1 << "->(" << Tv(t1,1) << "," << Tv(t1,2) << ")");                            
                         } else {
-                            LOG(t1 << ":isect  " << t2 << ":isect");
+                            CDT_LOG(t1 << ":isect  " << t2 << ":isect");
+                            Trot(t1,2);                            
                             Q.push_front(t1);
                         }
                     } else {
                         geo_debug_assert(t2v0_t1v1);
-                        Trot(t2,1);
                         if(o > 0) {
-                            LOG(t1 << ":isect  " << t2 << ":isect");
+                            Trot(t2,1);                            
+                            CDT_LOG(t1 << ":isect  " << t2 << ":isect");
                             Q.push_front(t1);                            
                         } else {
-                            LOG(t1 << ":isect  " << t2 << ":no isect");
+                            CDT_LOG(t1 << ":isect  " << t2 << ":no isect");
                             Tunmark(t2);
+                            Trot(t2,1); // so that new edge is edge 0
                             N.push_back(t2);
                             Q.push_front(t1);
+                            CDT_LOG("New edge: " << t2 << "->(" << Tv(t2,1) << "," << Tv(t2,2) << ")");                            
                         }
                     }
                 }
@@ -349,10 +508,83 @@ namespace GEO {
             step += 1;
         }
 
-        // Step 3: restore Delaunay
-        // TODO
+        if(true || !delaunay_) {
+            return;
+        }
+
+        CDT_LOG("check consistency before re-Delaunize swapped edges");
+        check_consistency();
+        
+        step = 0;
+        save("CDT2_"+String::to_string(step)+".geogram");        
+
+        debug_show_triangles(N,"N");
+
+
+        // Restore CDT condition
+        bool swap_occured = true;
+        while(swap_occured) {
+            swap_occured = false;
+            for(index_t t1: N) {
+                index_t v1 = Tv(t1,1);
+                index_t v2 = Tv(t1,2); 
+                if(
+                    (v1 == i && v2 == j) ||
+                    (v2 == i && v1 == j)
+                ) {
+                    continue;
+                }
+                index_t v0 = Tv(t1,0);
+                index_t t2 = Tadj(t1,0);
+                index_t e2 = Tadj_find(t2,t1);
+                index_t v3 = Tv(t2,e2);
+                std::cerr << "Test " << t1 << "," << t2 << std::endl;
+                if(incircle(v0,v1,v2,v3) || incircle(v3,v2,v1,v0)) {
+                    std::cerr << "Swap" << std::endl;
+                    swap_edge(t1);
+                    ++step;
+                    save("CDT2_"+String::to_string(step)+".geogram");                            
+                    swap_occured = true;
+                }
+            }
+        }
     }
 
+    index_t CDT::eT(index_t v1, index_t v2) {
+        index_t result = index_t(-1);
+        for_each_T_around_v(
+            v1,
+            [&](index_t t, index_t lv)->bool {
+                if(Tv(t, (lv+1)%3) == v2) {
+                    if(Tv(t, (lv+2)%3) != v1) {
+                        Trot(t, (lv+2)%3);
+                    }
+                    result = t;
+                    return true;
+                } else if(Tv(t, (lv+1)%3) == v1) {
+                    if(Tv(t, (lv+2)%3) != v2) {
+                        Trot(t, (lv+2)%3);
+                    }
+                    result = t;                    
+                    return true;
+                }
+                return false;
+            }
+        );
+        geo_debug_assert(result != index_t(-1));
+        geo_debug_assert(
+            (Tv(result,1) == v1 && Tv(result,2) == v2) ||
+            (Tv(result,1) == v2 && Tv(result,2) == v1) 
+        );
+        return result;
+    }
+
+    void CDT::swap_edge(Edge& E) {
+        index_t t = eT(E.first, E.second);
+        swap_edge(t);
+        E = std::make_pair(Tv(t,0), Tv(t,1));
+    }
+    
     index_t CDT::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
         // This version: linear scan
         // TODO: faster version
@@ -414,8 +646,7 @@ namespace GEO {
             o4*o1 > 0
         );
 
-        
-        LOG(
+        CDT_LOG(
              v1 << " " << v2 << " " <<
              v4 << " " << v3 << " " <<
              "convex?=" << result

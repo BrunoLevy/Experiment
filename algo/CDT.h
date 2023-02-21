@@ -1,4 +1,3 @@
-
 /*
  *
  */
@@ -10,18 +9,28 @@
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
 
+#define CDT_DEBUG
+#ifdef CDT_DEBUG
+#define CDT_LOG(X) std::cerr << X << std::endl
+#else
+#define CDT_LOG(X)
+#endif
+
 namespace GEO {
 
     // Under development, unfinished !!
     class Experiment_API CDT {
     public:
-
+        typedef std::pair<index_t, index_t> Edge;
+    
         CDT() : delaunay_(true) {
         }
     
         index_t insert(const vec2& P);
         
         void insert_constraint(index_t i, index_t j);
+        void insert_constraint_simple(index_t i, index_t j);
+        void insert_constraint_optimized(index_t i, index_t j);
 
         /**
          * \brief Specifies whether a constrained Delaunay
@@ -120,7 +129,28 @@ namespace GEO {
             geo_debug_assert(v < nv());
             return v2T_[v];
         }
-    
+
+        /**
+         * \brief Gets a triangle incident to an edge
+         * \param[in] v1 , v2 the two vertices of the edge
+         * \return a triangle such that edge 0 corresponds to
+         *  v1 , v2.
+         * \details The function rotates the triangle if need
+         *  be (modifies the triangulation).
+         */
+        index_t eT(index_t v1, index_t v2);
+
+
+        /**
+         * \brief Flips an edge
+         * \details Unefficient, because it needs internally
+         *  to retreive a triangle incident to the edge, by
+         *  turning around one of the vertices.
+         * \param[in,out] E the edge to be flipped. On exit the
+         *  flipped edge.
+         */
+        void swap_edge(Edge& E);
+
         /**
          * \brief Saves this CDT to a geogram mesh file.
          * \param[in] filename where to save this CDT
@@ -153,6 +183,18 @@ namespace GEO {
             index_t adj1, index_t adj2, index_t adj3
         ) {
             geo_debug_assert(t < nT());
+            geo_debug_assert(v1 < nv());
+            geo_debug_assert(v2 < nv());
+            geo_debug_assert(v3 < nv());                        
+            geo_debug_assert(adj1 < nT() || adj1 == index_t(-1));
+            geo_debug_assert(adj2 < nT() || adj2 == index_t(-1));
+            geo_debug_assert(adj3 < nT() || adj3 == index_t(-1));
+            geo_debug_assert(v1 != v2);
+            geo_debug_assert(v2 != v3);
+            geo_debug_assert(v3 != v1);            
+            geo_debug_assert(adj1 != adj2 || adj1 == index_t(-1));
+            geo_debug_assert(adj2 != adj3 || adj2 == index_t(-1));
+            geo_debug_assert(adj3 != adj1 || adj3 == index_t(-1));            
             T_[3*t  ]    = v1;
             T_[3*t+1]    = v2;
             T_[3*t+2]    = v3;                        
@@ -182,6 +224,39 @@ namespace GEO {
                 Tadj_[i], Tadj_[j], Tadj_[k]
             );
         }
+
+        /**
+         * \brief Consistency check for a triangle
+         * \details in debug mode, aborts if inconsistency is detected
+         * \param[in] t the triangle to be tested
+         */
+        void Tcheck(index_t t) {
+            geo_argused(t);
+#ifdef GEO_DEBUG
+            if(t == index_t(-1)) {
+                return;
+            }
+            for(index_t e=0; e<3; ++e) {
+                geo_debug_assert(Tv(t,e) != Tv(t,(e+1)%3));
+                if(Tadj(t,e) == index_t(-1)) {
+                    continue;
+                }
+                geo_debug_assert(Tadj(t,e) != Tadj(t,(e+1)%3));
+                index_t t2 = Tadj(t,e);
+                index_t e2 = Tadj_find(t2,t);
+                geo_debug_assert(Tadj(t2,e2) == t);
+            }
+#endif
+        }
+
+        void check_consistency() {
+#ifdef GEO_DEBUG            
+            for(index_t t=0; t<nT(); ++t) {
+                Tcheck(t);
+            }
+#endif            
+        }
+
         
         /**
          * \brief Sets a triangle adjacency relation
@@ -212,6 +287,7 @@ namespace GEO {
             geo_debug_assert(t2 < nT());
             index_t le = Tadj_find(t,t1);
             Tadj_set(t, le, t2);
+            Tcheck(t);            
         }
 
         /**
@@ -316,10 +392,7 @@ namespace GEO {
          *  touch it does not count)
          * \retval false otherwise
          */
-        bool seg_seg_intersect(
-            index_t i, index_t j, index_t k, index_t l
-        ) const;
-
+        bool seg_seg_intersect(index_t i,index_t j,index_t k,index_t l) const;
 
         /**
          * \brief Tests whether triange t and its neighbor accross edge 0 form 
@@ -329,7 +402,22 @@ namespace GEO {
          * \retval false otherwise
          */
         bool is_convex_quad(index_t t) const;
-    
+
+        template <class LIST> void debug_show_triangles(const LIST& L, const std::string& name) {
+            geo_argused(L);
+            geo_argused(name);
+#ifdef CDT_DEBUG            
+            std::cerr << name << "= ";
+            for(auto t: L) {
+                std::cerr << t
+                          << (Tis_marked(t) ? "" : "*")
+                          << "->(" << Tv(t,1) << "," << Tv(t,2) << ")"
+                          << " ";
+            }
+            std::cerr << std::endl;
+        }
+#endif
+        
     protected:
         vector<vec2> point_;
         vector<index_t> T_;
