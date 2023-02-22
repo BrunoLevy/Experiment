@@ -10,12 +10,6 @@
 #include <geogram/numerics/predicates.h>
 #include <set>
 
-#define CDT_DEBUG
-#ifdef CDT_DEBUG
-#define CDT_LOG(X) std::cerr << X << std::endl
-#else
-#define CDT_LOG(X)
-#endif
 
 namespace GEO {
 
@@ -250,6 +244,10 @@ namespace GEO {
 #endif
         }
 
+        /**
+         * \brief Consistency check for all the triangles
+         * \details in debug mode, aborts if inconsistency is detected
+         */        
         void check_consistency() {
 #ifdef GEO_DEBUG            
             for(index_t t=0; t<nT(); ++t) {
@@ -404,20 +402,6 @@ namespace GEO {
          */
         bool is_convex_quad(index_t t) const;
 
-        template <class LIST> void debug_show_triangles(const LIST& L, const std::string& name) {
-            geo_argused(L);
-            geo_argused(name);
-#ifdef CDT_DEBUG            
-            std::cerr << name << "= ";
-            for(auto t: L) {
-                std::cerr << t
-                          << (Tis_marked(t) ? "" : "*")
-                          << "->(" << Tv(t,1) << "," << Tv(t,2) << ")"
-                          << " ";
-            }
-            std::cerr << std::endl;
-        }
-#endif
         
     protected:
         vector<vec2> point_;
@@ -426,7 +410,6 @@ namespace GEO {
         vector<index_t> v2T_;
         vector<bool>    Tflags_;
         bool delaunay_;
-        std::set<Edge> constraints_;
     };
 
 }
