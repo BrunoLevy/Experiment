@@ -16,16 +16,12 @@ namespace GEO {
     // Under development, unfinished !!
     class Experiment_API CDT {
     public:
-        typedef std::pair<index_t, index_t> Edge;
-    
         CDT() : delaunay_(true) {
         }
     
         index_t insert(const vec2& P);
         
         void insert_constraint(index_t i, index_t j);
-        void insert_constraint_simple(index_t i, index_t j);
-        void insert_constraint_optimized(index_t i, index_t j);
 
         /**
          * \brief Specifies whether a constrained Delaunay
@@ -124,27 +120,6 @@ namespace GEO {
             geo_debug_assert(v < nv());
             return v2T_[v];
         }
-
-        /**
-         * \brief Gets a triangle incident to an edge
-         * \param[in] v1 , v2 the two vertices of the edge
-         * \return a triangle such that edge 0 corresponds to
-         *  v1 , v2.
-         * \details The function rotates the triangle if need
-         *  be (modifies the triangulation).
-         */
-        index_t eT(index_t v1, index_t v2);
-
-
-        /**
-         * \brief Flips an edge
-         * \details Unefficient, because it needs internally
-         *  to retreive a triangle incident to the edge, by
-         *  turning around one of the vertices.
-         * \param[in,out] E the edge to be flipped. On exit the
-         *  flipped edge.
-         */
-        void swap_edge(Edge& E);
 
         /**
          * \brief Saves this CDT to a geogram mesh file.
