@@ -8,6 +8,7 @@
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
+#include <set>
 
 #define CDT_DEBUG
 #ifdef CDT_DEBUG
@@ -424,7 +425,8 @@ namespace GEO {
         vector<index_t> Tadj_;
         vector<index_t> v2T_;
         vector<bool>    Tflags_;
-        bool delaunay_; 
+        bool delaunay_;
+        std::set<Edge> constraints_;
     };
 
 }
