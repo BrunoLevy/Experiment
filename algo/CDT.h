@@ -153,11 +153,41 @@ namespace GEO {
          *  will be pushed-back to Q, such that vT(t,1) and
          *  vT(t,2) are the extremities of the intersected edge.
          *  In addition, each triangle t is marked.
+         * \details If a vertex k that is exactly on the constraint
+         *  is found, then traversal stops there and k is returned.
+         *  One can find the remaining intersections by continuing
+         *  to call the function until \p j is returned.
+         * \return the first vertex on [i,j] encountered when
+         *  traversing the segment [i,j]. 
          */
-        void find_intersected_edges(
+        index_t find_intersected_edges(
             index_t i, index_t j, std::deque<index_t>& Q
         );
-    
+
+        /**
+         * \brief Constrains an edge by iteratively flipping
+         *  the intersected edges.
+         * \param[in] i , j the extremities of the edge
+         * \param[in] Q the list of intersected edges, computed
+         * \param[out] N the new edges, that need to be re-Delaunized
+         *  by find_intersected_edges()
+         */
+        void constrain_edges(
+            index_t i, index_t j,
+            std::deque<index_t>& Q, vector<index_t>& N
+        );
+
+
+        /**
+         * \brief Restore Delaunay condition for a set of
+         *  edges after inserting a constrained edge.
+         * \param[in] i , j the extremities of the constraint
+         * \param[in] N the edges for which Delaunay condition
+         *  should be restored.
+         */
+        void Delaunayize_edges(index_t i, index_t j, vector<index_t>& N);
+
+        
         /**
          * \brief Sets all the combinatorial information
          *  of a triangle

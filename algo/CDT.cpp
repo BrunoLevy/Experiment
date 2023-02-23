@@ -260,6 +260,7 @@ namespace GEO {
         return v;
     }
 
+    
     void CDT::insert_constraint(index_t i, index_t j) {
 
         CDT_LOG("insert constraint: " << i << "-" << j);
@@ -267,16 +268,162 @@ namespace GEO {
         std::deque<index_t> Q; // Queue of edges to constrain
         vector<index_t> N;     // New edges to re-Delaunize
 
-        // Step 1: find all the edges that have an intersection 
-        // with the constraint [i,j], enqueue them in Q.
-        find_intersected_edges(i,j,Q);
+        while(i != j) {
+            // Step 1: find all the edges that have an intersection 
+            // with the constraint [i,j], enqueue them in Q.
+            index_t k = find_intersected_edges(i,j,Q);
+            
+            // Step 2: constrain edges
+            constrain_edges(i,k,Q,N);
 
-        if(Q.size() != 0) {
-            save("before_enforce.geogram");
-            abort();
+            check_consistency();
+
+            // Step 3: restore Delaunay condition
+            if(delaunay_) {
+                Delaunayize_edges(i,k,N);
+            }
+
+            i = k;
         }
+    }
+
+    index_t CDT::find_intersected_edges(
+        index_t i, index_t j, std::deque<index_t>& Q
+    ) {
+
+        CDT_LOG("Find intersected edges: " << i << "-" << j);
         
-        // Step 2: constrain edges
+        // Walk from i to j, detect intersected edges and push
+        // them to Q. At each step, we are either on a triangle
+        // (generic case) or on a vertex (when we start from i, or
+        // when there is a vertex that is exactly on [i,k]).
+        // We keep track of the previous triangle or previous vertex
+        // to make sure we don't go backwards.
+        
+        index_t t_prev = NO_INDEX;
+        index_t v_prev = NO_INDEX;
+        index_t t      = NO_INDEX;
+        index_t v      = i;
+        index_t t_next = NO_INDEX;
+        index_t v_next = NO_INDEX;
+        bool finished = false;
+
+        while(!finished) {
+            CDT_LOG(
+                "   t=" << int(t) << " v=" << int(v) << "   "
+                "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "                
+            );
+            
+            if(t != NO_INDEX) {
+                // Generic case: we are on a triangle
+                geo_debug_assert(v == NO_INDEX);
+                // Are we arrived at j ? 
+                if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
+                    v_next = j;
+                    t_next = NO_INDEX;
+                    finished = true;
+                } else {
+                    // Test the three edges of the triangle
+                    for(index_t le = 0; le<3; ++le) {
+                        // Skip the edge we are coming from
+                        if(Tadj(t,le) == t_prev) {
+                            continue;
+                        }
+                        // Test edge e
+                        index_t v1 = Tv(t, (le + 1)%3);
+                        index_t v2 = Tv(t, (le + 2)%3);
+                        Sign o1 = orient2d(i,j,v1);
+                        Sign o2 = orient2d(i,j,v2);                        
+                        Sign o3 = orient2d(v1,v2,i);
+                        Sign o4 = orient2d(v1,v2,j);                            
+                        if(o1*o2 < 0 && o3*o4 < 0) {
+                            // [v1,v2] has a frank intersection with [i,j]
+                            Trot(t,le); // So that edge 0 is intersected edge
+                            Q.push_back(t);
+                            Tmark(t);
+                            CDT_LOG("   Intersection: t=" << t << " E=" << v1 << "-" << v2);
+                            t_next = Tadj(t,0);
+                            v_next = NO_INDEX;
+                            break;
+                        } else {
+                            // Special case: v1 or v2 is exactly on [i,j]
+                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
+                            if(o1 == ZERO && o3*o4 < 0) {
+                                t_next = NO_INDEX;
+                                v_next = v1;
+                                break;
+                            } else if(o2 == ZERO && o3*o4 < 0) {
+                                t_next = NO_INDEX;
+                                v_next = v2;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // We are on a vertex (when we start from i, or when there
+                // is a vertex exactly on [i,j]
+                geo_debug_assert(v != NO_INDEX);
+                // Test the triangles incident to v
+                for_each_T_around_v(
+                    v, [&](index_t t_around_v, index_t le) {
+                        // If triangle around vertex is the triangle
+                        // we came from, continue iteration around vertex
+                        if(t_around_v == t_prev) {
+                            return false;
+                        }
+                        index_t v1 = Tv(t_around_v, (le + 1)%3);
+                        index_t v2 = Tv(t_around_v, (le + 2)%3);
+                        // Are we arrived at j ? 
+                        if(v1 == j || v2 == j) {
+                            v_next = j;
+                            t_next = NO_INDEX;
+                            finished = true;
+                            return true;
+                        }
+                        Sign o1 = orient2d(i,j,v1);
+                        Sign o2 = orient2d(i,j,v2);                        
+                        Sign o3 = orient2d(v1,v2,i);
+                        Sign o4 = orient2d(v1,v2,j);                            
+                        if(o1*o2 < 0 && o3*o4 < 0) {
+                            Trot(t_around_v,le); // so that le becomes edge 0
+                            t_next = t_around_v;
+                            v_next = NO_INDEX;
+                            return true;
+                        } else {
+                            // Special case: v1 or v2 is exactly on [i,j]
+                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
+                            if(o1 == ZERO && o3*o4 < 0 && v1 != v_prev) {
+                                t_next = NO_INDEX;
+                                v_next = v1;
+                                return true;
+                            } else if(o2 == ZERO && o3*o4 < 0 && v2 != v_prev) {
+                                t_next = NO_INDEX;
+                                v_next = v2;
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                );
+            }
+            t_prev = t;
+            v_prev = v;
+            t = t_next;            
+            v = v_next;
+
+            if(v != NO_INDEX) {
+                return v;
+            }
+        }
+        return NO_INDEX;
+    }
+    
+    void CDT::constrain_edges(
+        index_t i, index_t j,
+        std::deque<index_t>& Q,
+        vector<index_t>& N
+    ) {
         while(Q.size() != 0) {
             index_t t1 = Q.back();
             Q.pop_back();
@@ -334,14 +481,9 @@ namespace GEO {
                 }
             }
         }
+    }
 
-        if(!delaunay_) {
-            return;
-        }
-
-        check_consistency();
-        
-        // Step 3: Restore CDT condition for new edges
+    void CDT::Delaunayize_edges(index_t i, index_t j, vector<index_t>& N) {
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
@@ -364,129 +506,9 @@ namespace GEO {
                 }
             }
         }
-    }
-
-    void CDT::find_intersected_edges(
-        index_t i, index_t j, std::deque<index_t>& Q
-    ) {
-        // Walk from i to j, detect intersected edges and push
-        // them to Q. At each step, we are either on a triangle
-        // (generic case) or on a vertex (when we start from i, or
-        // when there is a vertex that is exactly on [i,k]).
-        // We keep track of the previous triangle or previous vertex
-        // to make sure we don't go backwards.
-        
-        index_t t_prev = NO_INDEX;
-        index_t v_prev = NO_INDEX;
-        index_t t      = NO_INDEX;
-        index_t v      = i;
-        index_t t_next = NO_INDEX;
-        index_t v_next = NO_INDEX;
-        bool finished = false;
-
-        while(!finished) {
-            CDT_LOG(
-                "   t=" << int(t) << " v=" << int(v) << "   "
-                "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "                
-            );
-            
-            if(t != NO_INDEX) {
-                // Generic case: we are on a triangle
-                geo_debug_assert(v == NO_INDEX);
-                // Are we arrived at j ? 
-                if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
-                    finished = true;
-                } else {
-                    // Test the three edges of the triangle
-                    for(index_t le = 0; le<3; ++le) {
-                        // Skip the edge we are coming from
-                        if(Tadj(t,le) == t_prev) {
-                            continue;
-                        }
-                        // Test edge e
-                        index_t v1 = Tv(t, (le + 1)%3);
-                        index_t v2 = Tv(t, (le + 2)%3);
-                        Sign o1 = orient2d(i,j,v1);
-                        Sign o2 = orient2d(i,j,v2);                        
-                        Sign o3 = orient2d(v1,v2,i);
-                        Sign o4 = orient2d(v1,v2,j);                            
-                        if(o1*o2 < 0 && o3*o4 < 0) {
-                            // [v1,v2] has a frank intersection with [i,j]
-                            Trot(t,le); // So that edge 0 is intersected edge
-                            Q.push_back(t);
-                            Tmark(t);
-                            CDT_LOG("   Intersection: t=" << t << " E=" << v1 << "-" << v2);
-                            t_next = Tadj(t,0);
-                            v_next = NO_INDEX;
-                            break;
-                        } else {
-                            // Special case: v1 or v2 is exactly on [i,j]
-                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
-                            if(o1 == ZERO && o3*o4 < 0) {
-                                t_next = NO_INDEX;
-                                v_next = v1;
-                                break;
-                            } else if(o2 == ZERO && o3*o4 < 0) {
-                                t_next = NO_INDEX;
-                                v_next = v2;
-                                break;
-                            }
-                        }
-                    }
-                }
-            } else {
-                // We are on a vertex (when we start from i, or when there
-                // is a vertex exactly on [i,j]
-                geo_debug_assert(v != NO_INDEX);
-                // Test the triangles incident to v
-                for_each_T_around_v(
-                    v, [&](index_t t_around_v, index_t le) {
-                        // If triangle around vertex is the triangle
-                        // we came from, continue iteration around vertex
-                        if(t_around_v == t_prev) {
-                            return false;
-                        }
-                        index_t v1 = Tv(t_around_v, (le + 1)%3);
-                        index_t v2 = Tv(t_around_v, (le + 2)%3);
-                        // Are we arrived at j ? 
-                        if(v1 == j || v2 == j) {
-                            finished = true;
-                            return true;
-                        }
-                        Sign o1 = orient2d(i,j,v1);
-                        Sign o2 = orient2d(i,j,v2);                        
-                        Sign o3 = orient2d(v1,v2,i);
-                        Sign o4 = orient2d(v1,v2,j);                            
-                        if(o1*o2 < 0 && o3*o4 < 0) {
-                            Trot(t_around_v,le); // so that le becomes edge 0
-                            t_next = t_around_v;
-                            v_next = NO_INDEX;
-                            return true;
-                        } else {
-                            // Special case: v1 or v2 is exactly on [i,j]
-                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
-                            if(o1 == ZERO && o3*o4 < 0 && v1 != v_prev) {
-                                t_next = NO_INDEX;
-                                v_next = v1;
-                                return true;
-                            } else if(o2 == ZERO && o3*o4 < 0 && v2 != v_prev) {
-                                t_next = NO_INDEX;
-                                v_next = v2;
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                );
-            }
-            t_prev = t;
-            v_prev = v;
-            t = t_next;            
-            v = v_next;
-        }
+        N.resize(0);
     }
     
-
 /*    
     void CDT::find_intersected_edges(
         index_t i, index_t j, std::deque<index_t>& Q
