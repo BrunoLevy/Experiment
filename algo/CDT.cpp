@@ -266,7 +266,7 @@ namespace GEO {
 
             // Step 3: restore Delaunay condition
             if(delaunay_) {
-                Delaunayize_edges(i,k,N);
+                Delaunayize_edges(N);
             }
 
             check_consistency();            
@@ -419,6 +419,19 @@ namespace GEO {
         std::deque<index_t>& Q,
         vector<index_t>& N
     ) {
+        
+        auto move_from_Q_to_N = [&](index_t t) {
+            Tunmark(t);
+            if(
+                (Tv(t,1) == i && Tv(t,2) == j) ||
+                (Tv(t,1) == j && Tv(t,2) == i)
+            ) {
+                Tconstrain_edge(t,0);
+            } else {
+                N.push_back(t);
+            }
+        };
+        
         while(Q.size() != 0) {
             index_t t1 = Q.back();
             Q.pop_back();
@@ -441,9 +454,8 @@ namespace GEO {
                 
                 swap_edge(t1);
                 if(no_isect) {
-                    Tunmark(t1);
                     Trot(t1,2); // so that new edge is edge 0
-                    N.push_back(t1);
+                    move_from_Q_to_N(t1);
                 } else {
                     // See comment at beginning of file (a variation in Sloan's
                     // method that makes better use of the combinatorics)
@@ -451,9 +463,8 @@ namespace GEO {
                     if(t2v0_t1v2) {
                         if(o >= 0) {
                             // t1: no isect   t2: isect
-                            Tunmark(t1);
                             Trot(t1,2); // so that new edge is edge 0
-                            N.push_back(t1);
+                            move_from_Q_to_N(t1);
                         } else {
                             // t1: isect   t2: no isect
                             Trot(t1,2); // so that intersected edge is edge 0
@@ -467,9 +478,8 @@ namespace GEO {
                             Q.push_front(t1);                            
                         } else {
                             // t1: isect   t2: no isect
-                            Tunmark(t2);
                             Trot(t2,1); // so that new edge is edge 0
-                            N.push_back(t2);
+                            move_from_Q_to_N(t2);
                             Q.push_front(t1);
                         }
                     }
@@ -478,19 +488,14 @@ namespace GEO {
         }
     }
 
-    void CDTBase::Delaunayize_edges(index_t i, index_t j, vector<index_t>& N) {
+    void CDTBase::Delaunayize_edges(vector<index_t>& N) {
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
             for(index_t t1: N) {
+                geo_debug_assert(!Tedge_is_constrained(t1,0));
                 index_t v1 = Tv(t1,1);
-                index_t v2 = Tv(t1,2); 
-                if(
-                    (v1 == i && v2 == j) ||
-                    (v2 == i && v1 == j)
-                ) {
-                    continue;
-                }
+                index_t v2 = Tv(t1,2);
                 index_t v0 = Tv(t1,0);
                 index_t t2 = Tadj(t1,0);
                 index_t e2 = Tadj_find(t2,t1);
@@ -630,7 +635,7 @@ namespace GEO {
         };
         for(index_t c: M.facet_corners) {
             tex_coord[2*c]   = triangle_tex[c%3][0];
-            tex_coord[2*c+1] = triangle_tex[c%3][1];            
+            tex_coord[2*c+1] = triangle_tex[c%3][1];
         }
         mesh_save(M, filename);
     }

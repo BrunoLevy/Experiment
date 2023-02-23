@@ -188,7 +188,7 @@ namespace GEO {
          * \param[in] N the edges for which Delaunay condition
          *  should be restored.
          */
-        void Delaunayize_edges(index_t i, index_t j, vector<index_t>& N);
+        void Delaunayize_edges(vector<index_t>& N);
 
         
         /**
@@ -245,6 +245,12 @@ namespace GEO {
                 T_[i],    T_[j],    T_[k],
                 Tadj_[i], Tadj_[j], Tadj_[k]
             );
+            uint8_t ci = Tcflags_[i];
+            uint8_t cj = Tcflags_[j];
+            uint8_t ck = Tcflags_[k];
+            Tcflags_[3*t]   = ci;
+            Tcflags_[3*t+1] = cj;
+            Tcflags_[3*t+2] = ck;            
         }
 
         /**
@@ -332,22 +338,65 @@ namespace GEO {
          */
         index_t Tnew() {
             index_t t = nT();
-            T_.resize((t+1)*3, index_t(-1));
-            Tadj_.resize((t+1)*3, index_t(-1));
+            index_t nc = (t+1)*3; // new number of corners
+            T_.resize(nc, NO_INDEX);
+            Tadj_.resize(nc, NO_INDEX);
+            Tcflags_.resize(nc, 0);
             Tflags_.resize(t+1,0);
             return t;
         }
 
+        /**
+         * \brief Marks a triangle as intersected by the constraint
+         */
         void Tmark(index_t t) {
+            geo_debug_assert(t < nT());            
             Tflags_[t] = 1;
         }
 
+        /**
+         * \brief Unmarks a triangle as intersected by the constraint
+         */
         void Tunmark(index_t t) {
+            geo_debug_assert(t < nT());            
             Tflags_[t] = 0;
         }
 
+        /**
+         * \brief Tests whether a triangle is marked as intersected
+         */
         bool Tis_marked(index_t t) {
-            return Tflags_[t] == 1;
+            geo_debug_assert(t < nT());            
+            return (Tflags_[t] != 0);
+        }
+
+        /**
+         * \brief Tests whether an edge is constrained
+         * \param[in] t a triangle
+         * \param[in] le local edge index, in 0,1,2
+         * \retval true if the edge is constrained
+         * \retval false otherwise
+         */
+        bool Tedge_is_constrained(index_t t, index_t le) const {
+            geo_debug_assert(t < nT());
+            geo_debug_assert(le < 3);
+            return (Tcflags_[3*t+le] != 0);
+        }
+
+        /**
+         * \brief Sets an edge as constrained
+         * \param[in] t a triangle
+         * \param[in] le local edge index, in 0,1,2
+         */
+        void Tconstrain_edge(index_t t, index_t le) {
+            geo_debug_assert(t < nT());
+            geo_debug_assert(le < 3);
+            Tcflags_[3*t+le] = 1;
+            index_t t2 = Tadj(t,le);
+            if(t2 != NO_INDEX) {
+                index_t le2 = Tadj_find(t2,t);
+                Tcflags_[3*t2+le2] = 1;                
+            }
         }
     
         /**
@@ -443,12 +492,13 @@ namespace GEO {
         
     protected:
         index_t nv_;
-        vector<index_t> T_;
-        vector<index_t> Tadj_;
-        vector<index_t> v2T_;
-        vector<bool>    Tflags_;
-        bool delaunay_;
-        Sign orient_012_; 
+        vector<index_t> T_;       /**< triangles vertices array              */
+        vector<index_t> Tadj_;    /**< triangles adjacency array             */
+        vector<index_t> v2T_;     /**< vertex to triangle back pointer       */
+        vector<uint8_t> Tflags_;  /**< triangle flags                        */
+        vector<uint8_t> Tcflags_; /**< triangle corner flags                 */
+        bool delaunay_;           /**< if set, compute a CDT, else just a CT */
+        Sign orient_012_;         /**< global triangles orientation          */
     };
 
     /*****************************************************************/
