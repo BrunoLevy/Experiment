@@ -2,7 +2,6 @@
  *
  */
 
-
 // Reference: S. W. Sloan, a fast algorithm for generating
 // constrained Delaunay triangulation, 1992,
 // Computers and Structures
@@ -31,32 +30,13 @@
 
 
 // TODO:
-// 2) constaints walking: manage points on constraint
-//    Two options: walk around vertex
-//                 or SOS
-//    SOS: need to re-read original article (context
-//     is different from RVD is PCK that I'm used to)
-//    walk around vertex: we can do that, but we need to
-//     keep track of previous triangle *and* previous vertex
-//     (because there can be two triangles that touch the
-//      same vertex)
-//
-//    TODO OK, now we need to change it a bit, because the
-//    insertion supposes that [i,j] is the constrained edge,
-//    and sometimes it can be an "intermediary" edge...
-//     find_intersected_edges(v1,v2,Q) will return the vertex
-//     "where it went so far", can be v2 (then we are done) or
-//     can be an intermediary vertex 'v'. If it is the case,
-//     then we insert [v1,v] and continue with [v,v2]
-// 
-// 3) manage intersecting constraints on the fly
-// 4) doubly connected triangle list for S,Q,N
-// 5) parameterization by predicates orient2d and incircle
-// 6) can we avoid computing o ? (stored in Tflags)
-// 7) during constraint walk, do we need 4 orient tests ? 
-// 8) predicate cache:
+// 1) manage intersecting constraints on the fly
+// 2) doubly connected triangle list for S,Q,N
+// 3) can we avoid computing o ? (stored in Tflags)
+// 4) predicate cache:
 //     - test whether needed.
 //     - find a "noalloc" implementation (std::make_heap ?)
+// 5) management of boundary
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -68,8 +48,7 @@
 #include <geogram/basic/algorithm.h>
 #include <stack>
 
-
-#define CDT_DEBUG
+// #define CDT_DEBUG
 #ifdef CDT_DEBUG
 #define CDT_LOG(X) std::cerr << X << std::endl
 #else
@@ -99,20 +78,24 @@ namespace {
 
 namespace GEO {
 
-    index_t CDT::insert(const vec2& P) {
-        index_t v = point_.size();
-        CDT_LOG("insert point: " << v );
-        
-        point_.push_back(P);
-        v2T_.push_back(index_t(-1));
+    CDTBase::CDTBase() : nv_(0), delaunay_(true) {
+    }
 
+    CDTBase::~CDTBase() {
+    }
+    
+    index_t CDTBase::insert() {
+        index_t v = nv();
+        v2T_.push_back(index_t(-1));
+        ++nv_;
+        
         // The big triangle comes first
-        if(point_.size() == 3) {
+        if(nv_ == 3) {
             index_t t0 = Tnew();
             Tset(t0, 0, 1, 2, index_t(-1), index_t(-1), index_t(-1));
             orient_012_ = orient2d(0,1,2);
         }
-        if(point_.size() <= 3) {
+        if(nv_ <= 3) {
             return v;
         }
         
@@ -133,6 +116,8 @@ namespace GEO {
                 geo_debug_assert(o3 !=ZERO);
                 v = Tv(t1,2);
             }
+            v2T_.pop_back();
+            --nv_;
             return v;
         }
 
@@ -262,7 +247,7 @@ namespace GEO {
     }
 
     
-    void CDT::insert_constraint(index_t i, index_t j) {
+    void CDTBase::insert_constraint(index_t i, index_t j) {
 
         CDT_LOG("insert constraint: " << i << "-" << j);
         
@@ -290,7 +275,7 @@ namespace GEO {
         }
     }
 
-    index_t CDT::find_intersected_edges(
+    index_t CDTBase::find_intersected_edges(
         index_t i, index_t j, std::deque<index_t>& Q
     ) {
 
@@ -319,12 +304,57 @@ namespace GEO {
         while(v == NO_INDEX || v == i) {
             CDT_LOG(
                 "   t=" << int(t) << " v=" << int(v) << "   "
-                "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "                
+                "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "
             );
-            
-            if(t != NO_INDEX) {
+
+            if(v != NO_INDEX) {
+                // We are on a vertex (when we start from i, or when there
+                // is a vertex exactly on [i,j]
+                geo_debug_assert(t == NO_INDEX);
+                // Test the triangles incident to v
+                for_each_T_around_v(
+                    v, [&](index_t t_around_v, index_t le) {
+                        // If triangle around vertex is the triangle
+                        // we came from, continue iteration around vertex
+                        if(t_around_v == t_prev) {
+                            return false;
+                        }
+                        index_t v1 = Tv(t_around_v, (le + 1)%3);
+                        index_t v2 = Tv(t_around_v, (le + 2)%3);
+                        // Are we arrived at j ? 
+                        if(v1 == j || v2 == j) {
+                            v_next = j;
+                            t_next = NO_INDEX;
+                            return true;
+                        }
+                        Sign o1 = orient2d(i,j,v1);
+                        Sign o2 = orient2d(i,j,v2);                        
+                        Sign o3 = orient2d(v1,v2,j);
+                        Sign o4 = orient_012_; //equivalent to orient2d(v1,v2,i)
+                        if(o1*o2 < 0 && o3*o4 < 0) {
+                            Trot(t_around_v,le); // so that le becomes edge 0
+                            t_next = t_around_v;
+                            v_next = NO_INDEX;
+                            return true;
+                        } else {
+                            // Special case: v1 or v2 is exactly on [i,j]
+                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
+                            if(o1 == ZERO && o3*o4 < 0 && v1 != v_prev) {
+                                t_next = NO_INDEX;
+                                v_next = v1;
+                                return true;
+                            } else if(o2 == ZERO && o3*o4 < 0 && v2 != v_prev) {
+                                t_next = NO_INDEX;
+                                v_next = v2;
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                );
+            } else {
                 // Generic case: we are on a triangle
-                geo_debug_assert(v == NO_INDEX);
+                geo_debug_assert(t != NO_INDEX);
                 // Are we arrived at j ? 
                 if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
                     v_next = j;
@@ -351,7 +381,9 @@ namespace GEO {
                             Trot(t,le); // So that edge 0 is intersected edge
                             Q.push_back(t);
                             Tmark(t);
-                            CDT_LOG("   Intersection: t=" << t << " E=" << v1 << "-" << v2);
+                            CDT_LOG("   Intersection: t="
+                                    << t << " E=" << v1 << "-" << v2
+                            );
                             t_next = Tadj(t,0);
                             v_next = NO_INDEX;
                             break;
@@ -370,51 +402,6 @@ namespace GEO {
                         }
                     }
                 }
-            } else {
-                // We are on a vertex (when we start from i, or when there
-                // is a vertex exactly on [i,j]
-                geo_debug_assert(v != NO_INDEX);
-                // Test the triangles incident to v
-                for_each_T_around_v(
-                    v, [&](index_t t_around_v, index_t le) {
-                        // If triangle around vertex is the triangle
-                        // we came from, continue iteration around vertex
-                        if(t_around_v == t_prev) {
-                            return false;
-                        }
-                        index_t v1 = Tv(t_around_v, (le + 1)%3);
-                        index_t v2 = Tv(t_around_v, (le + 2)%3);
-                        // Are we arrived at j ? 
-                        if(v1 == j || v2 == j) {
-                            v_next = j;
-                            t_next = NO_INDEX;
-                            return true;
-                        }
-                        Sign o1 = orient2d(i,j,v1);
-                        Sign o2 = orient2d(i,j,v2);                        
-                        Sign o3 = orient2d(v1,v2,j);
-                        Sign o4 = orient_012_; // equivalent to orient2d(v1,v2,i) 
-                        if(o1*o2 < 0 && o3*o4 < 0) {
-                            Trot(t_around_v,le); // so that le becomes edge 0
-                            t_next = t_around_v;
-                            v_next = NO_INDEX;
-                            return true;
-                        } else {
-                            // Special case: v1 or v2 is exactly on [i,j]
-                            geo_debug_assert(o1 != ZERO || o2 != ZERO);
-                            if(o1 == ZERO && o3*o4 < 0 && v1 != v_prev) {
-                                t_next = NO_INDEX;
-                                v_next = v1;
-                                return true;
-                            } else if(o2 == ZERO && o3*o4 < 0 && v2 != v_prev) {
-                                t_next = NO_INDEX;
-                                v_next = v2;
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                );
             }
             t_prev = t;
             v_prev = v;
@@ -427,7 +414,7 @@ namespace GEO {
         return NO_INDEX;
     }
     
-    void CDT::constrain_edges(
+    void CDTBase::constrain_edges(
         index_t i, index_t j,
         std::deque<index_t>& Q,
         vector<index_t>& N
@@ -491,7 +478,7 @@ namespace GEO {
         }
     }
 
-    void CDT::Delaunayize_edges(index_t i, index_t j, vector<index_t>& N) {
+    void CDTBase::Delaunayize_edges(index_t i, index_t j, vector<index_t>& N) {
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
@@ -517,7 +504,7 @@ namespace GEO {
         N.resize(0);
     }
     
-    index_t CDT::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
+    index_t CDTBase::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
         // This version: linear scan
         // TODO: faster version
         for(index_t t=0; t<nT(); ++t) {
@@ -534,7 +521,7 @@ namespace GEO {
         geo_assert_not_reached;
     }
 
-    void CDT::swap_edge(index_t t1) {
+    void CDTBase::swap_edge(index_t t1) {
         index_t v1 = Tv(t1,0);
         index_t v2 = Tv(t1,1);
         index_t v3 = Tv(t1,2);                        
@@ -557,18 +544,7 @@ namespace GEO {
         Tcheck(t2);        
     }
     
-    Sign CDT::orient2d(index_t i, index_t j, index_t k) const {
-        return PCK::orient_2d(point_[i], point_[j], point_[k]);
-    }
-
-    Sign CDT::incircle(index_t i, index_t j, index_t k, index_t l) const {
-        return PCK::in_circle_2d_SOS(
-            point_[i].data(), point_[j].data(), point_[k].data(),
-            point_[l].data()
-        );
-    }
-
-    bool CDT::is_convex_quad(index_t t) const {
+    bool CDTBase::is_convex_quad(index_t t) const {
         index_t v1 = Tv(t,0);
         index_t v2 = Tv(t,1);
         index_t v3 = Tv(t,2);        
@@ -589,6 +565,46 @@ namespace GEO {
         );
         
         return result;
+    }
+
+    /********************************************************/
+
+    Sign CDT::orient2d(index_t i, index_t j, index_t k) const {
+        geo_debug_assert(i < nv());
+        geo_debug_assert(j < nv());
+        geo_debug_assert(k < nv());        
+        return PCK::orient_2d(point_[i], point_[j], point_[k]);
+    }
+
+    Sign CDT::incircle(index_t i, index_t j, index_t k, index_t l) const {
+        geo_debug_assert(i < nv());
+        geo_debug_assert(j < nv());
+        geo_debug_assert(k < nv());
+        geo_debug_assert(l < nv());                
+        return PCK::in_circle_2d_SOS(
+            point_[i].data(), point_[j].data(), point_[k].data(),
+            point_[l].data()
+        );
+    }
+
+    index_t CDT::create_intersection(
+        index_t i, index_t j, index_t k, index_t l
+    ) {
+        geo_debug_assert(i < nv());
+        geo_debug_assert(j < nv());
+        geo_debug_assert(k < nv());
+        geo_debug_assert(l < nv());                
+        vec2 U = point_[j] - point_[i];
+        vec2 V = point_[l] - point_[k];
+        vec2 D = point_[j] - point_[i];
+        double delta = det(U,V);
+        double t = det(D,V)/delta;
+        vec2 P = point_[i] + t*U;
+        point_.push_back(P);
+        v2T_.push_back(NO_INDEX);
+        index_t v = nv_;
+        ++nv_;
+        return v;
     }
     
     void CDT::save(const std::string& filename) const {

@@ -13,25 +13,21 @@
 namespace GEO {
 
     /**
-     * \brief Constrained Delaunay triangulation
+     * \brief Base class for constrained Delaunay triangulation
      */
-    class Experiment_API CDT {
+    class Experiment_API CDTBase {
     public:
         enum { NO_INDEX = index_t(-1) };
 
         /**
-         * \brief CDT constructor
+         * \brief CDTBase constructor
          */
-        CDT() : delaunay_(true) {
-        }
+        CDTBase();
 
         /**
-         * \brief Inserts a point
-         * \details Start by inserting three points forming
-         *  a large triangle around all the other points
-         * \return the index of the created point
+         * \brief CDTBase destructor
          */
-        index_t insert(const vec2& P);
+        virtual ~CDTBase();
 
         /**
          * \brief Inserts a constraint
@@ -62,7 +58,7 @@ namespace GEO {
          * \brief Gets the number of vertices
          */
         index_t nv() const {
-            return point_.size();
+            return nv_;
         }
     
         /**
@@ -142,10 +138,17 @@ namespace GEO {
          * \brief Saves this CDT to a geogram mesh file.
          * \param[in] filename where to save this CDT
          */
-        void save(const std::string& filename) const;
+        virtual void save(const std::string& filename) const = 0;
     
     protected:
-
+        /**
+         * \brief Inserts a new point 
+         * \details Start by inserting three points forming
+         *  a large triangle around all the other points
+         * \return the index of the created point
+         */
+        index_t insert();
+    
         /**
          * \brief Finds the edges intersected by a constraint
          * \param[in] i , j the two vertices of the constraint
@@ -398,11 +401,20 @@ namespace GEO {
         index_t locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const;
         
         /**
+         * \brief Tests whether triange t and its neighbor accross edge 0 form 
+         *  a strictly convex quad
+         * \retval true if triange \p t and its neighbor accross edge 0 form
+         *  a strictly convex quad
+         * \retval false otherwise
+         */
+        bool is_convex_quad(index_t t) const;
+
+        /**
          * \brief Orientation predicate
          * \param[in] i , j , k three vertices
          * \return the sign of det(pj-pi,pk-pi)
          */
-        Sign orient2d(index_t i, index_t j, index_t k) const;
+        virtual Sign orient2d(index_t i,index_t j,index_t k) const=0;
 
         /**
          * \brief Incircle predicate
@@ -415,19 +427,22 @@ namespace GEO {
          * \retval NEGATIVE if \p l is outside the circumscribed circle of
          *  the triangle
          */
-        Sign incircle(index_t i, index_t j, index_t k, index_t l) const;
+        virtual Sign incircle(index_t i,index_t j,index_t k,index_t l) const=0;
 
         /**
-         * \brief Tests whether triange t and its neighbor accross edge 0 form 
-         *  a strictly convex quad
-         * \retval true if triange \p t and its neighbor accross edge 0 form
-         *  a strictly convex quad
-         * \retval false otherwise
+         * \brief Given two segments that have an intersection, create the
+         *  intersection
+         * \param[in] i , j the vertices of the first segment
+         * \param[in] k , l the vertices of the second segment
+         * \return the index of a newly created vertex that corresponds to
+         *  the intersection between [\p i , \p j] and [\p k , \p l]
          */
-        bool is_convex_quad(index_t t) const;
+        virtual index_t create_intersection(
+            index_t i,index_t j,index_t k,index_t l
+        ) = 0;
         
     protected:
-        vector<vec2> point_;
+        index_t nv_;
         vector<index_t> T_;
         vector<index_t> Tadj_;
         vector<index_t> v2T_;
@@ -436,6 +451,59 @@ namespace GEO {
         Sign orient_012_; 
     };
 
+    /*****************************************************************/
+    
+    /**
+     * \brief Constrained Delaunay triangulation
+     */
+    class Experiment_API CDT: public CDTBase {
+    public:
+
+        /**
+         * \brief Inserts a point
+         * \details Start by inserting three points forming
+         *  a large triangle around all the other points
+         * \return the index of the created point
+         */
+        index_t insert(const vec2& p) {
+            point_.push_back(p);
+            index_t v = CDTBase::insert();
+            // If inserted point already existed in
+            // triangulation, then nv() did not increase
+            if(point_.size() > nv()) {
+                point_.pop_back();
+            }
+            return v;
+        }
+
+        /**
+         * \copydoc CDTBase::save()
+         */
+        void save(const std::string& filename) const override;
+        
+    protected:
+        /**
+         * \copydoc CDTBase::orient_2d()
+         */
+        Sign orient2d(index_t i, index_t j, index_t k) const override;
+
+        /**
+         * \copydoc CDTBase::incircle()
+         */
+        Sign incircle(index_t i,index_t j,index_t k,index_t l) const override;
+
+        /**
+         * \copydoc CDTBase::create_intersection()
+         */
+        index_t create_intersection(
+            index_t i,index_t j,index_t k,index_t l
+        ) override;
+        
+    protected:
+        vector<vec2> point_;
+    };
+
+    /*****************************************************************/    
 }
 
 #endif
