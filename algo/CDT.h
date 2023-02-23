@@ -433,6 +433,7 @@ namespace GEO {
         vector<index_t> v2T_;
         vector<bool>    Tflags_;
         bool delaunay_;
+        Sign orient_012_; 
     };
 
 }

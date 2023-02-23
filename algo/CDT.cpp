@@ -110,6 +110,7 @@ namespace GEO {
         if(point_.size() == 3) {
             index_t t0 = Tnew();
             Tset(t0, 0, 1, 2, index_t(-1), index_t(-1), index_t(-1));
+            orient_012_ = orient2d(0,1,2);
         }
         if(point_.size() <= 3) {
             return v;
@@ -283,6 +284,8 @@ namespace GEO {
                 Delaunayize_edges(i,k,N);
             }
 
+            check_consistency();            
+
             i = k;
         }
     }
@@ -306,9 +309,14 @@ namespace GEO {
         index_t v      = i;
         index_t t_next = NO_INDEX;
         index_t v_next = NO_INDEX;
-        bool finished = false;
 
-        while(!finished) {
+        // We stop at the first encountered vertex
+        // The function could be also used to traverse
+        // the whole intersected segment, but doing it
+        // like that is better to schedule constraint
+        // enforcement / re-Delaunay, especially when
+        // new vertices are inserted.
+        while(v == NO_INDEX || v == i) {
             CDT_LOG(
                 "   t=" << int(t) << " v=" << int(v) << "   "
                 "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "                
@@ -321,7 +329,6 @@ namespace GEO {
                 if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
                     v_next = j;
                     t_next = NO_INDEX;
-                    finished = true;
                 } else {
                     // Test the three edges of the triangle
                     for(index_t le = 0; le<3; ++le) {
@@ -329,14 +336,17 @@ namespace GEO {
                         if(Tadj(t,le) == t_prev) {
                             continue;
                         }
-                        // Test edge e
+                        // Test whether [v1,v2] intersects the
+                        // support line of (i,j). No need to test
+                        // the *segment* [i,j]: we know the line enters
+                        // the triangle, it is how we came here,
+                        // and we know it leaves it, else j would
+                        // have been one of the triangle's vertices.
                         index_t v1 = Tv(t, (le + 1)%3);
                         index_t v2 = Tv(t, (le + 2)%3);
                         Sign o1 = orient2d(i,j,v1);
                         Sign o2 = orient2d(i,j,v2);                        
-                        Sign o3 = orient2d(v1,v2,i);
-                        Sign o4 = orient2d(v1,v2,j);                            
-                        if(o1*o2 < 0 && o3*o4 < 0) {
+                        if(o1*o2 < 0) {
                             // [v1,v2] has a frank intersection with [i,j]
                             Trot(t,le); // So that edge 0 is intersected edge
                             Q.push_back(t);
@@ -348,11 +358,11 @@ namespace GEO {
                         } else {
                             // Special case: v1 or v2 is exactly on [i,j]
                             geo_debug_assert(o1 != ZERO || o2 != ZERO);
-                            if(o1 == ZERO && o3*o4 < 0) {
+                            if(o1 == ZERO) {
                                 t_next = NO_INDEX;
                                 v_next = v1;
                                 break;
-                            } else if(o2 == ZERO && o3*o4 < 0) {
+                            } else if(o2 == ZERO) {
                                 t_next = NO_INDEX;
                                 v_next = v2;
                                 break;
@@ -378,13 +388,12 @@ namespace GEO {
                         if(v1 == j || v2 == j) {
                             v_next = j;
                             t_next = NO_INDEX;
-                            finished = true;
                             return true;
                         }
                         Sign o1 = orient2d(i,j,v1);
                         Sign o2 = orient2d(i,j,v2);                        
-                        Sign o3 = orient2d(v1,v2,i);
-                        Sign o4 = orient2d(v1,v2,j);                            
+                        Sign o3 = orient2d(v1,v2,j);
+                        Sign o4 = orient_012_; // equivalent to orient2d(v1,v2,i) 
                         if(o1*o2 < 0 && o3*o4 < 0) {
                             Trot(t_around_v,le); // so that le becomes edge 0
                             t_next = t_around_v;
@@ -411,7 +420,6 @@ namespace GEO {
             v_prev = v;
             t = t_next;            
             v = v_next;
-
             if(v != NO_INDEX) {
                 return v;
             }
