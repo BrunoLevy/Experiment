@@ -8,19 +8,36 @@
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
-#include <set>
-
+#include <deque>
 
 namespace GEO {
 
-    // Under development, unfinished !!
+    /**
+     * \brief Constrained Delaunay triangulation
+     */
     class Experiment_API CDT {
     public:
+        enum { NO_INDEX = index_t(-1) };
+
+        /**
+         * \brief CDT constructor
+         */
         CDT() : delaunay_(true) {
         }
-    
+
+        /**
+         * \brief Inserts a point
+         * \details Start by inserting three points forming
+         *  a large triangle around all the other points
+         * \return the index of the created point
+         */
         index_t insert(const vec2& P);
-        
+
+        /**
+         * \brief Inserts a constraint
+         * \param[in] i , j the indices of the two vertices
+         *  of the constrained segment
+         */
         void insert_constraint(index_t i, index_t j);
 
         /**
@@ -128,16 +145,18 @@ namespace GEO {
         void save(const std::string& filename) const;
     
     protected:
-    
+
         /**
-         * \brief Swaps an edge.
-         * \details Swaps edge 0 of \p t1.
-         *    Vertex 0 of \p t1 is vertex 0 of
-         *    the two new triangles.
-         * \param[in] t1 a triangle index. Its edge
-         *    opposite to vertex 0 is swapped
+         * \brief Finds the edges intersected by a constraint
+         * \param[in] i , j the two vertices of the constraint
+         * \param[out] Q for each intersected edge, a triangle t
+         *  will be pushed-back to Q, such that vT(t,1) and
+         *  vT(t,2) are the extremities of the intersected edge.
+         *  In addition, each triangle t is marked.
          */
-        void swap_edge(index_t t1);
+        void find_intersected_edges(
+            index_t i, index_t j, std::deque<index_t>& Q
+        );
     
         /**
          * \brief Sets all the combinatorial information
@@ -195,6 +214,16 @@ namespace GEO {
             );
         }
 
+        /**
+         * \brief Swaps an edge.
+         * \details Swaps edge 0 of \p t1.
+         *    Vertex 0 of \p t1 is vertex 0 of
+         *    the two new triangles.
+         * \param[in] t1 a triangle index. Its edge
+         *    opposite to vertex 0 is swapped
+         */
+        void swap_edge(index_t t1);
+    
         /**
          * \brief Consistency check for a triangle
          * \details in debug mode, aborts if inconsistency is detected
@@ -294,7 +323,7 @@ namespace GEO {
          * \param[in] v the vertex
          * \param[in] doit the function, that takes as argument the 
          *  current triangle t and the local index lv of \p v in t. 
-         *  The function returns true if  iteration is finished and can be 
+         *  The function returns true if iteration is finished and can be 
          *  exited, false otherwise.
          */
         void for_each_T_around_v(
@@ -362,12 +391,30 @@ namespace GEO {
          * \brief Tests whether two segments intersect
          * \param[in] i , j the extremities of the first segment
          * \param[in] k , l the extremities of the second segment
+         * \param[out] o1 orientation of \p k relative to segment \p i \p j
+         * \param[out] o2 orientation of \p l relative to segment \p i \p j
          * \retval true if the two segments have an intersection (if they just
          *  touch it does not count)
          * \retval false otherwise
          */
-        bool seg_seg_intersect(index_t i,index_t j,index_t k,index_t l) const;
+        bool seg_seg_intersect(
+            index_t i,index_t j,index_t k,index_t l, Sign& o1, Sign& o2
+        ) const;
 
+        /**
+         * \brief Tests whether two segments intersect
+         * \param[in] i , j the extremities of the first segment
+         * \param[in] k , l the extremities of the second segment
+         * \retval true if the two segments have an intersection (if they just
+         *  touch it does not count)
+         * \retval false otherwise
+         */
+        bool seg_seg_intersect(index_t i,index_t j,index_t k,index_t l) const {
+            Sign o1;
+            Sign o2;
+            return seg_seg_intersect(i,j,k,l,o1,o2);
+        }
+        
         /**
          * \brief Tests whether triange t and its neighbor accross edge 0 form 
          *  a strictly convex quad
