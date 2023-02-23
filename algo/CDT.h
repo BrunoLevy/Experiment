@@ -418,34 +418,6 @@ namespace GEO {
         Sign incircle(index_t i, index_t j, index_t k, index_t l) const;
 
         /**
-         * \brief Tests whether two segments intersect
-         * \param[in] i , j the extremities of the first segment
-         * \param[in] k , l the extremities of the second segment
-         * \param[out] o1 orientation of \p k relative to segment \p i \p j
-         * \param[out] o2 orientation of \p l relative to segment \p i \p j
-         * \retval true if the two segments have an intersection (if they just
-         *  touch it does not count)
-         * \retval false otherwise
-         */
-        bool seg_seg_intersect(
-            index_t i,index_t j,index_t k,index_t l, Sign& o1, Sign& o2
-        ) const;
-
-        /**
-         * \brief Tests whether two segments intersect
-         * \param[in] i , j the extremities of the first segment
-         * \param[in] k , l the extremities of the second segment
-         * \retval true if the two segments have an intersection (if they just
-         *  touch it does not count)
-         * \retval false otherwise
-         */
-        bool seg_seg_intersect(index_t i,index_t j,index_t k,index_t l) const {
-            Sign o1;
-            Sign o2;
-            return seg_seg_intersect(i,j,k,l,o1,o2);
-        }
-        
-        /**
          * \brief Tests whether triange t and its neighbor accross edge 0 form 
          *  a strictly convex quad
          * \retval true if triange \p t and its neighbor accross edge 0 form
@@ -453,7 +425,6 @@ namespace GEO {
          * \retval false otherwise
          */
         bool is_convex_quad(index_t t) const;
-
         
     protected:
         vector<vec2> point_;

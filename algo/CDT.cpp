@@ -266,7 +266,7 @@ namespace GEO {
         CDT_LOG("insert constraint: " << i << "-" << j);
         
         std::deque<index_t> Q; // Queue of edges to constrain
-        vector<index_t> N;     // New edges to re-Delaunize
+        vector<index_t> N;     // New edges to re-Delaunayize
 
         while(i != j) {
             // Step 1: find all the edges that have an intersection 
@@ -509,56 +509,6 @@ namespace GEO {
         N.resize(0);
     }
     
-/*    
-    void CDT::find_intersected_edges(
-        index_t i, index_t j, std::deque<index_t>& Q
-    ) {
-        index_t t_prev = index_t(-1);
-        index_t t = vT(i);
-        bool finished = false;
-        for_each_T_around_v(
-            i, [&](index_t t_in, index_t le) {
-                index_t v1 = Tv(t_in, (le + 1)%3);
-                index_t v2 = Tv(t_in, (le + 2)%3);
-                if(v1 == j || v2 == j) {
-                    finished = true;
-                    return true;
-                }
-                if(seg_seg_intersect(i,j,v1,v2)) {
-                    t  = t_in;
-                    Trot(t,le);
-                    Q.push_back(t);
-                    Tmark(t);
-                    return true;
-                }
-                return false;
-            }
-        );
-        
-        while(!finished) {
-            t_prev = t;
-            t = Tadj(t,0);
-            if(Tv(t,0) == j || Tv(t,1) == j || Tv(t,2) == j) {
-                finished = true;
-            } else {
-                for(index_t le = 0; le<3; ++le) {
-                    if(Tadj(t,le) == t_prev) {
-                        continue;
-                    }
-                    index_t v1 = Tv(t, (le + 1)%3);
-                    index_t v2 = Tv(t, (le + 2)%3);
-                    if(seg_seg_intersect(i,j,v1,v2)) {
-                        Trot(t,le);
-                        Q.push_back(t);
-                        Tmark(t);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-*/
-    
     index_t CDT::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
         // This version: linear scan
         // TODO: faster version
@@ -608,19 +558,6 @@ namespace GEO {
             point_[i].data(), point_[j].data(), point_[k].data(),
             point_[l].data()
         );
-    }
-
-    bool CDT::seg_seg_intersect(
-        index_t i, index_t j, index_t k, index_t l, Sign& o1, Sign& o2
-    ) const  {
-        o1 = orient2d(i,j,k);
-        o2 = orient2d(i,j,l);
-        if(o1*o2 >=0 ) {
-            return false;
-        }
-        Sign o3 = orient2d(k,l,i);
-        Sign o4 = orient2d(k,l,j);
-        return (o3*o4 < 0);
     }
 
     bool CDT::is_convex_quad(index_t t) const {
