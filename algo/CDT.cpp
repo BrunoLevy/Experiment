@@ -51,7 +51,7 @@
 #include <geogram/basic/algorithm.h>
 #include <stack>
 
-// #define CDT_DEBUG
+//#define CDT_DEBUG
 #ifdef CDT_DEBUG
 #define CDT_LOG(X) std::cerr << X << std::endl
 #else
@@ -170,6 +170,9 @@ namespace GEO {
         while(S.size() != 0) {
             index_t t1 = S.top();
             S.pop();
+            if(Tedge_is_constrained(t1,0)) {
+                continue;
+            }
             index_t t2 = Tadj(t1,0);
             if(t2 == index_t(-1)) {
                 continue;
@@ -222,8 +225,6 @@ namespace GEO {
             Tadj_back_connect(t2,0,t2);
             Tadj_back_connect(t3,0,t2);
             Tadj_back_connect(t4,0,t1);
-            // Tadj_replace(t1_adj2, t1, t4);
-            // Tadj_replace(t2_adj3, t2, t3);
             Tset_edge_cnstr(t1,1,cnstr);
             Tset_edge_cnstr(t2,2,cnstr);
             Tset_edge_cnstr(t3,1,cnstr);
@@ -239,7 +240,6 @@ namespace GEO {
             Tset(t2,v,v3,v1,t1_adj2,t1,NO_INDEX);
             Tadj_back_connect(t1,0,t1);
             Tadj_back_connect(t2,0,t1);            
-            // Tadj_replace(t1_adj2, t1, t2);
             Tset_edge_cnstr(t1,1,cnstr);
             Tset_edge_cnstr(t2,2,cnstr);
         }
@@ -266,8 +266,6 @@ namespace GEO {
         Tadj_back_connect(t1,0,t1);
         Tadj_back_connect(t2,0,t1);
         Tadj_back_connect(t3,0,t1);        
-        // Tadj_replace(adj2, t1, t2);
-        // Tadj_replace(adj3, t1, t3);                
     }
     
     void CDTBase::insert_constraint(index_t i, index_t j) {
@@ -358,7 +356,7 @@ namespace GEO {
                         Sign o4 = orient_012_; //equivalent to orient2d(v1,v2,i)
                         if(o1*o2 < 0 && o3*o4 < 0) {
                             Trot(t_around_v,le); // so that le becomes edge 0
-                            t_next = t_around_v; // inserted during next round
+                            t_next = t_around_v; // added to Q during next round
                             v_next = NO_INDEX;
                             return true;
                         } else {
@@ -544,6 +542,11 @@ namespace GEO {
         while(swap_occured) {
             swap_occured = false;
             for(index_t t1: N) {
+                // TODO: I do not understand how this happens,
+                // but this happens.
+                if(Tedge_is_constrained(t1,0)) {
+                    continue;
+                }
                 index_t v1 = Tv(t1,1);
                 index_t v2 = Tv(t1,2);
                 index_t v0 = Tv(t1,0);
@@ -594,8 +597,6 @@ namespace GEO {
         index_t t2_adj3 = Tadj(t2,(le2+2)%3);
         Tset(t1,v1,v4,v3,t2_adj3,t1_adj2,t2);
         Tset(t2,v1,v2,v4,t2_adj2,t1,t1_adj3);
-        // Tadj_replace(t1_adj3, t1, t2);
-        // Tadj_replace(t2_adj3, t2, t1);
         Tadj_back_connect(t1,0,t2);
         Tadj_back_connect(t1,1,t1);
         Tadj_back_connect(t2,0,t2);
@@ -666,7 +667,7 @@ namespace GEO {
         geo_debug_assert(E2 < ncnstr());
         vec2 U = point_[j] - point_[i];
         vec2 V = point_[l] - point_[k];
-        vec2 D = point_[j] - point_[i];
+        vec2 D = point_[k] - point_[i];
         double delta = det(U,V);
         double t = det(D,V)/delta;
         vec2 P = point_[i] + t*U;

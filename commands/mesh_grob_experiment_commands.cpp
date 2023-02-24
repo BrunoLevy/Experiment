@@ -121,6 +121,11 @@ namespace OGF {
                     mesh_grob()->edges.vertex(e,1)                    
                 );
             }
+            for(index_t v=mesh_grob()->vertices.nb(); v<cdt.nv(); ++v) {
+                mesh_grob()->vertices.create_vertex(
+                    cdt.point(v).data()
+                );
+            }
             for(index_t t=0; t<cdt.nT(); ++t) {
                 index_t i = cdt.Tv(t,0);
                 index_t j = cdt.Tv(t,1);

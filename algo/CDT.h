@@ -355,24 +355,6 @@ namespace GEO {
         }
 
         /**
-         * \brief Replaces a triangle adjacency relation
-         * \param[in] t a triangle
-         * \param[in] t1 a triangle adjacent to \p t
-         * \param[in] t2 the triangle that will replace \p t1
-         */
-        void Tadj_replace(index_t t, index_t t1, index_t t2) {
-            if(t == NO_INDEX) {
-                return;
-            }
-            geo_debug_assert(t < nT());
-            geo_debug_assert(t1 < nT());
-            geo_debug_assert(t2 < nT());
-            index_t le = Tadj_find(t,t1);
-            Tadj_set(t, le, t2);
-            Tcheck(t);            
-        }
-
-        /**
          * \brief After having changed connections from triangle
          *  to a neighbor, creates connections from neighbor
          *  to triangle.
@@ -643,6 +625,12 @@ namespace GEO {
          * \copydoc CDTBase::save()
          */
         void save(const std::string& filename) const override;
+
+
+        vec2 point(index_t v) const {
+            geo_debug_assert(v < nv());
+            return point_[v];
+        }
         
     protected:
         /**
