@@ -30,6 +30,11 @@ namespace GEO {
         virtual ~CDTBase();
 
         /**
+         * \brief Removes everything from this triangulation
+         */
+        virtual void clear();
+        
+        /**
          * \brief Inserts a constraint
          * \param[in] i , j the indices of the two vertices
          *  of the constrained segment
@@ -60,7 +65,14 @@ namespace GEO {
         index_t nv() const {
             return nv_;
         }
-    
+
+        /**
+         * \brief Gets the number of constraints
+         */
+        index_t ncnstr() const {
+            return ncnstr_;
+        }
+        
         /**
          * \brief Gets a vertex of a triangle
          * \param[in] t the triangle
@@ -143,12 +155,36 @@ namespace GEO {
     protected:
         /**
          * \brief Inserts a new point 
-         * \details Start by inserting three points forming
-         *  a large triangle around all the other points
-         * \return the index of the created point
+         * \param[in] v the index of the new point, supposed to be
+         *  equal to nv()
+         * \return the index of the created point. May be different
+         *  from v if the point already existed in the triangulation
          */
-        index_t insert();
-    
+        index_t insert(index_t v);
+
+        /**
+         * \brief Inserts a vertex in an edge
+         * \param[in] v the vertex to be inserted
+         * \param[in] t a triangle incident to the edge
+         * \param[in] le the local index of the edge in \p t
+         * \param[out] t1 , t2 , t3 , t4 the up to four new triangles
+         */
+        void insert_vertex_in_edge(
+            index_t v, index_t t, index_t le,
+            index_t& t1, index_t& t2, index_t& t3, index_t& t4
+        );
+
+        /**
+         * \brief Inserts a vertex in a triangle
+         * \param[in] v the vertex to be inserted
+         * \param[in] t the triangle
+         * \param[out] t1 , t2 , t3  the three new triangles
+         */
+        void insert_vertex_in_triangle(
+            index_t v, index_t t,
+            index_t& t1, index_t& t2, index_t& t3
+        );
+        
         /**
          * \brief Finds the edges intersected by a constraint
          * \param[in] i , j the two vertices of the constraint
@@ -245,12 +281,12 @@ namespace GEO {
                 T_[i],    T_[j],    T_[k],
                 Tadj_[i], Tadj_[j], Tadj_[k]
             );
-            uint8_t ci = Tcflags_[i];
-            uint8_t cj = Tcflags_[j];
-            uint8_t ck = Tcflags_[k];
-            Tcflags_[3*t]   = ci;
-            Tcflags_[3*t+1] = cj;
-            Tcflags_[3*t+2] = ck;            
+            index_t ci = Tecnstr_[i];
+            index_t cj = Tecnstr_[j];
+            index_t ck = Tecnstr_[k];
+            Tecnstr_[3*t]   = ci;
+            Tecnstr_[3*t+1] = cj;
+            Tecnstr_[3*t+2] = ck;            
         }
 
         /**
@@ -341,7 +377,7 @@ namespace GEO {
             index_t nc = (t+1)*3; // new number of corners
             T_.resize(nc, NO_INDEX);
             Tadj_.resize(nc, NO_INDEX);
-            Tcflags_.resize(nc, 0);
+            Tecnstr_.resize(nc, NO_INDEX);
             Tflags_.resize(t+1,0);
             return t;
         }
@@ -377,28 +413,38 @@ namespace GEO {
          * \retval true if the edge is constrained
          * \retval false otherwise
          */
-        bool Tedge_is_constrained(index_t t, index_t le) const {
+        index_t Tedge_constraint(index_t t, index_t le) const {
             geo_debug_assert(t < nT());
             geo_debug_assert(le < 3);
-            return (Tcflags_[3*t+le] != 0);
+            return Tecnstr_[3*t+le];
         }
-
+        
         /**
          * \brief Sets an edge as constrained
          * \param[in] t a triangle
          * \param[in] le local edge index, in 0,1,2
+         * \param[in] cnstr_id identifier of the constrained edge
          */
-        void Tconstrain_edge(index_t t, index_t le) {
+        void Tset_edge_constraint(
+            index_t t, index_t le, index_t cnstr_id 
+        ) {
             geo_debug_assert(t < nT());
             geo_debug_assert(le < 3);
-            Tcflags_[3*t+le] = 1;
-            index_t t2 = Tadj(t,le);
-            if(t2 != NO_INDEX) {
-                index_t le2 = Tadj_find(t2,t);
-                Tcflags_[3*t2+le2] = 1;                
-            }
+            Tecnstr_[3*t+le] = cnstr_id;
         }
-    
+
+        /**
+         * \brief Tests whether an edge is constrained
+         * \param[in] t a triangle
+         * \param[in] le local edge index, in 0,1,2
+         * \retval true if the edge is constrained
+         * \retval false otherwise
+         */
+        bool Tedge_is_constrained(index_t t, index_t le) const {
+            return (Tedge_constraint(t,le) != NO_INDEX);
+        }
+
+        
         /**
          * \brief Calls a user-defined function for each triangle 
          * around a vertex
@@ -492,11 +538,12 @@ namespace GEO {
         
     protected:
         index_t nv_;
+        index_t ncnstr_;
         vector<index_t> T_;       /**< triangles vertices array              */
         vector<index_t> Tadj_;    /**< triangles adjacency array             */
         vector<index_t> v2T_;     /**< vertex to triangle back pointer       */
         vector<uint8_t> Tflags_;  /**< triangle flags                        */
-        vector<uint8_t> Tcflags_; /**< triangle corner flags                 */
+        vector<index_t> Tecnstr_; /**< triangle edge constraint              */
         bool delaunay_;           /**< if set, compute a CDT, else just a CT */
         Sign orient_012_;         /**< global triangles orientation          */
     };
@@ -510,6 +557,11 @@ namespace GEO {
     public:
 
         /**
+         * \copydoc CDTBase::clear()
+         */
+        void clear() override;
+        
+        /**
          * \brief Inserts a point
          * \details Start by inserting three points forming
          *  a large triangle around all the other points
@@ -517,7 +569,7 @@ namespace GEO {
          */
         index_t insert(const vec2& p) {
             point_.push_back(p);
-            index_t v = CDTBase::insert();
+            index_t v = CDTBase::insert(point_.size()-1);
             // If inserted point already existed in
             // triangulation, then nv() did not increase
             if(point_.size() > nv()) {
