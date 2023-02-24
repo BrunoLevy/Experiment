@@ -127,6 +127,7 @@ namespace OGF {
                 index_t k = cdt.Tv(t,2);
                 mesh_grob()->facets.create_triangle(i,j,k);
             }
+            cdt.save("CDT_result.geogram");
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(mesh_grob());

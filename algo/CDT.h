@@ -229,16 +229,21 @@ namespace GEO {
         
         /**
          * \brief Sets all the combinatorial information
-         *  of a triangle
+         *  of a triangle and clears edge flags
          * \param[in] t the triangle
          * \param[in] v1 , v2 , v3 the three vertices 
          * \param[in] adj1 , adj2 , adj3 the three triangles
          *  adjacent to \p t
+         * \param[in] e1cnstr , e2cnstr , e3cnstr optional
+         *  edge constraints
          */
         void Tset(
             index_t t,
             index_t v1,   index_t v2,   index_t v3,
-            index_t adj1, index_t adj2, index_t adj3
+            index_t adj1, index_t adj2, index_t adj3,
+            index_t e1cnstr = NO_INDEX,
+            index_t e2cnstr = NO_INDEX,
+            index_t e3cnstr = NO_INDEX            
         ) {
             geo_debug_assert(t < nT());
             geo_debug_assert(v1 < nv());
@@ -259,9 +264,12 @@ namespace GEO {
             Tadj_[3*t  ] = adj1;
             Tadj_[3*t+1] = adj2;
             Tadj_[3*t+2] = adj3;
+            Tecnstr_[3*t]   = e1cnstr;
+            Tecnstr_[3*t+1] = e2cnstr;
+            Tecnstr_[3*t+2] = e3cnstr;
             v2T_[v1] = t;
             v2T_[v2] = t;
-            v2T_[v3] = t;        
+            v2T_[v3] = t;
         }
 
         /**
@@ -273,20 +281,16 @@ namespace GEO {
          */
         void Trot(index_t t, index_t lv) {
             geo_debug_assert(t < nT());
+            geo_debug_assert(lv < 3);
             index_t i = 3*t+(lv%3);
             index_t j = 3*t+((lv+1)%3);
-            index_t k = 3*t+((lv+2)%3);        
+            index_t k = 3*t+((lv+2)%3);
             Tset(
                 t,
-                T_[i],    T_[j],    T_[k],
-                Tadj_[i], Tadj_[j], Tadj_[k]
+                T_[i], T_[j], T_[k],
+                Tadj_[i], Tadj_[j], Tadj_[k],
+                Tecnstr_[i], Tecnstr_[j], Tecnstr_[k]
             );
-            index_t ci = Tecnstr_[i];
-            index_t cj = Tecnstr_[j];
-            index_t ck = Tecnstr_[k];
-            Tecnstr_[3*t]   = ci;
-            Tecnstr_[3*t+1] = cj;
-            Tecnstr_[3*t+2] = ck;            
         }
 
         /**
@@ -357,7 +361,7 @@ namespace GEO {
          * \param[in] t2 the triangle that will replace \p t1
          */
         void Tadj_replace(index_t t, index_t t1, index_t t2) {
-            if(t == index_t(-1)) {
+            if(t == NO_INDEX) {
                 return;
             }
             geo_debug_assert(t < nT());
@@ -368,6 +372,32 @@ namespace GEO {
             Tcheck(t);            
         }
 
+        /**
+         * \brief After having changed connections from triangle
+         *  to a neighbor, creates connections from neighbor
+         *  to triangle.
+         * \details edge flags are copied from the neighbor to \p t1.
+         *  If there is no triangle accross \p le1, then
+         *  nothing is done
+         * \param[in] t1 a triangle
+         * \param[in] le1 a local edge of \p t1, in 0,1,2
+         * \param[in] prev_t2_adj_e2 the triangle adjacent to t2 that
+         *  \p t1 will replace, where t2 = Tadj(t1,le1)
+         */
+        void Tadj_back_connect(
+            index_t t1, index_t le1, index_t prev_t2_adj_e2
+        ) {
+            geo_debug_assert(t1 < nT());
+            geo_debug_assert(le1 < 3);
+            index_t t2 = Tadj(t1,le1);
+            if(t2 == NO_INDEX) {
+                return;
+            }
+            index_t le2 = Tadj_find(t2,prev_t2_adj_e2);
+            Tadj_set(t2,le2,t1);
+            Tset_edge_cnstr(t1,le1,Tedge_cnstr(t2,le2));
+        }
+        
         /**
          * \brief Creates a new triangle
          * \return the index of the new triange
@@ -413,7 +443,7 @@ namespace GEO {
          * \retval true if the edge is constrained
          * \retval false otherwise
          */
-        index_t Tedge_constraint(index_t t, index_t le) const {
+        index_t Tedge_cnstr(index_t t, index_t le) const {
             geo_debug_assert(t < nT());
             geo_debug_assert(le < 3);
             return Tecnstr_[3*t+le];
@@ -425,7 +455,7 @@ namespace GEO {
          * \param[in] le local edge index, in 0,1,2
          * \param[in] cnstr_id identifier of the constrained edge
          */
-        void Tset_edge_constraint(
+        void Tset_edge_cnstr(
             index_t t, index_t le, index_t cnstr_id 
         ) {
             geo_debug_assert(t < nT());
@@ -434,6 +464,25 @@ namespace GEO {
         }
 
         /**
+         * \brief Sets an edge as constrained in triangle and in neighbor
+         * \param[in] t a triangle
+         * \param[in] le local edge index, in 0,1,2
+         * \param[in] cnstr_id identifier of the constrained edge
+         */
+        void Tset_edge_cnstr_with_neighbor(
+            index_t t, index_t le, index_t cnstr_id 
+        ) {
+            geo_debug_assert(t < nT());
+            geo_debug_assert(le < 3);
+            Tset_edge_cnstr(t, le, cnstr_id);
+            index_t t2 = Tadj(t,le);
+            if(t2 != NO_INDEX) {
+                index_t le2 = Tadj_find(t2,t);
+                Tset_edge_cnstr(t2,le2,cnstr_id);
+            }
+        }
+        
+        /**
          * \brief Tests whether an edge is constrained
          * \param[in] t a triangle
          * \param[in] le local edge index, in 0,1,2
@@ -441,7 +490,7 @@ namespace GEO {
          * \retval false otherwise
          */
         bool Tedge_is_constrained(index_t t, index_t le) const {
-            return (Tedge_constraint(t,le) != NO_INDEX);
+            return (Tedge_cnstr(t,le) != NO_INDEX);
         }
 
         
@@ -527,13 +576,25 @@ namespace GEO {
         /**
          * \brief Given two segments that have an intersection, create the
          *  intersection
+         * \details The intersection is given both as the indices of segment
+         *  extremities (i,j) and (k,l), that one can use to retreive the 
+         *  points in derived classes, and constraint indices E1 and E2, that
+         *  derived classes may use to retreive symbolic information attached
+         *  to the constraint
+         * \param[in] E1 the index of the first edge, corresponding to the
+         *  value of ncnstr() when insert_constraint() was called for
+         *  that edge
          * \param[in] i , j the vertices of the first segment
+         * \param[in] E2 the index of the second edge, corresponding to the
+         *  value of ncnstr() when insert_constraint() was called for
+         *  that edge
          * \param[in] k , l the vertices of the second segment
          * \return the index of a newly created vertex that corresponds to
          *  the intersection between [\p i , \p j] and [\p k , \p l]
          */
         virtual index_t create_intersection(
-            index_t i,index_t j,index_t k,index_t l
+            index_t E1, index_t i, index_t j,
+            index_t E2, index_t k, index_t l
         ) = 0;
         
     protected:
@@ -598,7 +659,8 @@ namespace GEO {
          * \copydoc CDTBase::create_intersection()
          */
         index_t create_intersection(
-            index_t i,index_t j,index_t k,index_t l
+            index_t E1, index_t i, index_t j,
+            index_t E2, index_t k, index_t l
         ) override;
         
     protected:

@@ -193,6 +193,7 @@ namespace GEO {
         index_t v, index_t t, index_t le1,
         index_t& t1, index_t& t2, index_t& t3, index_t& t4
     ) {
+        index_t cnstr = Tedge_cnstr(t,le1);
         t1 = t;
         t2 = Tadj(t1,le1);
         index_t v1 = Tv(t1,le1);
@@ -217,8 +218,16 @@ namespace GEO {
             Tset(t2,v,v2,v4,t2_adj2,t3,t1);
             Tset(t3,v,v4,v3,t2_adj3,t4,t2);
             Tset(t4,v,v3,v1,t1_adj2,t1,t3);
-            Tadj_replace(t1_adj2, t1, t4);
-            Tadj_replace(t2_adj3, t2, t3);
+            Tadj_back_connect(t1,0,t1);
+            Tadj_back_connect(t2,0,t2);
+            Tadj_back_connect(t3,0,t2);
+            Tadj_back_connect(t4,0,t1);
+            // Tadj_replace(t1_adj2, t1, t4);
+            // Tadj_replace(t2_adj3, t2, t3);
+            Tset_edge_cnstr(t1,1,cnstr);
+            Tset_edge_cnstr(t2,2,cnstr);
+            Tset_edge_cnstr(t3,1,cnstr);
+            Tset_edge_cnstr(t4,2,cnstr);                        
         } else {
             // New vertex is on an edge of t1 and t1 has no neighbor
             // accross that edge. Discard t1 and replace it with two
@@ -228,7 +237,11 @@ namespace GEO {
             t4 = NO_INDEX;
             Tset(t1,v,v1,v2,t1_adj3,NO_INDEX,t2);
             Tset(t2,v,v3,v1,t1_adj2,t1,NO_INDEX);
-            Tadj_replace(t1_adj2, t1, t2);                    
+            Tadj_back_connect(t1,0,t1);
+            Tadj_back_connect(t2,0,t1);            
+            // Tadj_replace(t1_adj2, t1, t2);
+            Tset_edge_cnstr(t1,1,cnstr);
+            Tset_edge_cnstr(t2,2,cnstr);
         }
     }
 
@@ -250,8 +263,11 @@ namespace GEO {
         Tset(t1,v,v2,v3,adj1,t2,t3);
         Tset(t2,v,v3,v1,adj2,t3,t1);
         Tset(t3,v,v1,v2,adj3,t1,t2);
-        Tadj_replace(adj2, t1, t2);
-        Tadj_replace(adj3, t1, t3);                
+        Tadj_back_connect(t1,0,t1);
+        Tadj_back_connect(t2,0,t1);
+        Tadj_back_connect(t3,0,t1);        
+        // Tadj_replace(adj2, t1, t2);
+        // Tadj_replace(adj3, t1, t3);                
     }
     
     void CDTBase::insert_constraint(index_t i, index_t j) {
@@ -347,14 +363,22 @@ namespace GEO {
                             return true;
                         } else {
                             // Special case: v1 or v2 is exactly on [i,j]
+                            // Edge is flagged as constraint here, because
+                            // it will not be seen by constraint enforcement.
                             geo_debug_assert(o1 != ZERO || o2 != ZERO);
                             if(o1 == ZERO && o3*o4 < 0 && v1 != v_prev) {
                                 t_next = NO_INDEX;
                                 v_next = v1;
+                                Tset_edge_cnstr_with_neighbor(
+                                    t_around_v, (le + 2)%3, ncnstr_-1
+                                );
                                 return true;
                             } else if(o2 == ZERO && o3*o4 < 0 && v2 != v_prev) {
                                 t_next = NO_INDEX;
                                 v_next = v2;
+                                Tset_edge_cnstr_with_neighbor(
+                                    t_around_v, (le + 1)%3, ncnstr_-1
+                                );                                
                                 return true;
                             }
                         }
@@ -390,9 +414,14 @@ namespace GEO {
                             Trot(t,le); // So that edge 0 is intersected edge
                             if(Tedge_is_constrained(t,0)) {
                                 CDT_LOG("   Constraints intersection");
-                                v_next = create_intersection(i,j,v1,v2);
+                                v_next = create_intersection(
+                                    ncnstr()-1, i, j,
+                                    Tedge_cnstr(t,0), v1, v2
+                                );
                                 index_t nt1,nt2,nt3,nt4;
-                                insert_vertex_in_edge(v_next,t,le,nt1,nt2,nt3,nt4);
+                                insert_vertex_in_edge(
+                                    v_next,t,0,nt1,nt2,nt3,nt4
+                                );
                                 t_next = NO_INDEX;
                             } else {
                                 Q.push_back(t);
@@ -443,11 +472,11 @@ namespace GEO {
                 (Tv(t,1) == i && Tv(t,2) == j) ||
                 (Tv(t,1) == j && Tv(t,2) == i)
             ) {
-                Tset_edge_constraint(t,0,ncnstr_-1);
+                Tset_edge_cnstr(t,0,ncnstr_-1);
                 index_t t2 = Tadj(t,0);
                 if(t2 != NO_INDEX) {
                     index_t le2 = Tadj_find(t2,t);
-                    Tset_edge_constraint(t2,le2,ncnstr_-1);                    
+                    Tset_edge_cnstr(t2,le2,ncnstr_-1);                    
                 }
             } else {
                 N.push_back(t);
@@ -565,8 +594,12 @@ namespace GEO {
         index_t t2_adj3 = Tadj(t2,(le2+2)%3);
         Tset(t1,v1,v4,v3,t2_adj3,t1_adj2,t2);
         Tset(t2,v1,v2,v4,t2_adj2,t1,t1_adj3);
-        Tadj_replace(t1_adj3, t1, t2);
-        Tadj_replace(t2_adj3, t2, t1);
+        // Tadj_replace(t1_adj3, t1, t2);
+        // Tadj_replace(t2_adj3, t2, t1);
+        Tadj_back_connect(t1,0,t2);
+        Tadj_back_connect(t1,1,t1);
+        Tadj_back_connect(t2,0,t2);
+        Tadj_back_connect(t2,2,t1);        
         Tcheck(t1);
         Tcheck(t2);        
     }
@@ -620,12 +653,17 @@ namespace GEO {
     }
 
     index_t CDT::create_intersection(
-        index_t i, index_t j, index_t k, index_t l
+        index_t E1, index_t i, index_t j,
+        index_t E2, index_t k, index_t l
     ) {
+        geo_argused(E1);
+        geo_argused(E2);        
         geo_debug_assert(i < nv());
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
-        geo_debug_assert(l < nv());                
+        geo_debug_assert(l < nv());
+        geo_debug_assert(E1 < ncnstr());
+        geo_debug_assert(E2 < ncnstr());
         vec2 U = point_[j] - point_[i];
         vec2 V = point_[l] - point_[k];
         vec2 D = point_[j] - point_[i];
@@ -651,6 +689,8 @@ namespace GEO {
             index_t k = Tv(t,2);
             M.facets.create_triangle(i,j,k);
         }
+
+        
         Attribute<double> tex_coord;
         tex_coord.create_vector_attribute(
             M.facet_corners.attributes(), "tex_coord", 2
@@ -664,6 +704,16 @@ namespace GEO {
             tex_coord[2*c]   = triangle_tex[c%3][0];
             tex_coord[2*c+1] = triangle_tex[c%3][1];
         }
+
+        Attribute<bool> constraint(M.facet_corners.attributes(), "constraint");
+        for(index_t c: M.facet_corners) {
+            index_t t  = c/3;
+            index_t lv = c%3;
+            constraint[c] =
+                Tedge_is_constrained(t, (lv+1)%3) ||
+                Tedge_is_constrained(t, (lv+2)%3) ; 
+        }
+        
         mesh_save(M, filename);
     }
 }
