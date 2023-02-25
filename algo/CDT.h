@@ -8,12 +8,21 @@
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
+#include <stack>
 #include <deque>
 
 namespace GEO {
 
     /**
      * \brief Base class for constrained Delaunay triangulation
+     * \details Manages the combinatorics of the constrained Delaunay
+     *  triangulation. The points need to be stored elsewhere, and manipulated 
+     *  through indices, with two predicates:
+     *  - orient2d(i,j,k)
+     *  - incircle(i,j,k,l)
+     *  and one construction:
+     *  - create_intersection(i,j,k,l)
+     *  See \ref CDT for an example of implementation
      */
     class Experiment_API CDTBase {
     public:
@@ -151,7 +160,14 @@ namespace GEO {
          * \param[in] filename where to save this CDT
          */
         virtual void save(const std::string& filename) const = 0;
-    
+
+
+        /**
+         * \brief Tests whether a triangle edge is Delaunay
+         * \details returns true also for constrained edges and edges on borders
+         */
+        bool Tedge_is_Delaunay(index_t t, index_t le) const;
+
     protected:
         /**
          * \brief Inserts a new point 
@@ -162,6 +178,29 @@ namespace GEO {
          */
         index_t insert(index_t v);
 
+
+        /**
+         * \brief Creates the combinatorics for a first large enclosing
+         *  triangle
+         * \param[in] v1 , v2 , v3 the three vertices of the first triangle,
+         *  in 0,1,2
+         * \details enclosing_triangle() or enclosing_quad() need to be called
+         *  before anything else
+         */
+        void enclosing_triangle(index_t v1, index_t v2, index_t v3);
+
+        /**
+         * \brief Creates the combinatorics for a first large enclosing
+         *  quad
+         * \param[in] v1 , v2 , v3 , v4 the four vertices of the quad,
+         *  in 0,1,2,3
+         * \details enclosing_triangle() or enclosing_quad() need to be called
+         *  before anything else
+         */
+        void enclosing_quad(
+            index_t v1, index_t v2, index_t v3, index_t v4
+        );
+        
         /**
          * \brief Inserts a vertex in an edge
          * \param[in] v the vertex to be inserted
@@ -216,7 +255,19 @@ namespace GEO {
             std::deque<index_t>& Q, vector<index_t>& N
         );
 
-
+        /**
+         * \brief Restore Delaunay condition starting from the
+         *  triangles incident to a given vertex.
+         * \param[in] v the vertex
+         * \param[in] S a stack of triangles, initialized with 
+         *  the triangles incident to the vertex. Each triangle t
+         *  are Trot()-ed in such a way that the vertex 
+         *  corresponds to Vt(t,0)
+         * \details Each time a triangle edge is swapped, the
+         *  two new neighbors are recursively examined.
+         */
+        void Delaunayize_vertex_neighbors(index_t v, std::stack<index_t>& S);
+        
         /**
          * \brief Restore Delaunay condition for a set of
          *  edges after inserting a constrained edge.
@@ -224,7 +275,7 @@ namespace GEO {
          * \param[in] N the edges for which Delaunay condition
          *  should be restored.
          */
-        void Delaunayize_edges(vector<index_t>& N);
+        void Delaunayize_new_edges(vector<index_t>& N);
 
         
         /**
@@ -282,7 +333,7 @@ namespace GEO {
         void Trot(index_t t, index_t lv) {
             geo_debug_assert(t < nT());
             geo_debug_assert(lv < 3);
-            index_t i = 3*t+(lv%3);
+            index_t i = 3*t+lv;
             index_t j = 3*t+((lv+1)%3);
             index_t k = 3*t+((lv+2)%3);
             Tset(
@@ -603,6 +654,25 @@ namespace GEO {
          * \copydoc CDTBase::clear()
          */
         void clear() override;
+
+        /**
+         * \brief Creates a first large enclosing triangle
+         * \param[in] p1 , p2 , p3 the three vertices of the first triangle
+         * \details enclosing_triangle() or enclosing_quad() need to be called
+         *  before anything else
+         */
+        void enclosing_triangle(const vec2& p1, const vec2& p2, const vec2& p3);
+
+        /**
+         * \brief Creates a first large enclosing quad
+         * \param[in] p1 , p2 , p3 , p4 the four vertices of the quad
+         * \details The quad needs to be convex. 
+         *  enclosing_triangle() or enclosing_quad() need to be called
+         *  before anything else. 
+         */
+        void enclosing_quad(
+            const vec2& p1, const vec2& p2, const vec2& p3, const vec2& p4
+        );
         
         /**
          * \brief Inserts a point
