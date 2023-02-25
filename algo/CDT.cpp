@@ -24,21 +24,20 @@
 //    - t1 can either leave Q or be enqueued again
 //    - t2 was always in Q already (because it has an edge
 //      that has an intersection with the constraint), but
-//      there is one case where it leaves Q (instead of removing
-//      it from Q - which would require a linear scan - we mark
-//      it as "not intersected" (unmark it). 
+//      there is one case where it leaves Q
+// We need to mark/unmark triangles for one case: when t2 is unmarked,
+// it means there is no intersection.
 
 
 // TODO:
 // 1) test new API with creation of first quad
-// 2) doubly connected triangle list for S,Q,N
-// 3) can we avoid computing o ? (stored in Tflags)
-// 4) predicate cache:
+// 2) can we avoid computing o ? (stored in Tflags)
+// 3) predicate cache:
 //     - test whether needed.
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 5) faster locate()
-// 6) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 7) tag/remove external triangles
+// 4) faster locate()
+// 5) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 6) tag/remove external triangles
 
 // BUG:
 //  constraints_100_8.geogram: two triangles are not Delaunay at the end (???)
@@ -196,8 +195,7 @@ namespace GEO {
         index_t first_v_isect = nv_;
         
         DList Q; // Queue of edges to constrain
-        // DList N; // New edges to re-Delaunayize
-        vector<index_t> N;
+        DList N; // New edges to re-Delaunayize
 
         while(i != j) {
             // Step 1: find all the edges that have an intersection 
@@ -356,7 +354,7 @@ namespace GEO {
                             // [v1,v2] has a frank intersection with [i,j]
                             Trot(t,le); // So that edge 0 is intersected edge
                             if(Tedge_is_constrained(t,0)) {
-                                CDT_LOG("   Constraints intersection");
+                                CDT_LOG("   ====> Constraints intersection");
                                 v_next = create_intersection(
                                     ncnstr()-1, i, j,
                                     Tedge_cnstr(t,0), v1, v2
@@ -364,11 +362,11 @@ namespace GEO {
                                 insert_vertex_in_edge(v_next,t,0);
                                 t_next = NO_INDEX;
                             } else {
-                                DList_push_back(Q,t);
-                                Tmark(t);
                                 CDT_LOG("   Intersection: t="
                                         << t << " E=" << v1 << "-" << v2
                                        );
+                                DList_push_back(Q,t);
+                                Tmark(t);
                                 t_next = Tadj(t,0);
                                 v_next = NO_INDEX;
                             }
@@ -400,10 +398,10 @@ namespace GEO {
         return NO_INDEX;
     }
     
-    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, vector<index_t>& N) {
+    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList& N) {
         // Moves an edge from Q (the queue Q of intersected edges) to
         // N (the list of new edges).
-        auto move_from_Q_to_N = [&](index_t t) {
+        auto new_edge = [&](index_t t) {
             Tunmark(t);
             if(
                 (Tv(t,1) == i && Tv(t,2) == j) ||
@@ -411,8 +409,7 @@ namespace GEO {
             ) {
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
-                N.push_back(t);
-                // DList_push_back(N,t);
+                DList_push_back(N,t);
             }
         };
         
@@ -438,7 +435,7 @@ namespace GEO {
                 swap_edge(t1);
                 if(no_isect) {
                     Trot(t1,2); // so that new edge is edge 0
-                    move_from_Q_to_N(t1);
+                    new_edge(t1);
                 } else {
                     // See comment at beginning of file (a variation in Sloan's
                     // method that makes better use of the combinatorics)
@@ -447,7 +444,7 @@ namespace GEO {
                         if(o >= 0) {
                             // t1: no isect   t2: isect
                             Trot(t1,2); // so that new edge is edge 0
-                            move_from_Q_to_N(t1);
+                            new_edge(t1);
                         } else {
                             // t1: isect   t2: no isect
                             Trot(t1,2); // so that intersected edge is edge 0
@@ -462,7 +459,8 @@ namespace GEO {
                         } else {
                             // t1: isect   t2: no isect
                             Trot(t2,1); // so that new edge is edge 0
-                            move_from_Q_to_N(t2);
+                            DList_remove(Q,t2);
+                            new_edge(t2);
                             DList_push_front(Q,t1);
                         }
                     }
@@ -493,12 +491,12 @@ namespace GEO {
         }
     }
     
-    void CDTBase::Delaunayize_new_edges(vector<index_t>& N) {
+    void CDTBase::Delaunayize_new_edges(DList& N) {
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
-            for(index_t t1: N) {
-            // for(index_t t1 = N.front; t1 != NO_INDEX; t1 = Tnext(t1)) {
+            //for(index_t t1: N) {
+            for(index_t t1 = N.front; t1 != NO_INDEX; t1 = Tnext(t1)) {
                 if(Tedge_is_constrained(t1,0)) {
                     continue;
                 }
@@ -514,7 +512,7 @@ namespace GEO {
                 }
             }
         }
-        N.clear();
+        DList_clear(N);
     }
     
     index_t CDTBase::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {

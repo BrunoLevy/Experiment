@@ -206,13 +206,13 @@ namespace GEO {
 
         index_t Tnext(index_t t) {
             geo_debug_assert(t < nT());
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            geo_debug_assert(Tis_in_list(t));
             return Tnext_[t];
         }
 
         index_t Tprev(index_t t) {
             geo_debug_assert(t < nT());
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            geo_debug_assert(Tis_in_list(t));            
             return Tprev_[t];
         }
         
@@ -221,10 +221,6 @@ namespace GEO {
          */
         struct DList {
             DList() : back(NO_INDEX), front(NO_INDEX) {
-            }
-            void clear() {
-                back = NO_INDEX;
-                front = NO_INDEX;
             }
             bool empty() {
                 geo_debug_assert(
@@ -236,9 +232,17 @@ namespace GEO {
             index_t front;
         };
 
+        void DList_clear(DList& L) {
+            for(index_t t=L.front; t!=NO_INDEX; t = Tnext_[t]) {
+                Tunflag_as_in_list(t);
+            }
+            L.back = NO_INDEX;
+            L.front = NO_INDEX;
+        }
+        
         void DList_push_back(DList& L, index_t t) {
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) == 0);
-            Tflags_[t] |= T_IN_LIST_MASK;
+            geo_debug_assert(!Tis_in_list(t));
+            Tflag_as_in_list(t);
             if(L.empty()) {
                 L.back = t;
                 L.front = t;
@@ -262,14 +266,14 @@ namespace GEO {
             } else {
                 Tnext_[L.back] = NO_INDEX;
             }
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
-            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
+            geo_debug_assert(Tis_in_list(t));
+            Tunflag_as_in_list(t);
             return t;
         }
 
         void DList_push_front(DList& L, index_t t) {
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) == 0);
-            Tflags_[t] |= T_IN_LIST_MASK;
+            geo_debug_assert(!Tis_in_list(t));
+            Tflag_as_in_list(t);
             if(L.empty()) {
                 L.back = t;
                 L.front = t;
@@ -293,11 +297,26 @@ namespace GEO {
             } else {
                 Tprev_[L.front] = NO_INDEX;
             }
-            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
-            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
+            geo_debug_assert(Tis_in_list(t));
+            Tunflag_as_in_list(t);
             return t;
         }
-        
+
+
+        void DList_remove(DList& L, index_t t) {
+            if(t == L.front) {
+                DList_pop_front(L);
+            } else if(t == L.back) {
+                DList_pop_back(L);
+            } else {
+                geo_debug_assert(Tis_in_list(t));
+                index_t t_prev = Tprev(t);
+                index_t t_next = Tnext(t);
+                Tprev_[t_next] = t_prev;
+                Tnext_[t_prev] = t_next;
+                Tunflag_as_in_list(t);
+            }
+        }
         
         /**
          * \brief Inserts a vertex in an edge
@@ -346,7 +365,7 @@ namespace GEO {
          * \param[out] N the new edges, that need to be re-Delaunized
          *  by find_intersected_edges()
          */
-        void constrain_edges(index_t i, index_t j, DList& Q, vector<index_t>& N);
+        void constrain_edges(index_t i, index_t j, DList& Q, DList& N);
 
         /**
          * \brief Restore Delaunay condition starting from the
@@ -368,7 +387,7 @@ namespace GEO {
          * \param[in] N the edges for which Delaunay condition
          *  should be restored.
          */
-        void Delaunayize_new_edges(vector<index_t>& N);
+        void Delaunayize_new_edges(DList& N);
 
         
         /**
@@ -564,6 +583,31 @@ namespace GEO {
             return ((Tflags_[t] & T_MARKED_MASK) != 0);
         }
 
+        /**
+         * \brief Marks a triangle as in a DList
+         */
+        void Tflag_as_in_list(index_t t) {
+            geo_debug_assert(t < nT());            
+            Tflags_[t] |= T_IN_LIST_MASK;
+        }
+
+        /**
+         * \brief Unmarks a triangle as in a DList
+         */
+        void Tunflag_as_in_list(index_t t) {
+            geo_debug_assert(t < nT());            
+            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
+        }
+        
+        /**
+         * \brief Tests whether a triangle is in a DList
+         */
+        bool Tis_in_list(index_t t) {
+            geo_debug_assert(t < nT());            
+            return ((Tflags_[t] & T_IN_LIST_MASK) != 0);
+        }
+
+        
         /**
          * \brief Tests whether an edge is constrained
          * \param[in] t a triangle
