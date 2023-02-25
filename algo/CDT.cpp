@@ -59,27 +59,6 @@
 #define CDT_LOG(X)
 #endif
 
-namespace {
-    using namespace GEO;
-    template <class LIST> void debug_show_triangles(
-        const LIST& L, const std::string& name
-    ) {
-        geo_argused(L);
-        geo_argused(name);
-#ifdef CDT_DEBUG            
-        std::cerr << name << "= ";
-        for(auto t: L) {
-            std::cerr << t
-                      << (Tis_marked(t) ? "" : "*")
-                      << "->(" << Tv(t,1) << "," << Tv(t,2) << ")"
-                      << " ";
-        }
-        std::cerr << std::endl;
-#endif        
-    }
-}
-
-
 namespace GEO {
 
     CDTBase::CDTBase() : nv_(0), ncnstr_(0), delaunay_(true) {
@@ -399,9 +378,10 @@ namespace GEO {
     }
     
     void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList& N) {
-        // Moves an edge from Q (the queue Q of intersected edges) to
-        // N (the list of new edges).
-        auto new_edge = [&](index_t t) {
+        
+        // Edge le of triangle t has no isect with cnstr, it is a new edge
+        auto new_edge = [&](index_t t,index_t le) {
+            Trot(t,le);
             Tunmark(t);
             if(
                 (Tv(t,1) == i && Tv(t,2) == j) ||
@@ -411,6 +391,12 @@ namespace GEO {
             } else {
                 DList_push_back(N,t);
             }
+        };
+
+        // Edge le of triangle t still has an isect with cnstr
+        auto isect_edge = [&](index_t t, index_t le) {
+            Trot(t,le);
+            DList_push_front(Q,t);
         };
         
         while(!Q.empty()) {
@@ -434,34 +420,26 @@ namespace GEO {
                 
                 swap_edge(t1);
                 if(no_isect) {
-                    Trot(t1,2); // so that new edge is edge 0
-                    new_edge(t1);
+                    new_edge(t1,2);
                 } else {
                     // See comment at beginning of file (a variation in Sloan's
                     // method that makes better use of the combinatorics)
                     Sign o = orient2d(i,j,v0);
                     if(t2v0_t1v2) {
                         if(o >= 0) {
-                            // t1: no isect   t2: isect
-                            Trot(t1,2); // so that new edge is edge 0
-                            new_edge(t1);
+                            new_edge(t1,2);
                         } else {
-                            // t1: isect   t2: no isect
-                            Trot(t1,2); // so that intersected edge is edge 0
-                            DList_push_front(Q,t1);
+                            isect_edge(t1,2);
                         }
                     } else {
                         geo_debug_assert(t2v0_t1v1);
                         if(o > 0) {
-                            // t1: isect   t2: isect
-                            Trot(t2,1); // so that intersected edge is edge 0
-                            DList_push_front(Q,t1);
+                            Trot(t2,1); 
+                            isect_edge(t1,0);
                         } else {
-                            // t1: isect   t2: no isect
-                            Trot(t2,1); // so that new edge is edge 0
                             DList_remove(Q,t2);
-                            new_edge(t2);
-                            DList_push_front(Q,t1);
+                            new_edge(t2,1);
+                            isect_edge(t1,0);
                         }
                     }
                 }

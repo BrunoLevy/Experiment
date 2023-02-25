@@ -218,11 +218,16 @@ namespace GEO {
         
         /**
          * \brief Doubly connected triangle list
+         * \details The same triangle cannot be only
+         *  in a single DList at the same time. 
          */
         struct DList {
+            /**
+             * \brief Constructs an empty DList
+             */
             DList() : back(NO_INDEX), front(NO_INDEX) {
             }
-            bool empty() {
+            bool empty() const {
                 geo_debug_assert(
                     (back==NO_INDEX)==(front==NO_INDEX)
                 );
@@ -445,15 +450,17 @@ namespace GEO {
         void Trot(index_t t, index_t lv) {
             geo_debug_assert(t < nT());
             geo_debug_assert(lv < 3);
-            index_t i = 3*t+lv;
-            index_t j = 3*t+((lv+1)%3);
-            index_t k = 3*t+((lv+2)%3);
-            Tset(
-                t,
-                T_[i], T_[j], T_[k],
-                Tadj_[i], Tadj_[j], Tadj_[k],
-                Tecnstr_[i], Tecnstr_[j], Tecnstr_[k]
-            );
+            if(lv != 0) {
+                index_t i = 3*t+lv;
+                index_t j = 3*t+((lv+1)%3);
+                index_t k = 3*t+((lv+2)%3);
+                Tset(
+                    t,
+                    T_[i], T_[j], T_[k],
+                    Tadj_[i], Tadj_[j], Tadj_[k],
+                    Tecnstr_[i], Tecnstr_[j], Tecnstr_[k]
+                );
+            }
         }
 
         /**
