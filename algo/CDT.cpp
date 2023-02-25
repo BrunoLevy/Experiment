@@ -13,7 +13,7 @@
 // in such a way that the edge we are talking about is
 // systematically edge 0 (with vertices 1 and 2).
 //
-// - The constraint enforcing step manipulates a queue Q
+// - The constraint-enforcing step manipulates a queue Q
 // of edges encoded this way. It examines pairs of triangles
 // t1,t2=Tadj(t1,0), decides whether to swap their common
 // edge (based on convexity test and intersection of
@@ -30,14 +30,15 @@
 
 
 // TODO:
-// 1) doubly connected triangle list for S,Q,N
-// 2) can we avoid computing o ? (stored in Tflags)
-// 3) predicate cache:
+// 1) test new API with creation of first quad
+// 2) doubly connected triangle list for S,Q,N
+// 3) can we avoid computing o ? (stored in Tflags)
+// 4) predicate cache:
 //     - test whether needed.
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 4) faster locate()
-// 5) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 6) tag/remove external triangles
+// 5) faster locate()
+// 6) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 7) tag/remove external triangles
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -49,7 +50,7 @@
 #include <geogram/basic/algorithm.h>
 #include <stack>
 
-//#define CDT_DEBUG
+#define CDT_DEBUG
 #ifdef CDT_DEBUG
 #define CDT_LOG(X) std::cerr << X << std::endl
 #else
@@ -95,7 +96,9 @@ namespace GEO {
         Tecnstr_.resize(0);
     }
 
-    void CDTBase::enclosing_triangle(index_t v0, index_t v1, index_t v2) {
+    void CDTBase::create_enclosing_triangle(
+        index_t v0, index_t v1, index_t v2
+    ) {
         nv_ = 3;
         v2T_.resize(3);
         geo_debug_assert(v0 <= 3);
@@ -106,7 +109,7 @@ namespace GEO {
         orient_012_ = orient2d(0,1,2);
     }
 
-    void CDTBase::enclosing_quad(
+    void CDTBase::create_enclosing_quad(
         index_t v0, index_t v1, index_t v2, index_t v3
     ) {
         nv_ = 4;
@@ -692,7 +695,7 @@ namespace GEO {
         point_.resize(0);
     }
     
-    void CDT::enclosing_triangle(
+    void CDT::create_enclosing_triangle(
         const vec2& p1, const vec2& p2, const vec2& p3
     ) {
         geo_assert(nv() == 0);
@@ -700,10 +703,10 @@ namespace GEO {
         point_.push_back(p1);
         point_.push_back(p2);
         point_.push_back(p3);
-        CDTBase::enclosing_triangle(0,1,2);
+        CDTBase::create_enclosing_triangle(0,1,2);
     }
 
-    void CDT::enclosing_quad(
+    void CDT::create_enclosing_quad(
         const vec2& p1, const vec2& p2, const vec2& p3, const vec2& p4
     ) {
         geo_assert(nv() == 0);
@@ -712,7 +715,7 @@ namespace GEO {
         point_.push_back(p2);
         point_.push_back(p3);        
         point_.push_back(p4);
-        CDTBase::enclosing_quad(0,1,2,3);
+        CDTBase::create_enclosing_quad(0,1,2,3);
     }
     
     Sign CDT::orient2d(index_t i, index_t j, index_t k) const {

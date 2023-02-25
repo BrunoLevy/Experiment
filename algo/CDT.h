@@ -184,20 +184,20 @@ namespace GEO {
          *  triangle
          * \param[in] v1 , v2 , v3 the three vertices of the first triangle,
          *  in 0,1,2
-         * \details enclosing_triangle() or enclosing_quad() need to be called
-         *  before anything else
+         * \details create_enclosing_triangle() or create_enclosing_quad() 
+         *  need to be called before anything else
          */
-        void enclosing_triangle(index_t v1, index_t v2, index_t v3);
+        void create_enclosing_triangle(index_t v1, index_t v2, index_t v3);
 
         /**
          * \brief Creates the combinatorics for a first large enclosing
          *  quad
          * \param[in] v1 , v2 , v3 , v4 the four vertices of the quad,
          *  in 0,1,2,3
-         * \details enclosing_triangle() or enclosing_quad() need to be called
-         *  before anything else
+         * \details create_enclosing_triangle() or create_enclosing_quad() 
+         *  need to be called before anything else
          */
-        void enclosing_quad(
+        void create_enclosing_quad(
             index_t v1, index_t v2, index_t v3, index_t v4
         );
         
@@ -658,19 +658,21 @@ namespace GEO {
         /**
          * \brief Creates a first large enclosing triangle
          * \param[in] p1 , p2 , p3 the three vertices of the first triangle
-         * \details enclosing_triangle() or enclosing_quad() need to be called
-         *  before anything else
+         * \details create_enclosing_triangle() or create_enclosing_quad() 
+         *  need to be called before anything else
          */
-        void enclosing_triangle(const vec2& p1, const vec2& p2, const vec2& p3);
+        void create_enclosing_triangle(
+            const vec2& p1, const vec2& p2, const vec2& p3
+        );
 
         /**
          * \brief Creates a first large enclosing quad
          * \param[in] p1 , p2 , p3 , p4 the four vertices of the quad
          * \details The quad needs to be convex. 
-         *  enclosing_triangle() or enclosing_quad() need to be called
-         *  before anything else. 
+         *  create_enclosing_triangle() or create_enclosing_quad() 
+         *  need to be called before anything else. 
          */
-        void enclosing_quad(
+        void create_enclosing_quad(
             const vec2& p1, const vec2& p2, const vec2& p3, const vec2& p4
         );
         

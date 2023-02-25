@@ -116,7 +116,7 @@ namespace OGF {
                 vec2 p0(mesh_grob()->vertices.point_ptr(0));
                 vec2 p1(mesh_grob()->vertices.point_ptr(1));
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
-                cdt.enclosing_triangle(p0,p1,p2);
+                cdt.create_enclosing_triangle(p0,p1,p2);
             }
             
             for(index_t v: mesh_grob()->vertices) {
