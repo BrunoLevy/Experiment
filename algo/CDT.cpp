@@ -398,7 +398,7 @@ namespace GEO {
             Trot(t,le);
             DList_push_front(Q,t);
         };
-        
+
         while(!Q.empty()) {
             index_t t1 = DList_pop_back(Q);
             if(!Tis_marked(t1)) {
@@ -473,7 +473,6 @@ namespace GEO {
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
-            //for(index_t t1: N) {
             for(index_t t1 = N.front; t1 != NO_INDEX; t1 = Tnext(t1)) {
                 if(Tedge_is_constrained(t1,0)) {
                     continue;
@@ -482,6 +481,9 @@ namespace GEO {
                 index_t v2 = Tv(t1,2);
                 index_t v0 = Tv(t1,0);
                 index_t t2 = Tadj(t1,0);
+                if(t2 == NO_INDEX) {
+                    continue;
+                }
                 index_t e2 = Tadj_find(t2,t1);
                 index_t v3 = Tv(t2,e2);
                 if(incircle(v0,v1,v2,v3) == POSITIVE) {

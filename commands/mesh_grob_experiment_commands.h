@@ -107,7 +107,9 @@ namespace OGF {
          */
         void constrained_delaunay_2d(
             bool use_my_code=true,
-            bool Delaunay=true
+            bool Delaunay=true,
+            bool constrained=true,
+            bool quad=false
         );
 
 

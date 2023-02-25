@@ -102,7 +102,9 @@ namespace OGF {
     
     void MeshGrobExperimentCommands::constrained_delaunay_2d(
         bool use_my_code,
-        bool Delaunay
+        bool Delaunay,
+        bool constrained,
+        bool quad
     ) {
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
@@ -112,7 +114,17 @@ namespace OGF {
             CDT cdt;
             cdt.set_delaunay(Delaunay);
 
-            {
+            index_t n=0;
+            if(quad) {
+                n=4;
+                vec2 p0(mesh_grob()->vertices.point_ptr(0));
+                vec2 p1(mesh_grob()->vertices.point_ptr(1));
+                vec2 p2(mesh_grob()->vertices.point_ptr(2));
+                vec2 p3(mesh_grob()->vertices.point_ptr(3));                
+                cdt.create_enclosing_quad(p0,p1,p2,p3);
+                n=4;
+            } else {
+                n=3;
                 vec2 p0(mesh_grob()->vertices.point_ptr(0));
                 vec2 p1(mesh_grob()->vertices.point_ptr(1));
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
@@ -120,23 +132,25 @@ namespace OGF {
             }
             
             for(index_t v: mesh_grob()->vertices) {
-                if(v < 3) {
+                if(v < n) {
                     continue;
                 }
                 const double* p = mesh_grob()->vertices.point_ptr(v);
                 cdt.insert(vec2(p));
             }
-            for(index_t e: mesh_grob()->edges) {
-                cdt.insert_constraint(
-                    mesh_grob()->edges.vertex(e,0),
-                    mesh_grob()->edges.vertex(e,1)                    
-                );
-            }
-            // Create the vertices coming from constraint intersections
-            for(index_t v=mesh_grob()->vertices.nb(); v<cdt.nv(); ++v) {
-                mesh_grob()->vertices.create_vertex(
-                    cdt.point(v).data()
-                );
+            if(constrained) {
+                for(index_t e: mesh_grob()->edges) {
+                    cdt.insert_constraint(
+                        mesh_grob()->edges.vertex(e,0),
+                        mesh_grob()->edges.vertex(e,1)                    
+                    );
+                }
+                // Create the vertices coming from constraint intersections
+                for(index_t v=mesh_grob()->vertices.nb(); v<cdt.nv(); ++v) {
+                    mesh_grob()->vertices.create_vertex(
+                        cdt.point(v).data()
+                    );
+                }
             }
             for(index_t t=0; t<cdt.nT(); ++t) {
                 index_t i = cdt.Tv(t,0);
