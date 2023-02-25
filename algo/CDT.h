@@ -389,7 +389,6 @@ namespace GEO {
             }
 #endif            
         }
-
         
         /**
          * \brief Sets a triangle adjacency relation
@@ -442,6 +441,8 @@ namespace GEO {
             Tadj_.resize(nc, NO_INDEX);
             Tecnstr_.resize(nc, NO_INDEX);
             Tflags_.resize(t+1,0);
+            Tnext_.resize(t+1,NO_INDEX);
+            Tprev_.resize(t+1,NO_INDEX);            
             return t;
         }
 
@@ -526,6 +527,85 @@ namespace GEO {
             return (Tedge_cnstr(t,le) != NO_INDEX);
         }
 
+        index_t Tnext(index_t t) {
+            geo_debug_assert(t < nT());
+            return Tnext_[t];
+        }
+
+        index_t Tprev(index_t t) {
+            geo_debug_assert(t < nT());
+            return Tprev_[t];
+        }
+        
+        /**
+         * \brief Doubly connected triangle list
+         */
+        struct DList {
+            DList() : back(NO_INDEX), front(NO_INDEX) {
+            }
+            bool empty() {
+                geo_debug_assert(
+                    (back==NO_INDEX)==(front==NO_INDEX)
+                );
+                return (back==NO_INDEX);
+            }
+            index_t back;
+            index_t front;
+        };
+
+        void DList_push_back(DList& L, index_t t) {
+            if(L.empty()) {
+                L.back = t;
+                L.front = t;
+                Tnext_[t] = NO_INDEX;
+                Tprev_[t] = NO_INDEX;
+            } else {
+                Tnext_[t] = NO_INDEX;
+                Tnext_[L.back] = t;
+                Tprev_[t] = L.back;
+                L.back = t;
+            }
+        }
+
+        index_t DList_pop_back(DList& L) {
+            geo_debug_assert(!L.empty());
+            index_t t = L.back;
+            L.back = Tprev_[L.back];
+            if(L.back == NO_INDEX) {
+                geo_debug_assert(L.front == t);
+                L.front = NO_INDEX;
+            } else {
+                Tnext_[L.back] = NO_INDEX;
+            }
+            return t;
+        }
+
+        void DList_push_front(DList& L, index_t t) {
+            if(L.empty()) {
+                L.back = t;
+                L.front = t;
+                Tnext_[t] = NO_INDEX;
+                Tprev_[t] = NO_INDEX;
+            } else {
+                Tprev_[t] = NO_INDEX;
+                Tprev_[L.front] = t;
+                Tnext_[t] = L.front;
+                L.front = t;
+            }
+        }
+
+        index_t DList_pop_front(DList& L) {
+            geo_debug_assert(!L.empty());
+            index_t t = L.front;
+            L.front = Tnext_[L.front];
+            if(L.front == NO_INDEX) {
+                geo_debug_assert(L.back == t);
+                L.back = NO_INDEX;
+            } else {
+                Tprev_[L.front] = NO_INDEX;
+            }
+            return t;
+        }
         
         /**
          * \brief Calls a user-defined function for each triangle 
@@ -638,6 +718,8 @@ namespace GEO {
         vector<index_t> v2T_;     /**< vertex to triangle back pointer       */
         vector<uint8_t> Tflags_;  /**< triangle flags                        */
         vector<index_t> Tecnstr_; /**< triangle edge constraint              */
+        vector<index_t> Tnext_;   /**< doubly connected triangle list        */
+        vector<index_t> Tprev_;   /**< doubly connected triangle list        */
         bool delaunay_;           /**< if set, compute a CDT, else just a CT */
         Sign orient_012_;         /**< global triangles orientation          */
     };
@@ -646,6 +728,39 @@ namespace GEO {
     
     /**
      * \brief Constrained Delaunay triangulation
+     * \details
+     *   Example:
+     *   \code
+     *    CDT cdt;
+     *    vec2 p1 = ..., p2 = ..., p3 = ...;
+     *    cdt.create_enclosing_triangle(p1,p2,p3); // or enclosing_quad
+     *    // insert points
+     *    for(...) {
+     *      vec2 p = ...;
+     *      index_t v = cdt.insert(p);
+     *      ...
+     *    }
+     *    // insert constraints
+     *    for(...) {
+     *       index_t v1=..., v2=...;
+     *       cdt.insert_constraint(v1,v2);   
+     *    }
+     *    // get triangles
+     *    for(index_t t=0; t<cdt.nT(); ++t) {
+     *       index_t v1 = cdt.Tv(t,0); 
+     *       index_t v2 = cdt.Tv(t,1); 
+     *       index_t v3 = cdt.Tv(t,2); 
+     *       ... do something with v1,v2,v3
+     *    }
+     *   \endcode   
+     *   If some constraints are intersecting, new vertices are generated. They
+     *   can be accessed using the function vec2 CDT::point(index_t v). Vertices
+     *   coming from an intersection are between indices nv1 and CDT::nv(), 
+     *   where nv1 is the value of CDT::nv() before inserting the constraints
+     *   (nv1 corresponds to the number of times CDT::insert() was called plus
+     *   the number of points in the enclosing polygon).
+     *   If one only wants a constrained triangulation (not Delaunay), 
+     *   one can call CDT::set_Delaunay(first) before inserting the points.
      */
     class Experiment_API CDT: public CDTBase {
     public:
