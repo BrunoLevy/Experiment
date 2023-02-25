@@ -40,6 +40,9 @@
 // 6) management of boundary: can we have "vertex at infinity" like in CGAL ?
 // 7) tag/remove external triangles
 
+// BUG:
+//  constraints_100_8.geogram: two triangles are not Delaunay at the end (???)
+
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
 // (other ways of doing exact computations using FP)
@@ -94,6 +97,8 @@ namespace GEO {
         v2T_.resize(0);
         Tflags_.resize(0);
         Tecnstr_.resize(0);
+        Tnext_.resize(0);
+        Tprev_.resize(0);
     }
 
     void CDTBase::create_enclosing_triangle(
@@ -154,28 +159,18 @@ namespace GEO {
         // Stack of triangle edges to examine for flipping
         // Note: it is always edge 0 that we examine, since new
         // triangles are always created with v as vertex 0.
-        std::stack<index_t> S;
+        DList S;
 
         // Phase 2: split triangle
         // Particular case: v is on edge
-        index_t t1,t2,t3,t4;        
         if(nb_z == 1) {
             CDT_LOG("vertex on edge");            
             index_t le = (o1 == ZERO) ? 0 :
                          (o2 == ZERO) ? 1 :
                           2 ;
-            insert_vertex_in_edge(v,t,le,t1,t2,t3,t4);
-            S.push(t1);
-            S.push(t2);
-            if(t3 != NO_INDEX && t4 != NO_INDEX) {
-                S.push(t3);
-                S.push(t4);
-            }
+            insert_vertex_in_edge(v,t,le,&S);
         } else {
-            insert_vertex_in_triangle(v,t,t1,t2,t3);
-            S.push(t1);
-            S.push(t2);
-            S.push(t3);
+            insert_vertex_in_triangle(v,t,&S);
         }
 
         check_consistency();
@@ -200,8 +195,9 @@ namespace GEO {
         // First vertex coming from constraints intersection
         index_t first_v_isect = nv_;
         
-        std::deque<index_t> Q; // Queue of edges to constrain
-        vector<index_t> N;     // New edges to re-Delaunayize
+        DList Q; // Queue of edges to constrain
+        // DList N; // New edges to re-Delaunayize
+        vector<index_t> N;
 
         while(i != j) {
             // Step 1: find all the edges that have an intersection 
@@ -226,7 +222,7 @@ namespace GEO {
 
         // Delaunayize triangles around vertices coming from
         // constraint intersections
-        std::stack<index_t> S;        
+        DList S;        
         for(index_t v=first_v_isect; v<nv(); ++v) {
             // We cannot use for_each_triangle_around_vertex()
             // because we need to Trot() t during traveral,
@@ -238,7 +234,7 @@ namespace GEO {
                 index_t lv = Tv_find(t,v);
                 Trot(t,lv);
                 geo_debug_assert(Tv(t,0) == v);
-                S.push(t);
+                DList_push_back(S,t);
                 t = Tadj(t, 1);
                 geo_debug_assert(t != NO_INDEX);
             } while(t != t0);            
@@ -247,7 +243,7 @@ namespace GEO {
     }
 
     index_t CDTBase::find_intersected_edges(
-        index_t i, index_t j, std::deque<index_t>& Q
+        index_t i, index_t j, DList& Q
     ) {
 
         CDT_LOG("Find intersected edges: " << i << "-" << j);
@@ -365,13 +361,10 @@ namespace GEO {
                                     ncnstr()-1, i, j,
                                     Tedge_cnstr(t,0), v1, v2
                                 );
-                                index_t nt1,nt2,nt3,nt4;
-                                insert_vertex_in_edge(
-                                    v_next,t,0,nt1,nt2,nt3,nt4
-                                );
+                                insert_vertex_in_edge(v_next,t,0);
                                 t_next = NO_INDEX;
                             } else {
-                                Q.push_back(t);
+                                DList_push_back(Q,t);
                                 Tmark(t);
                                 CDT_LOG("   Intersection: t="
                                         << t << " E=" << v1 << "-" << v2
@@ -407,9 +400,7 @@ namespace GEO {
         return NO_INDEX;
     }
     
-    void CDTBase::constrain_edges(
-        index_t i, index_t j, std::deque<index_t>& Q, vector<index_t>& N
-    ) {
+    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, vector<index_t>& N) {
         // Moves an edge from Q (the queue Q of intersected edges) to
         // N (the list of new edges).
         auto move_from_Q_to_N = [&](index_t t) {
@@ -421,12 +412,12 @@ namespace GEO {
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
                 N.push_back(t);
+                // DList_push_back(N,t);
             }
         };
         
-        while(Q.size() != 0) {
-            index_t t1 = Q.back();
-            Q.pop_back();
+        while(!Q.empty()) {
+            index_t t1 = DList_pop_back(Q);
             if(!Tis_marked(t1)) {
                 continue;
             }
@@ -434,8 +425,8 @@ namespace GEO {
                 // If the only remaining edge to flip does not form a convex
                 // quad, it means we are going to flip forever ! (shoud not
                 // happen)
-                geo_assert(Q.size() != 0);
-                Q.push_front(t1);
+                geo_assert(!Q.empty());
+                DList_push_front(Q,t1);
             } else {
                 index_t t2 = Tadj(t1,0);
                 bool no_isect  = !Tis_marked(t2);
@@ -460,19 +451,19 @@ namespace GEO {
                         } else {
                             // t1: isect   t2: no isect
                             Trot(t1,2); // so that intersected edge is edge 0
-                            Q.push_front(t1);
+                            DList_push_front(Q,t1);
                         }
                     } else {
                         geo_debug_assert(t2v0_t1v1);
                         if(o > 0) {
                             // t1: isect   t2: isect
-                            Trot(t2,1); // so that intersected edge is edge 0 
-                            Q.push_front(t1);                            
+                            Trot(t2,1); // so that intersected edge is edge 0
+                            DList_push_front(Q,t1);
                         } else {
                             // t1: isect   t2: no isect
                             Trot(t2,1); // so that new edge is edge 0
                             move_from_Q_to_N(t2);
-                            Q.push_front(t1);
+                            DList_push_front(Q,t1);
                         }
                     }
                 }
@@ -480,12 +471,9 @@ namespace GEO {
         }
     }
 
-    void CDTBase::Delaunayize_vertex_neighbors(
-        index_t v, std::stack<index_t>& S
-    ) {
-        while(S.size() != 0) {
-            index_t t1 = S.top();
-            S.pop();
+    void CDTBase::Delaunayize_vertex_neighbors(index_t v, DList& S) {
+        while(!S.empty()) {
+            index_t t1 = DList_pop_back(S);
             geo_debug_assert(Tv(t1,0) == v);
             if(Tedge_is_constrained(t1,0)) {
                 continue;
@@ -499,8 +487,8 @@ namespace GEO {
             index_t v3 = Tv(t2,2);
             if(incircle(v1,v2,v3,v) == POSITIVE) {
                 swap_edge(t1);
-                S.push(t1);
-                S.push(t2);                    
+                DList_push_back(S,t1);
+                DList_push_back(S,t2);                    
             }
         }
     }
@@ -510,6 +498,7 @@ namespace GEO {
         while(swap_occured) {
             swap_occured = false;
             for(index_t t1: N) {
+            // for(index_t t1 = N.front; t1 != NO_INDEX; t1 = Tnext(t1)) {
                 if(Tedge_is_constrained(t1,0)) {
                     continue;
                 }
@@ -525,7 +514,7 @@ namespace GEO {
                 }
             }
         }
-        N.resize(0);
+        N.clear();
     }
     
     index_t CDTBase::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
@@ -549,11 +538,11 @@ namespace GEO {
     
     void CDTBase::insert_vertex_in_edge(
         index_t v, index_t t, index_t le1,
-        index_t& t1, index_t& t2, index_t& t3, index_t& t4
+        DList* S
     ) {
         index_t cnstr = Tedge_cnstr(t,le1);
-        t1 = t;
-        t2 = Tadj(t1,le1);
+        index_t t1 = t;
+        index_t t2 = Tadj(t1,le1);
         index_t v1 = Tv(t1,le1);
         index_t v2 = Tv(t1,(le1+1)%3);
         index_t v3 = Tv(t1,(le1+2)%3);
@@ -570,8 +559,8 @@ namespace GEO {
             index_t v4 = Tv(t2,le2);
             index_t t2_adj2 = Tadj(t2,(le2+1)%3);
             index_t t2_adj3 = Tadj(t2,(le2+2)%3);
-            t3 = Tnew();
-            t4 = Tnew();
+            index_t t3 = Tnew();
+            index_t t4 = Tnew();
             Tset(t1,v,v1,v2,t1_adj3,t2,t4);
             Tset(t2,v,v2,v4,t2_adj2,t3,t1);
             Tset(t3,v,v4,v3,t2_adj3,t4,t2);
@@ -583,44 +572,56 @@ namespace GEO {
             Tset_edge_cnstr(t1,1,cnstr);
             Tset_edge_cnstr(t2,2,cnstr);
             Tset_edge_cnstr(t3,1,cnstr);
-            Tset_edge_cnstr(t4,2,cnstr);                        
+            Tset_edge_cnstr(t4,2,cnstr);
+            if(S != nullptr) {
+                DList_push_back(*S, t1);
+                DList_push_back(*S, t2);
+                DList_push_back(*S, t3);
+                DList_push_back(*S, t4);                
+            }
         } else {
             // New vertex is on an edge of t1 and t1 has no neighbor
             // accross that edge. Discard t1 and replace it with two
             // new triangles (recycle t1).
             t2 = Tnew();
-            t3 = NO_INDEX;
-            t4 = NO_INDEX;
             Tset(t1,v,v1,v2,t1_adj3,NO_INDEX,t2);
             Tset(t2,v,v3,v1,t1_adj2,t1,NO_INDEX);
             Tadj_back_connect(t1,0,t1);
             Tadj_back_connect(t2,0,t1);            
             Tset_edge_cnstr(t1,1,cnstr);
             Tset_edge_cnstr(t2,2,cnstr);
+            if(S != nullptr) {
+                DList_push_back(*S, t1);
+                DList_push_back(*S, t2);
+            }
         }
     }
 
     void CDTBase::insert_vertex_in_triangle(
-        index_t v, index_t t,
-        index_t& t1, index_t& t2, index_t& t3
+        index_t v, index_t t, DList* S
     ) {
         // New vertex is in t1. Discard t1 and replace it with three
         // new triangles (recycle t1).
-        t1 = t;
+        index_t t1 = t;
         index_t v1 = Tv(t1,0);
         index_t v2 = Tv(t1,1);
         index_t v3 = Tv(t1,2);
         index_t adj1 = Tadj(t1,0);
         index_t adj2 = Tadj(t1,1);
         index_t adj3 = Tadj(t1,2);
-        t2 = Tnew();
-        t3 = Tnew();
+        index_t t2 = Tnew();
+        index_t t3 = Tnew();
         Tset(t1,v,v2,v3,adj1,t2,t3);
         Tset(t2,v,v3,v1,adj2,t3,t1);
         Tset(t3,v,v1,v2,adj3,t1,t2);
         Tadj_back_connect(t1,0,t1);
         Tadj_back_connect(t2,0,t1);
-        Tadj_back_connect(t3,0,t1);        
+        Tadj_back_connect(t3,0,t1);
+        if(S != nullptr) {
+            DList_push_back(*S,t1);
+            DList_push_back(*S,t2);
+            DList_push_back(*S,t3);            
+        }
     }
     
     void CDTBase::swap_edge(index_t t1) {

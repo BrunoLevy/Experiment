@@ -8,8 +8,6 @@
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
-#include <stack>
-#include <deque>
 
 namespace GEO {
 
@@ -200,28 +198,128 @@ namespace GEO {
         void create_enclosing_quad(
             index_t v1, index_t v2, index_t v3, index_t v4
         );
+
+        /**
+         * \brief Constants for triangle flags
+         */
+        enum {T_MARKED_MASK = 1, T_IN_LIST_MASK = 2};
+
+        index_t Tnext(index_t t) {
+            geo_debug_assert(t < nT());
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            return Tnext_[t];
+        }
+
+        index_t Tprev(index_t t) {
+            geo_debug_assert(t < nT());
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            return Tprev_[t];
+        }
+        
+        /**
+         * \brief Doubly connected triangle list
+         */
+        struct DList {
+            DList() : back(NO_INDEX), front(NO_INDEX) {
+            }
+            void clear() {
+                back = NO_INDEX;
+                front = NO_INDEX;
+            }
+            bool empty() {
+                geo_debug_assert(
+                    (back==NO_INDEX)==(front==NO_INDEX)
+                );
+                return (back==NO_INDEX);
+            }
+            index_t back;
+            index_t front;
+        };
+
+        void DList_push_back(DList& L, index_t t) {
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) == 0);
+            Tflags_[t] |= T_IN_LIST_MASK;
+            if(L.empty()) {
+                L.back = t;
+                L.front = t;
+                Tnext_[t] = NO_INDEX;
+                Tprev_[t] = NO_INDEX;
+            } else {
+                Tnext_[t] = NO_INDEX;
+                Tnext_[L.back] = t;
+                Tprev_[t] = L.back;
+                L.back = t;
+            }
+        }
+
+        index_t DList_pop_back(DList& L) {
+            geo_debug_assert(!L.empty());
+            index_t t = L.back;
+            L.back = Tprev_[L.back];
+            if(L.back == NO_INDEX) {
+                geo_debug_assert(L.front == t);
+                L.front = NO_INDEX;
+            } else {
+                Tnext_[L.back] = NO_INDEX;
+            }
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
+            return t;
+        }
+
+        void DList_push_front(DList& L, index_t t) {
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) == 0);
+            Tflags_[t] |= T_IN_LIST_MASK;
+            if(L.empty()) {
+                L.back = t;
+                L.front = t;
+                Tnext_[t] = NO_INDEX;
+                Tprev_[t] = NO_INDEX;
+            } else {
+                Tprev_[t] = NO_INDEX;
+                Tprev_[L.front] = t;
+                Tnext_[t] = L.front;
+                L.front = t;
+            }
+        }
+
+        index_t DList_pop_front(DList& L) {
+            geo_debug_assert(!L.empty());
+            index_t t = L.front;
+            L.front = Tnext_[L.front];
+            if(L.front == NO_INDEX) {
+                geo_debug_assert(L.back == t);
+                L.back = NO_INDEX;
+            } else {
+                Tprev_[L.front] = NO_INDEX;
+            }
+            geo_debug_assert((Tflags_[t] & T_IN_LIST_MASK) != 0);
+            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
+            return t;
+        }
+        
         
         /**
          * \brief Inserts a vertex in an edge
          * \param[in] v the vertex to be inserted
          * \param[in] t a triangle incident to the edge
          * \param[in] le the local index of the edge in \p t
-         * \param[out] t1 , t2 , t3 , t4 the up to four new triangles
+         * \param[out] S optional DList of created triangles
          */
         void insert_vertex_in_edge(
             index_t v, index_t t, index_t le,
-            index_t& t1, index_t& t2, index_t& t3, index_t& t4
+            DList* S = nullptr
         );
 
         /**
          * \brief Inserts a vertex in a triangle
          * \param[in] v the vertex to be inserted
          * \param[in] t the triangle
-         * \param[out] t1 , t2 , t3  the three new triangles
+         * \param[out] S optional DList of created triangles
          */
         void insert_vertex_in_triangle(
             index_t v, index_t t,
-            index_t& t1, index_t& t2, index_t& t3
+            DList* S = nullptr
         );
         
         /**
@@ -238,9 +336,7 @@ namespace GEO {
          * \return the first vertex on [i,j] encountered when
          *  traversing the segment [i,j]. 
          */
-        index_t find_intersected_edges(
-            index_t i, index_t j, std::deque<index_t>& Q
-        );
+        index_t find_intersected_edges(index_t i, index_t j, DList& Q);
 
         /**
          * \brief Constrains an edge by iteratively flipping
@@ -250,10 +346,7 @@ namespace GEO {
          * \param[out] N the new edges, that need to be re-Delaunized
          *  by find_intersected_edges()
          */
-        void constrain_edges(
-            index_t i, index_t j,
-            std::deque<index_t>& Q, vector<index_t>& N
-        );
+        void constrain_edges(index_t i, index_t j, DList& Q, vector<index_t>& N);
 
         /**
          * \brief Restore Delaunay condition starting from the
@@ -266,7 +359,7 @@ namespace GEO {
          * \details Each time a triangle edge is swapped, the
          *  two new neighbors are recursively examined.
          */
-        void Delaunayize_vertex_neighbors(index_t v, std::stack<index_t>& S);
+        void Delaunayize_vertex_neighbors(index_t v, DList& S);
         
         /**
          * \brief Restore Delaunay condition for a set of
@@ -442,16 +535,17 @@ namespace GEO {
             Tecnstr_.resize(nc, NO_INDEX);
             Tflags_.resize(t+1,0);
             Tnext_.resize(t+1,NO_INDEX);
-            Tprev_.resize(t+1,NO_INDEX);            
+            Tprev_.resize(t+1,NO_INDEX);
             return t;
         }
 
+        
         /**
          * \brief Marks a triangle as intersected by the constraint
          */
         void Tmark(index_t t) {
             geo_debug_assert(t < nT());            
-            Tflags_[t] = 1;
+            Tflags_[t] |= T_MARKED_MASK;
         }
 
         /**
@@ -459,7 +553,7 @@ namespace GEO {
          */
         void Tunmark(index_t t) {
             geo_debug_assert(t < nT());            
-            Tflags_[t] = 0;
+            Tflags_[t] &= Numeric::uint8(~T_MARKED_MASK);
         }
 
         /**
@@ -467,7 +561,7 @@ namespace GEO {
          */
         bool Tis_marked(index_t t) {
             geo_debug_assert(t < nT());            
-            return (Tflags_[t] != 0);
+            return ((Tflags_[t] & T_MARKED_MASK) != 0);
         }
 
         /**
@@ -527,86 +621,6 @@ namespace GEO {
             return (Tedge_cnstr(t,le) != NO_INDEX);
         }
 
-        index_t Tnext(index_t t) {
-            geo_debug_assert(t < nT());
-            return Tnext_[t];
-        }
-
-        index_t Tprev(index_t t) {
-            geo_debug_assert(t < nT());
-            return Tprev_[t];
-        }
-        
-        /**
-         * \brief Doubly connected triangle list
-         */
-        struct DList {
-            DList() : back(NO_INDEX), front(NO_INDEX) {
-            }
-            bool empty() {
-                geo_debug_assert(
-                    (back==NO_INDEX)==(front==NO_INDEX)
-                );
-                return (back==NO_INDEX);
-            }
-            index_t back;
-            index_t front;
-        };
-
-        void DList_push_back(DList& L, index_t t) {
-            if(L.empty()) {
-                L.back = t;
-                L.front = t;
-                Tnext_[t] = NO_INDEX;
-                Tprev_[t] = NO_INDEX;
-            } else {
-                Tnext_[t] = NO_INDEX;
-                Tnext_[L.back] = t;
-                Tprev_[t] = L.back;
-                L.back = t;
-            }
-        }
-
-        index_t DList_pop_back(DList& L) {
-            geo_debug_assert(!L.empty());
-            index_t t = L.back;
-            L.back = Tprev_[L.back];
-            if(L.back == NO_INDEX) {
-                geo_debug_assert(L.front == t);
-                L.front = NO_INDEX;
-            } else {
-                Tnext_[L.back] = NO_INDEX;
-            }
-            return t;
-        }
-
-        void DList_push_front(DList& L, index_t t) {
-            if(L.empty()) {
-                L.back = t;
-                L.front = t;
-                Tnext_[t] = NO_INDEX;
-                Tprev_[t] = NO_INDEX;
-            } else {
-                Tprev_[t] = NO_INDEX;
-                Tprev_[L.front] = t;
-                Tnext_[t] = L.front;
-                L.front = t;
-            }
-        }
-
-        index_t DList_pop_front(DList& L) {
-            geo_debug_assert(!L.empty());
-            index_t t = L.front;
-            L.front = Tnext_[L.front];
-            if(L.front == NO_INDEX) {
-                geo_debug_assert(L.back == t);
-                L.back = NO_INDEX;
-            } else {
-                Tprev_[L.front] = NO_INDEX;
-            }
-            return t;
-        }
-        
         /**
          * \brief Calls a user-defined function for each triangle 
          * around a vertex
