@@ -28,10 +28,6 @@
 // We need to mark/unmark triangles for one case: when t2 is unmarked,
 // it means there is no intersection.
 
-// BUGS:
-//  contraints_100_8.geogram and constraints_100_11.geogram has a
-//  non-Delaunay edge at the end (and it seems a constraint flag is
-//  missing on the border)
 
 // TODO:
 // 1) can we avoid computing o ? (stored in Tflags)
@@ -41,6 +37,11 @@
 // 3) management of boundary: can we have "vertex at infinity" like in CGAL ?
 // 4) tag/remove external triangles
 // 5) insert additional vertices with Delaunay refinement
+
+// Double-check what happens with contraints_100_8.geogram and
+// constraints_100_11.geogram : depending on whether new edges are pushed
+// to the front or to the back of N, there remains a non-Delaunay edge in
+// the end (if pushed to the back).
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -167,12 +168,12 @@ namespace GEO {
 
     
     void CDTBase::insert_constraint(index_t i, index_t j) {
-
         CDT_LOG("insert constraint: " << i << "-" << j);
 
         ++ncnstr_;
 
-        // First vertex coming from constraints intersection
+        // Index of first vertex coming from constraints intersection
+        // (keep track of it to re-Delaunayize their neighborhoods).
         index_t first_v_isect = nv_;
         
         DList Q; // Queue of edges to constrain
@@ -184,6 +185,7 @@ namespace GEO {
             // Stop at vertex on constraint or constraint intersection
             // if any (returned in k)
             index_t k = find_intersected_edges(i,j,Q);
+
             // Step 2: constrain edges
             constrain_edges(i,k,Q,delaunay_ ? &N : nullptr);
             check_consistency();
@@ -220,6 +222,7 @@ namespace GEO {
             } while(t != t0);            
             Delaunayize_vertex_neighbors(v,S);
         }
+
     }
 
     index_t CDTBase::find_intersected_edges(
@@ -297,6 +300,12 @@ namespace GEO {
                             index_t le_cnstr_edge = (v1 == j) ? (le+2)%3 : (le+1)%3;
                             Tset_edge_cnstr_with_neighbor(
                                 t_around_v, le_cnstr_edge, ncnstr_-1
+                            );
+                            CDT_LOG(
+                                " During cnstr " << i << "-" << j << ": " 
+                                << " Constrained edge "
+                                << Tv(t_around_v, (le_cnstr_edge+1)%3) << "-"
+                                << Tv(t_around_v, (le_cnstr_edge+2)%3)
                             );
                             return true;
                         }
@@ -422,7 +431,7 @@ namespace GEO {
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
                 if(N != nullptr) {
-                    DList_push_back(*N,t);
+                    DList_push_front(*N,t);
                 }
             }
         };
@@ -456,7 +465,7 @@ namespace GEO {
                 if(no_isect) {
                     new_edge(t1,2);
                 } else {
-                    // See comment at beginning of file (a variation in Sloan's
+                    // See comment at beginning of file (a small variation in Sloan's
                     // method that makes better use of the combinatorics)
                     Sign o = orient2d(i,j,v0);
                     if(t2v0_t1v2) {
@@ -724,7 +733,7 @@ namespace GEO {
         Tadj_back_connect(t1,0,t2);
         Tadj_back_connect(t1,1,t1);
         Tadj_back_connect(t2,0,t2);
-        Tadj_back_connect(t2,2,t1);        
+        Tadj_back_connect(t2,2,t1);
         Tcheck(t1);
         Tcheck(t2);        
     }
