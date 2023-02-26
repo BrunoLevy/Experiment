@@ -9,6 +9,8 @@
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
 
+// See documentation of CDT class at the end of this file.
+
 namespace GEO {
 
     /**
@@ -218,7 +220,7 @@ namespace GEO {
         
         /**
          * \brief Doubly connected triangle list
-         * \details The same triangle cannot be only
+         * \details The same triangle can be only
          *  in a single DList at the same time. 
          *  Used to implement:
          *  - the stack S of triangles to flip in insert()
@@ -313,6 +315,13 @@ namespace GEO {
         }
 
 
+        /**
+         * \brief Removes a triangle from a DList
+         * \pre \p The triangle t is in the DList \p L
+         * \details The triangle can be anywhere in the DList
+         * \param[in] t the triangle to be removed
+         * \param[in,out] L the DList
+         */
         void DList_remove(DList& L, index_t t) {
             if(t == L.front) {
                 DList_pop_front(L);
@@ -373,9 +382,9 @@ namespace GEO {
          * \param[in] i , j the extremities of the edge
          * \param[in] Q the list of intersected edges, computed
          * \param[out] N the new edges, that need to be re-Delaunized
-         *  by find_intersected_edges()
+         *  by find_intersected_edges(), or nullptr 
          */
-        void constrain_edges(index_t i, index_t j, DList& Q, DList& N);
+        void constrain_edges(index_t i, index_t j, DList& Q, DList* N);
 
         /**
          * \brief Restore Delaunay condition starting from the
@@ -816,7 +825,7 @@ namespace GEO {
      *   \code
      *    CDT cdt;
      *    vec2 p1 = ..., p2 = ..., p3 = ...;
-     *    cdt.create_enclosing_triangle(p1,p2,p3); // or enclosing_quad
+     *    cdt.create_enclosing_triangle(p1,p2,p3); // or enclosing_quad() or _rect()
      *    // insert points
      *    for(...) {
      *      vec2 p = ...;
@@ -842,6 +851,7 @@ namespace GEO {
      *   where nv1 is the value of CDT::nv() before inserting the constraints
      *   (nv1 corresponds to the number of times CDT::insert() was called plus
      *   the number of points in the enclosing polygon).
+     *
      *   If one only wants a constrained triangulation (not Delaunay), 
      *   one can call CDT::set_Delaunay(first) before inserting the points.
      */

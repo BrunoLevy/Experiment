@@ -146,9 +146,9 @@ namespace GEO {
             index_t le = (o1 == ZERO) ? 0 :
                          (o2 == ZERO) ? 1 :
                           2 ;
-            insert_vertex_in_edge(v,t,le,&S);
+            insert_vertex_in_edge(v,t,le,delaunay_ ? &S : nullptr);
         } else {
-            insert_vertex_in_triangle(v,t,&S);
+            insert_vertex_in_triangle(v,t,delaunay_ ? &S : nullptr);
         }
 
         check_consistency();
@@ -183,7 +183,7 @@ namespace GEO {
             // if any (returned in k)
             index_t k = find_intersected_edges(i,j,Q);
             // Step 2: constrain edges
-            constrain_edges(i,k,Q,N);
+            constrain_edges(i,k,Q,delaunay_ ? &N : nullptr);
             check_consistency();
             // Step 3: restore Delaunay condition
             if(delaunay_) {
@@ -404,7 +404,7 @@ namespace GEO {
         return NO_INDEX;
     }
     
-    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList& N) {
+    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList* N) {
 
         // Edge le of triangle t has no isect with cnstr, it is a new edge
         auto new_edge = [&](index_t t,index_t le) {
@@ -416,7 +416,9 @@ namespace GEO {
             ) {
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
-                DList_push_back(N,t);
+                if(N != nullptr) {
+                    DList_push_back(*N,t);
+                }
             }
         };
 
