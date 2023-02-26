@@ -203,7 +203,8 @@ namespace GEO {
             // We cannot use for_each_triangle_around_vertex()
             // because we need to Trot() t during traveral,
             // to have v has t's vertex 0
-            // But the good news is that v is never on the border.
+            // But the good news is that v is never on the border,
+            // so traversal is easier.
             index_t t0 = vT(v); // Need to store it, because we Trot()
             index_t t = t0;
             do {

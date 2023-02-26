@@ -220,6 +220,11 @@ namespace GEO {
          * \brief Doubly connected triangle list
          * \details The same triangle cannot be only
          *  in a single DList at the same time. 
+         *  Used to implement:
+         *  - the stack S of triangles to flip in insert()
+         *  - the queue Q of intersected edges in 
+         *    detect_intersected_edges() and constrain_edges()
+         *  - the list N of new edges in constrain_edges()
          */
         struct DList {
             /**
@@ -849,8 +854,8 @@ namespace GEO {
         /**
          * \brief Creates a first large enclosing triangle
          * \param[in] p1 , p2 , p3 the three vertices of the first triangle
-         * \details create_enclosing_triangle() or create_enclosing_quad() 
-         *  need to be called before anything else
+         * \details create_enclosing_triangle(), create_enclosing_rectangle() 
+         *  or create_enclosing_quad()  need to be called before anything else
          */
         void create_enclosing_triangle(
             const vec2& p1, const vec2& p2, const vec2& p3
@@ -860,18 +865,35 @@ namespace GEO {
          * \brief Creates a first large enclosing quad
          * \param[in] p1 , p2 , p3 , p4 the four vertices of the quad
          * \details The quad needs to be convex. 
-         *  create_enclosing_triangle() or create_enclosing_quad() 
-         *  need to be called before anything else. 
+         * create_enclosing_triangle(), create_enclosing_rectangle() 
+         *  or create_enclosing_quad()  need to be called before anything else
          */
         void create_enclosing_quad(
             const vec2& p1, const vec2& p2, const vec2& p3, const vec2& p4
         );
+
+
+        /**
+         * \brief Creates a first large enclosing rectangle
+         * \param[in] x1 , y1 , x2 , y2 rectangle bounds
+         * \details create_enclosing_triangle(), create_enclosing_rectangle() 
+         *  or create_enclosing_quad()  need to be called before anything else
+         */
+        void create_enclosing_rectangle(
+            double x1, double y1, double x2, double y2
+        ) {
+            create_enclosing_quad(
+                vec2(x1,y1),
+                vec2(x2,y1),
+                vec2(x2,y2),
+                vec2(x1,y1)
+            );
+        }
         
         /**
          * \brief Inserts a point
-         * \details Start by inserting three points forming
-         *  a large triangle around all the other points
-         * \return the index of the created point
+         * \return the index of the created point. Duplicated points are
+         *  detected (and them the same index is returned)
          */
         index_t insert(const vec2& p) {
             point_.push_back(p);
@@ -889,7 +911,11 @@ namespace GEO {
          */
         void save(const std::string& filename) const override;
 
-
+        /**
+         * \brief Gets a point by index
+         * \param[in] v point index
+         * \return the point at index \p v
+         */
         vec2 point(index_t v) const {
             geo_debug_assert(v < nv());
             return point_[v];
