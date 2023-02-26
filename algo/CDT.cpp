@@ -37,6 +37,7 @@
 // 3) faster locate()
 // 4) management of boundary: can we have "vertex at infinity" like in CGAL ?
 // 5) tag/remove external triangles
+// 6) insert additional vertices with Delaunay refinement
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -222,7 +223,6 @@ namespace GEO {
     index_t CDTBase::find_intersected_edges(
         index_t i, index_t j, DList& Q
     ) {
-
         CDT_LOG("Find intersected edges: " << i << "-" << j);
         
         // Walk from i to j, detect intersected edges and push
@@ -232,6 +232,9 @@ namespace GEO {
         // We keep track of the previous triangle or previous vertex
         // to make sure we don't go backwards.
         
+        // At any time, exactly one of t,v is different from NO_INDEX
+        // (same thing for t_prev,v_prev and t_next,v_next)
+        
         index_t t_prev = NO_INDEX;
         index_t v_prev = NO_INDEX;
         index_t t      = NO_INDEX;
@@ -239,18 +242,34 @@ namespace GEO {
         index_t t_next = NO_INDEX;
         index_t v_next = NO_INDEX;
 
-        // We stop at the first encountered vertex
-        // The function could be also used to traverse
-        // the whole intersected segment, but doing it
-        // like that is better to schedule constraint
-        // enforcement / re-Delaunay, especially when
-        // new vertices are inserted.
+        // We stop at the first encountered vertex or constraint
+        // intersection
+        // The iteration below could be also used to traverse
+        // the whole intersected segment, but stopping at first
+        // vertex makes it easier to schedule constraint
+        // enforcement / re-Delaunay (especially in the case of 
+        // constraint intersection that needs to insert a new vertex)
+
         while(v == NO_INDEX || v == i) {
             CDT_LOG(
                 "   t=" << int(t) << " v=" << int(v) << "   "
                 "t_prev=" << int(t_prev) << " v_prev=" << int(v_prev) << "   "
             );
 
+            // The code below is more complicated than I wished, but is
+            // simpler than it looks like. There are two main different cases:
+            // - on a vertex (v != NO_INDEX, t == NO_INDEX)
+            //   traverse all the triangles around v and find the one that
+            //   has an intersection. For instance, when we start from vertex i,
+            //   and also when the previous step encountered a vertex exactly on
+            //   the constrained segment
+            // - on an edge intersection (v == NO_INDEX, t != NO_INDEX)
+            //   propagate to the neighbor of t accross the intersected edge
+            // What makes things slightly more complicated is that each case
+            // has two sub-cases, depending on whether the constraint segment
+            // passes exactly through a vertex
+
+            
             if(v != NO_INDEX) {
                 // We are on a vertex (when we start from i, or when there
                 // is a vertex exactly on [i,j], or when there was a constraints

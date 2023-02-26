@@ -725,7 +725,9 @@ namespace GEO {
                 if(Tis_marked(t)) {
                     std::cerr << '*';
                 }
-                std::cerr << t << "(" << Tv(t,0) << "," << Tv(t,1) << "," << Tv(t,2) << ") ";
+                std::cerr << t << "("
+                          << Tv(t,0) << "," << Tv(t,1) << "," << Tv(t,2)
+                          << ") ";
             }
             std::cerr << std::endl;
         }
