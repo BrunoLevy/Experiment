@@ -29,8 +29,9 @@
 // it means there is no intersection.
 
 // BUGS:
-//  contraints_200_1.geogram and constraints_200_2.geogram in non-Delaunay
-//    mode misses some constraints intersections.
+//  contraints_100_8.geogram and constraints_100_11.geogram has a
+//  non-Delaunay edge at the end (and it seems a constraint flag is
+//  missing on the border)
 
 // TODO:
 // 1) can we avoid computing o ? (stored in Tflags)
