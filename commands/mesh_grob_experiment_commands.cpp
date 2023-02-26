@@ -122,7 +122,6 @@ namespace OGF {
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
                 vec2 p3(mesh_grob()->vertices.point_ptr(3));                
                 cdt.create_enclosing_quad(p0,p1,p2,p3);
-                n=4;
             } else {
                 n=3;
                 vec2 p0(mesh_grob()->vertices.point_ptr(0));

@@ -30,17 +30,13 @@
 
 
 // TODO:
-// 1) test new API with creation of first quad
-// 2) can we avoid computing o ? (stored in Tflags)
-// 3) predicate cache:
+// 1) can we avoid computing o ? (stored in Tflags)
+// 2) predicate cache:
 //     - test whether needed.
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 4) faster locate()
-// 5) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 6) tag/remove external triangles
-
-// BUG:
-//  constraints_100_8.geogram: two triangles are not Delaunay at the end (???)
+// 3) faster locate()
+// 4) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 5) tag/remove external triangles
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -52,7 +48,10 @@
 #include <geogram/basic/algorithm.h>
 #include <stack>
 
+#ifdef GEO_DEBUG
 #define CDT_DEBUG
+#endif
+
 #ifdef CDT_DEBUG
 #define CDT_LOG(X) std::cerr << X << std::endl
 #else
@@ -103,8 +102,8 @@ namespace GEO {
         geo_debug_assert(v3 <= 4);        
         index_t t0 = Tnew();
         index_t t1 = Tnew();        
-        Tset(t0, v0, v1, v2, index_t(-1), t1, index_t(-1));
-        Tset(t1, v0, v2, v3, index_t(-1), index_t(-1), t0);        
+        Tset(t0, v0, v1, v3, t1, NO_INDEX, NO_INDEX);
+        Tset(t1, v3, v1, v2, NO_INDEX, NO_INDEX, t0);
         orient_012_ = orient2d(0,1,2);
         geo_debug_assert(is_convex_quad(t0));
         if(incircle(v0,v1,v2,v3) == POSITIVE) {
@@ -266,12 +265,20 @@ namespace GEO {
                         }
                         index_t v1 = Tv(t_around_v, (le + 1)%3);
                         index_t v2 = Tv(t_around_v, (le + 2)%3);
+
                         // Are we arrived at j ? 
                         if(v1 == j || v2 == j) {
                             v_next = j;
                             t_next = NO_INDEX;
+                            // Edge is flagged as constraint here, because
+                            // it will not be seen by constraint enforcement.
+                            index_t le_cnstr_edge = (v1 == j) ? le : (le+1)%3;
+                            Tset_edge_cnstr_with_neighbor(
+                                t_around_v, le_cnstr_edge, ncnstr_-1
+                            );
                             return true;
                         }
+                        
                         Sign o1 = orient2d(i,j,v1);
                         Sign o2 = orient2d(i,j,v2);                        
                         Sign o3 = orient2d(v1,v2,j);
@@ -378,7 +385,7 @@ namespace GEO {
     }
     
     void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList& N) {
-        
+
         // Edge le of triangle t has no isect with cnstr, it is a new edge
         auto new_edge = [&](index_t t,index_t le) {
             Trot(t,le);
@@ -489,7 +496,7 @@ namespace GEO {
                 if(incircle(v0,v1,v2,v3) == POSITIVE) {
                     swap_edge(t1);
                     swap_occured = true;
-                }
+                } 
             }
         }
         DList_clear(N);

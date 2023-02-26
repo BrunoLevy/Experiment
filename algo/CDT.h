@@ -204,13 +204,13 @@ namespace GEO {
          */
         enum {T_MARKED_MASK = 1, T_IN_LIST_MASK = 2};
 
-        index_t Tnext(index_t t) {
+        index_t Tnext(index_t t) const {
             geo_debug_assert(t < nT());
             geo_debug_assert(Tis_in_list(t));
             return Tnext_[t];
         }
 
-        index_t Tprev(index_t t) {
+        index_t Tprev(index_t t) const {
             geo_debug_assert(t < nT());
             geo_debug_assert(Tis_in_list(t));            
             return Tprev_[t];
@@ -585,7 +585,7 @@ namespace GEO {
         /**
          * \brief Tests whether a triangle is marked as intersected
          */
-        bool Tis_marked(index_t t) {
+        bool Tis_marked(index_t t) const {
             geo_debug_assert(t < nT());            
             return ((Tflags_[t] & T_MARKED_MASK) != 0);
         }
@@ -609,7 +609,7 @@ namespace GEO {
         /**
          * \brief Tests whether a triangle is in a DList
          */
-        bool Tis_in_list(index_t t) {
+        bool Tis_in_list(index_t t) const {
             geo_debug_assert(t < nT());            
             return ((Tflags_[t] & T_IN_LIST_MASK) != 0);
         }
@@ -712,6 +712,17 @@ namespace GEO {
                 }
                 t = Tadj(t, (lv+2)%3);
             }
+        }
+
+        void DList_show(const std::string& name, const DList& list) const {
+            std::cerr << name << "=";
+            for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
+                if(Tis_marked(t)) {
+                    std::cerr << '*';
+                }
+                std::cerr << t << "(" << Tv(t,0) << "," << Tv(t,1) << "," << Tv(t,2) << ") ";
+            }
+            std::cerr << std::endl;
         }
         
         /**
