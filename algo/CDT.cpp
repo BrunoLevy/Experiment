@@ -28,16 +28,18 @@
 // We need to mark/unmark triangles for one case: when t2 is unmarked,
 // it means there is no intersection.
 
+// BUGS:
+//  contraints_200_1.geogram and constraints_200_2.geogram in non-Delaunay
+//    mode misses some constraints intersections.
 
 // TODO:
 // 1) can we avoid computing o ? (stored in Tflags)
 // 2) predicate cache:
 //     - test whether needed.
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 3) faster locate()
-// 4) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 5) tag/remove external triangles
-// 6) insert additional vertices with Delaunay refinement
+// 3) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 4) tag/remove external triangles
+// 5) insert additional vertices with Delaunay refinement
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -46,8 +48,7 @@
 #include <OGF/Experiment/algo/CDT.h>
 #include <geogram/mesh/mesh.h>
 #include <geogram/mesh/mesh_io.h>
-#include <geogram/basic/algorithm.h>
-#include <stack>
+#include <geogram/basic/numeric.h>
 
 #ifdef GEO_DEBUG
 #define CDT_DEBUG
@@ -118,17 +119,17 @@ namespace GEO {
         ++nv_;
         
         // Phase 1: find triangle that contains vertex i
-        Sign o1,o2,o3;
-        index_t t = locate(v,o1,o2,o3);
-        int nb_z = (o1 == ZERO) + (o2 == ZERO) + (o3 == ZERO);
+        Sign o[3];
+        index_t t = locate(v,o);
+        int nb_z = (o[0] == ZERO) + (o[1] == ZERO) + (o[2] == ZERO);
         geo_debug_assert(nb_z != 3);
 
         // Duplicated vertex
         if(nb_z == 2) {
             CDT_LOG("duplicated vertex");
-            v = (o1 != ZERO) ? Tv(t,0) :
-                (o2 != ZERO) ? Tv(t,1) :
-                               Tv(t,2) ;
+            v = (o[0] != ZERO) ? Tv(t,0) :
+                (o[1] != ZERO) ? Tv(t,1) :
+                                 Tv(t,2) ;
             v2T_.pop_back();
             --nv_;
             return v;
@@ -143,8 +144,8 @@ namespace GEO {
         // Particular case: v is on edge
         if(nb_z == 1) {
             CDT_LOG("vertex on edge");            
-            index_t le = (o1 == ZERO) ? 0 :
-                         (o2 == ZERO) ? 1 :
+            index_t le = (o[0] == ZERO) ? 0 :
+                         (o[1] == ZERO) ? 1 :
                           2 ;
             insert_vertex_in_edge(v,t,le,delaunay_ ? &S : nullptr);
         } else {
@@ -292,7 +293,7 @@ namespace GEO {
                             t_next = NO_INDEX;
                             // Edge is flagged as constraint here, because
                             // it will not be seen by constraint enforcement.
-                            index_t le_cnstr_edge = (v1 == j) ? le : (le+1)%3;
+                            index_t le_cnstr_edge = (v1 == j) ? (le+2)%3 : (le+1)%3;
                             Tset_edge_cnstr_with_neighbor(
                                 t_around_v, le_cnstr_edge, ncnstr_-1
                             );
@@ -360,7 +361,10 @@ namespace GEO {
                             // [v1,v2] has a frank intersection with [i,j]
                             Trot(t,le); // So that edge 0 is intersected edge
                             if(Tedge_is_constrained(t,0)) {
-                                CDT_LOG("   ====> Constraints intersection");
+                                CDT_LOG(
+                                    "   ====> Constraints intersection with:"
+                                    << v1 << "-" << v2
+                                );
                                 v_next = create_intersection(
                                     ncnstr()-1, i, j,
                                     Tedge_cnstr(t,0), v1, v2
@@ -524,21 +528,88 @@ namespace GEO {
         DList_clear(N);
     }
     
-    index_t CDTBase::locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const {
-        // This version: linear scan
-        // TODO: faster version
-        for(index_t t=0; t<nT(); ++t) {
-            index_t i = Tv(t,0);
-            index_t j = Tv(t,1);
-            index_t k = Tv(t,2);
-            o1 = orient2d(v,j,k);
-            o2 = orient2d(v,k,i);
-            o3 = orient2d(v,i,j);
-            if(o1*o2 >= 0 && o2*o3 >= 0 && o3*o1 >= 0) {
-                return t;
+    index_t CDTBase::locate(index_t v, Sign* o) const {
+        Sign o_local[3];
+        if(o == nullptr) {
+            o = o_local;
+        }
+
+        // Simple locate, linear scan
+        /*
+        {
+            for(index_t t=0; t<nT(); ++t) {
+                index_t i = Tv(t,0);
+                index_t j = Tv(t,1);
+                index_t k = Tv(t,2);
+                o[0] = orient2d(v,j,k);
+                o[1] = orient2d(v,k,i);
+                o[2] = orient2d(v,i,j);
+                if(o[0]*o[1] >= 0 && o[1]*o[2] >= 0 && o[2]*o[0] >= 0) {
+                    return t;
+                    break;
+                }
+            }
+            geo_assert_not_reached;
+        }
+        */
+
+        // More efficient locate, "walking the triangulation"
+        index_t t_pred = nT()+1; // Needs to be different from NO_INDEX
+        index_t t = index_t(Numeric::random_int32()) % nT();
+    still_walking:
+        {
+            // May happen if we try to locate a point outside the boundary
+            geo_debug_assert(t != NO_INDEX);
+            
+            index_t tv[3];
+            tv[0] = Tv(t,0);
+            tv[1] = Tv(t,1);
+            tv[2] = Tv(t,2);
+            
+            // Start from a random edge
+            index_t e0 = index_t(Numeric::random_int32()) % 3;
+            for(index_t de = 0; de < 3; ++de) {
+                index_t le = (e0 + de) % 3;
+                
+                index_t t_next = Tadj(t,le);
+
+                //   If the candidate next triangle is the
+                // one we came from, then we know already that
+                // the orientation is positive, thus we examine
+                // the next candidate (or exit the loop if they
+                // are exhausted).
+                //
+                // (here is why intial value of t_pred needs to be
+                // different from NO_INDEX)
+                if(t_next == t_pred) {
+                    o[le] = POSITIVE;
+                    continue ; 
+                }
+
+                // To test the orientation of p w.r.t. the facet f of
+                // t, we replace vertex number f with p in t (same
+                // convention as in CGAL).
+                index_t v_bkp = tv[le];
+                tv[le] = v;
+                o[le] = Sign(orient_012_ * orient2d(tv[0], tv[1], tv[2]));
+                
+                // If the orientation is not negative, then we cannot
+                // walk towards t_next, and examine the next candidate
+                // (or exit the loop if they are exhausted).
+                if(o[le] != NEGATIVE) {
+                    tv[le] = v_bkp;
+                    continue;
+                }
+
+                // If we reach this point, then t_next is a valid
+                // successor, thus we are still walking.
+                t_pred = t;
+                t = t_next;
+                goto still_walking;
             }
         }
-        geo_assert_not_reached;
+
+        return t;
     }
 
     /***************** Triangulation surgery (boring code ahead) *********/

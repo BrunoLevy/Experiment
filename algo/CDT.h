@@ -381,8 +381,9 @@ namespace GEO {
          *  the intersected edges.
          * \param[in] i , j the extremities of the edge
          * \param[in] Q the list of intersected edges, computed
-         * \param[out] N the new edges, that need to be re-Delaunized
-         *  by find_intersected_edges(), or nullptr 
+         * \param[out] N a pointer to the DList with the new edges 
+         *  that need to be re-Delaunized by find_intersected_edges(), 
+         *  or nullptr if one does not want to get them
          */
         void constrain_edges(index_t i, index_t j, DList& Q, DList* N);
 
@@ -744,10 +745,12 @@ namespace GEO {
         /**
          * \brief Locates a vertex
          * \param[in] v the vertex index
-         * \param[out] o1 , o2 , o3 the three orientation predicates
+         * \param[out] orient a pointer to the three orientations in the 
+         *  triangle. If one of them is zero, the point is on an edge, and
+         *  if two of them are zero, it is on a vertex.
          * \return a triangle that contains \p v
          */
-        index_t locate(index_t v, Sign& o1, Sign& o2, Sign& o3) const;
+        index_t locate(index_t v, Sign* orient = nullptr) const;
         
         /**
          * \brief Tests whether triange t and its neighbor accross edge 0 form 
@@ -825,7 +828,8 @@ namespace GEO {
      *   \code
      *    CDT cdt;
      *    vec2 p1 = ..., p2 = ..., p3 = ...;
-     *    cdt.create_enclosing_triangle(p1,p2,p3); // or enclosing_quad() or _rect()
+     *    cdt.create_enclosing_triangle(p1,p2,p3); 
+     *         // or create_enclosing_quad() or create_enclosing_rect()
      *    // insert points
      *    for(...) {
      *      vec2 p = ...;
@@ -853,7 +857,7 @@ namespace GEO {
      *   the number of points in the enclosing polygon).
      *
      *   If one only wants a constrained triangulation (not Delaunay), 
-     *   one can call CDT::set_Delaunay(first) before inserting the points.
+     *   one can call CDT::set_Delaunay(false) before inserting the points.
      */
     class Experiment_API CDT: public CDTBase {
     public:
