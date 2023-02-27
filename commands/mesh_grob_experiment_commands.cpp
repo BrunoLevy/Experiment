@@ -130,13 +130,11 @@ namespace OGF {
                 cdt.create_enclosing_triangle(p0,p1,p2);
             }
             
-            for(index_t v: mesh_grob()->vertices) {
-                if(v < n) {
-                    continue;
-                }
-                const double* p = mesh_grob()->vertices.point_ptr(v);
-                cdt.insert(vec2(p));
-            }
+            cdt.insert(
+                mesh_grob()->vertices.nb()-n,
+                mesh_grob()->vertices.point_ptr(n)
+            );
+            
             if(constrained) {
                 for(index_t e: mesh_grob()->edges) {
                     cdt.insert_constraint(
@@ -159,20 +157,21 @@ namespace OGF {
             }
 
             // Check whether all edges are Delaunay
-            if(Delaunay) {
-                for(index_t t=0; t<cdt.nT(); ++t) {
-                    for(index_t le=0; le<3; ++le) {
-                        if(!cdt.Tedge_is_Delaunay(t,le)) {
-                            Logger::err("CDT")
-                                << "Triangle " << t << " edge " << le
-                                << " is not Delaunay!"
-                                << std::endl;
+            if(false) {
+                if(Delaunay) {
+                    for(index_t t=0; t<cdt.nT(); ++t) {
+                        for(index_t le=0; le<3; ++le) {
+                            if(!cdt.Tedge_is_Delaunay(t,le)) {
+                                Logger::err("CDT")
+                                    << "Triangle " << t << " edge " << le
+                                    << " is not Delaunay!"
+                                    << std::endl;
+                            }
                         }
                     }
                 }
+                cdt.save("CDT_result.geogram");
             }
-            
-            cdt.save("CDT_result.geogram");
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(mesh_grob());

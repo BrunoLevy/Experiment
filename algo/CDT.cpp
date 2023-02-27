@@ -48,6 +48,7 @@
 // (other ways of doing exact computations using FP)
 
 #include <OGF/Experiment/algo/CDT.h>
+#include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh.h>
 #include <geogram/mesh/mesh_io.h>
 #include <geogram/basic/numeric.h>
@@ -115,14 +116,17 @@ namespace GEO {
         }
     }
     
-    index_t CDTBase::insert(index_t v) {
-        geo_debug_assert(v == nv());
-        v2T_.push_back(index_t(-1));
-        ++nv_;
+    index_t CDTBase::insert(index_t v, index_t hint) {
+        if(v == nv()) {
+            v2T_.push_back(index_t(-1));
+            ++nv_;
+        } else {
+            geo_debug_assert(v < nv_);
+        }
         
         // Phase 1: find triangle that contains vertex i
         Sign o[3];
-        index_t t = locate(v,o);
+        index_t t = locate(v,hint,o);
         int nb_z = (o[0] == ZERO) + (o[1] == ZERO) + (o[2] == ZERO);
         geo_debug_assert(nb_z != 3);
 
@@ -238,7 +242,6 @@ namespace GEO {
         // to make sure we don't go backwards.
         
         // At any time, exactly one of t,v is different from NO_INDEX
-        // (same thing for t_prev,v_prev and t_next,v_next)
         
         index_t t_prev = NO_INDEX;
         index_t v_prev = NO_INDEX;
@@ -538,7 +541,7 @@ namespace GEO {
         DList_clear(N);
     }
     
-    index_t CDTBase::locate(index_t v, Sign* o) const {
+    index_t CDTBase::locate(index_t v, index_t hint, Sign* o) const {
         Sign o_local[3];
         if(o == nullptr) {
             o = o_local;
@@ -565,7 +568,9 @@ namespace GEO {
 
         // More efficient locate, "walking the triangulation"
         index_t t_pred = nT()+1; // Needs to be different from NO_INDEX
-        index_t t = index_t(Numeric::random_int32()) % nT();
+        index_t t = (hint == NO_INDEX) ?
+                     index_t(Numeric::random_int32()) % nT() :
+                     hint ;
     still_walking:
         {
             // May happen if we try to locate a point outside the boundary
@@ -737,6 +742,8 @@ namespace GEO {
         Tcheck(t1);
         Tcheck(t2);        
     }
+
+    /***************** Geometry ***********************/
     
     bool CDTBase::is_convex_quad(index_t t) const {
         index_t v1 = Tv(t,0);
@@ -779,6 +786,19 @@ namespace GEO {
     
     /********************************************************************/
 
+    CDT::~CDT() {
+        index_t orient_cnt = 0;
+        for(auto o: orient_stat_) {
+            orient_cnt += (o.second-1);
+        }
+        index_t incircle_cnt = 0;
+        for(auto o: incircle_stat_) {
+            incircle_cnt += (o.second-1);
+        }
+        std::cerr << orient_cnt << "    " << incircle_cnt << std::endl;
+        // 132   942
+    }
+    
     void CDT::clear() {
         CDTBase::clear();
         point_.resize(0);
@@ -810,7 +830,8 @@ namespace GEO {
     Sign CDT::orient2d(index_t i, index_t j, index_t k) const {
         geo_debug_assert(i < nv());
         geo_debug_assert(j < nv());
-        geo_debug_assert(k < nv());        
+        geo_debug_assert(k < nv());
+        // ++orient_stat_[trindex(i,j,k)];
         return PCK::orient_2d(point_[i], point_[j], point_[k]);
     }
 
@@ -818,7 +839,8 @@ namespace GEO {
         geo_debug_assert(i < nv());
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
-        geo_debug_assert(l < nv());                
+        geo_debug_assert(l < nv());
+        // ++incircle_stat_[quadindex(i,j,k,l)];        
         return PCK::in_circle_2d_SOS(
             point_[i].data(), point_[j].data(), point_[k].data(),
             point_[l].data()
@@ -848,6 +870,23 @@ namespace GEO {
         index_t v = nv_;
         ++nv_;
         return v;
+    }
+
+    void CDT::insert(index_t nb_points, const double* points) {
+        index_t v_offset = nv();
+        point_.reserve(point_.size()+nb_points);
+        v2T_.resize(v2T_.size()+nb_points, NO_INDEX);
+        for(index_t i=0; i<nb_points; ++i) {
+            point_.push_back(vec2(points+2*i));
+        }
+        nv_+=nb_points;
+        vector<index_t> sorted_indices;
+        compute_BRIO_order(nb_points, points, sorted_indices, 2, 2);
+        index_t hint = NO_INDEX;
+        for(index_t i=0; i<nb_points; ++i) {
+            index_t v = CDTBase::insert(v_offset+sorted_indices[i], hint);
+            hint = vT(v);
+        }
     }
     
     void CDT::save(const std::string& filename) const {

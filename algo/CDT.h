@@ -9,6 +9,9 @@
 #include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
 
+#include <geogram/mesh/index.h>
+#include <map>
+
 // See documentation of CDT class at the end of this file.
 
 namespace GEO {
@@ -173,11 +176,12 @@ namespace GEO {
          * \brief Inserts a new point 
          * \param[in] v the index of the new point, supposed to be
          *  equal to nv()
+         * \param[in] hint an optional triangle, not too far away
+         *  from the point to be inserted
          * \return the index of the created point. May be different
          *  from v if the point already existed in the triangulation
          */
-        index_t insert(index_t v);
-
+        index_t insert(index_t v, index_t hint = NO_INDEX);
 
         /**
          * \brief Creates the combinatorics for a first large enclosing
@@ -745,12 +749,16 @@ namespace GEO {
         /**
          * \brief Locates a vertex
          * \param[in] v the vertex index
+         * \param[in] hint an optional triangle, not too far away from the
+         *  point to be inserted
          * \param[out] orient a pointer to the three orientations in the 
          *  triangle. If one of them is zero, the point is on an edge, and
          *  if two of them are zero, it is on a vertex.
          * \return a triangle that contains \p v
          */
-        index_t locate(index_t v, Sign* orient = nullptr) const;
+        index_t locate(
+            index_t v, index_t hint = NO_INDEX, Sign* orient = nullptr
+        ) const;
         
         /**
          * \brief Tests whether triange t and its neighbor accross edge 0 form 
@@ -862,6 +870,8 @@ namespace GEO {
     class Experiment_API CDT: public CDTBase {
     public:
 
+        ~CDT() override;
+        
         /**
          * \copydoc CDTBase::clear()
          */
@@ -893,7 +903,7 @@ namespace GEO {
          * \brief Creates a first large enclosing rectangle
          * \param[in] x1 , y1 , x2 , y2 rectangle bounds
          * \details create_enclosing_triangle(), create_enclosing_rectangle() 
-         *  or create_enclosing_quad()  need to be called before anything else
+         *  or create_enclosing_quad() need to be called before anything else
          */
         void create_enclosing_rectangle(
             double x1, double y1, double x2, double y2
@@ -908,12 +918,15 @@ namespace GEO {
         
         /**
          * \brief Inserts a point
+         * \param[in] p the point to be inserted
+         * \param[in] hint a triangle not too far away from the point to
+         *  be inserted
          * \return the index of the created point. Duplicated points are
-         *  detected (and them the same index is returned)
+         *  detected (and them the index of the existing point is returned)
          */
-        index_t insert(const vec2& p) {
+        index_t insert(const vec2& p, index_t hint = NO_INDEX) {
             point_.push_back(p);
-            index_t v = CDTBase::insert(point_.size()-1);
+            index_t v = CDTBase::insert(point_.size()-1, hint);
             // If inserted point already existed in
             // triangulation, then nv() did not increase
             if(point_.size() > nv()) {
@@ -922,6 +935,17 @@ namespace GEO {
             return v;
         }
 
+        /**
+         * \brief Batch-inserts a set of point
+         * \details In general, it is much faster than calling 
+         *  insert() multiple times. Internally it uses a spatial
+         *  sort (Amenta et.al's BRIO method).
+         * \param[in] points a contiguous array of all point
+         *  coordinates
+         * \param[in] nb_points number of points
+         */
+        void insert(index_t nb_points, const double* points);
+        
         /**
          * \copydoc CDTBase::save()
          */
@@ -958,6 +982,9 @@ namespace GEO {
         
     protected:
         vector<vec2> point_;
+        mutable std::map<trindex, index_t> orient_stat_;
+        mutable std::map<quadindex, index_t> incircle_stat_;
+        
     };
 
     /*****************************************************************/    
