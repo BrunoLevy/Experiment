@@ -157,7 +157,8 @@ namespace OGF {
             }
 
             // Check whether all edges are Delaunay
-            if(false) {
+#ifdef GEO_DEBUG            
+            {
                 if(Delaunay) {
                     for(index_t t=0; t<cdt.nT(); ++t) {
                         for(index_t le=0; le<3; ++le) {
@@ -172,6 +173,7 @@ namespace OGF {
                 }
                 cdt.save("CDT_result.geogram");
             }
+#endif            
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(mesh_grob());

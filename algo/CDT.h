@@ -918,7 +918,15 @@ namespace GEO {
          *  each time constrain_edges() seems to be bugged
          * \see constrain_edges()
          */
-        void constrain_edges_simple(index_t i, index_t j, DList& Q, DList* N);
+        void constrain_edges_simple(
+            index_t i, index_t j, DList& Q, vector<Edge>& N
+        );
+
+        /**
+         * \brief Simpler version of Delaunayize_new_edges() that uses a vector
+         *  instead of a DList
+         */
+        void Delaunayize_new_edges_simple(vector<Edge>& N);
         
     protected:
         index_t nv_;

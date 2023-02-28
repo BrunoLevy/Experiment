@@ -182,7 +182,6 @@ namespace GEO {
     
     void CDTBase::insert_constraint(index_t i, index_t j) {
         CDT_LOG("insert constraint: " << i << "-" << j);
-
         ++ncnstr_;
 
         // Index of first vertex coming from constraints intersection
@@ -190,7 +189,8 @@ namespace GEO {
         index_t first_v_isect = nv_;
         
         DList Q; // Queue of edges to constrain
-        DList N; // New edges to re-Delaunayize
+        // DList N; // New edges to re-Delaunayize
+        vector<Edge> N; // New edges to re-Delaunayize
 
         while(i != j) {
             // Step 1: find all the edges that have an intersection 
@@ -201,11 +201,12 @@ namespace GEO {
 
             // Step 2: constrain edges
             // constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); // BUGGED
-            constrain_edges_simple(i,k,Q,delaunay_ ? &N : nullptr);            
+            constrain_edges_simple(i,k,Q,N);
             check_consistency();
             // Step 3: restore Delaunay condition
             if(delaunay_) {
-                Delaunayize_new_edges(N);
+                // Delaunayize_new_edges(N);                
+                Delaunayize_new_edges_simple(N);
             }
             check_consistency();            
             i = k;
@@ -474,14 +475,12 @@ namespace GEO {
             
             index_t t1 = DList_pop_back(Q);
             if(!Tis_marked(t1)) {
-                std::cerr << t1 << " not marked" << std::endl;
                 continue;
             }
             if(!is_convex_quad(t1)) {
                 // If the only remaining edge to flip does not form a convex
                 // quad, it means we are going to flip forever ! (shoud not
                 // happen)
-                std::cerr << t1 << " not convex quad" << std::endl;
                 geo_assert(!Q.empty());
                 DList_push_front(Q,t1);
             } else {
@@ -492,11 +491,8 @@ namespace GEO {
                 bool t2v0_t1v1 = (Tis_marked(t2) && Tv(t2,0) == Tv(t1,1));
                 geo_argused(t2v0_t1v1);
 
-                std::cerr << t1 << " swap edge" << std::endl;
-
                 swap_edge(t1);
                 if(no_isect) {
-                    std::cerr << t1 << " no isect" << std::endl;
                     geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
                     new_edge(t1,2);
                 } else {
@@ -506,14 +502,10 @@ namespace GEO {
                     Sign o = orient2d(i,j,v0);
                     if(t2v0_t1v2) {
                         if(o >= 0) {
-                            std::cerr << t1 << " no isect "
-                                      << t2 << " isect " << std::endl;
                             geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             new_edge(t1,2);
                         } else {
-                            std::cerr << t1 << " isect "
-                                      << t2 << " isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,2));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             isect_edge(t1,2);
@@ -521,15 +513,11 @@ namespace GEO {
                     } else {
                         geo_debug_assert(t2v0_t1v1);
                         if(o > 0) {
-                            std::cerr << t1 << " isect "
-                                      << t2 << " isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,0));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,1));
                             Trot(t2,1); 
                             isect_edge(t1,0);
                         } else {
-                            std::cerr << t1 << " isect "
-                                      << t2 << " no isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,0));
                             geo_debug_assert(!segment_edge_intersect(i,j,t2,1));
                             DList_remove(Q,t2);
@@ -543,9 +531,8 @@ namespace GEO {
     }
 
     void CDTBase::constrain_edges_simple(
-        index_t i, index_t j, DList& Q_in, DList* N
+        index_t i, index_t j, DList& Q_in, vector<Edge>& N
     ) {
-        typedef std::pair<index_t, index_t> Edge;
         std::deque<Edge> Q;
         for(index_t t=Q_in.front; t != NO_INDEX; t = Tnext(t)) {
             Q.push_back(std::make_pair(Tv(t,1), Tv(t,2)));
@@ -579,16 +566,7 @@ namespace GEO {
                         index_t t = eT(E);                
                         Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
                     } else {
-                        if(N != nullptr) {
-                            index_t t = eT(E);
-                            if(Tis_in_list(t)) {
-                                index_t t2 = Tadj(t,0);
-                                index_t le2 = Tadj_find(t2,t);
-                                Trot(t2,le2);
-                                t = t2;
-                            }
-                            DList_push_back(*N, t);
-                        }
+                        N.push_back(E);
                     }
                 }
             }
@@ -642,6 +620,34 @@ namespace GEO {
         }
         DList_clear(N);
     }
+
+    void CDTBase::Delaunayize_new_edges_simple(vector<Edge>& N) {
+        bool swap_occured = true;
+        while(swap_occured) {
+            swap_occured = false;
+            for(Edge& E: N) {
+                index_t t1 = eT(E);
+                if(Tedge_is_constrained(t1,0)) {
+                    continue;
+                }
+                index_t v1 = Tv(t1,1);
+                index_t v2 = Tv(t1,2);
+                index_t v0 = Tv(t1,0);
+                index_t t2 = Tadj(t1,0);
+                if(t2 == NO_INDEX) {
+                    continue;
+                }
+                index_t e2 = Tadj_find(t2,t1);
+                index_t v3 = Tv(t2,e2);
+                if(incircle(v0,v1,v2,v3) == POSITIVE) {
+                    swap_edge(t1);
+                    E = std::make_pair(Tv(t1,0), Tv(t1,1));
+                    swap_occured = true;
+                } 
+            }
+        }
+        N.resize(0);
+    }
     
     index_t CDTBase::locate(index_t v, index_t hint, Sign* o) const {
         Sign o_local[3];
@@ -677,11 +683,13 @@ namespace GEO {
     still_walking:
         {
             ++nb_traversed_t;
-            if(nb_traversed_t >= nT()) {
-                // abort();
-                std::cerr << t << " " << std::flush;
-            }
-            // May happen if we try to locate a point outside the boundary
+
+            // Infinite loop are not supposed to happen, but
+            // let us detect them, just in case...
+            geo_debug_assert(nb_traversed_t <= 2*nT());
+            
+            // You will land here if we try to locate a point outside
+            // the boundary
             geo_debug_assert(t != NO_INDEX);
             
             index_t tv[3];
@@ -921,7 +929,8 @@ namespace GEO {
     }
     
     CDT::~CDT() {
-        
+
+#ifdef GEO_DEBUG        
         double dup_orient_cnt =
             double(orient_cnt_) - double(orient_stat_.size());
         
@@ -934,7 +943,8 @@ namespace GEO {
         
         std::cerr << "duplicated incircle_cnt:"
                   << 100.0 * dup_incircle_cnt / double(incircle_cnt_)
-                  << "%" << std::endl;        
+                  << "%" << std::endl;
+#endif        
     }
     
     void CDT::clear() {
@@ -969,8 +979,10 @@ namespace GEO {
         geo_debug_assert(i < nv());
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
+#ifdef GEO_DEBUG        
         ++orient_cnt_;
-        //++orient_stat_[trindex(i,j,k)];
+        ++orient_stat_[trindex(i,j,k)];
+#endif        
         return PCK::orient_2d(point_[i], point_[j], point_[k]);
     }
 
@@ -979,8 +991,10 @@ namespace GEO {
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
         geo_debug_assert(l < nv());
+#ifdef GEO_DEBUG                
         ++incircle_cnt_;
-        //++incircle_stat_[quadindex(i,j,k,l)];        
+        ++incircle_stat_[quadindex(i,j,k,l)];
+#endif        
         return PCK::in_circle_2d_SOS(
             point_[i].data(), point_[j].data(), point_[k].data(),
             point_[l].data()
