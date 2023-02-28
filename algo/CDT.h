@@ -340,6 +340,14 @@ namespace GEO {
                 Tunflag_as_in_list(t);
             }
         }
+
+        index_t DList_size(const DList& L) const {
+            index_t result = 0;
+            for(index_t t = L.front; t != NO_INDEX; t = Tnext(t)) {
+                ++result;
+            }
+            return result;
+        }
         
         /**
          * \brief Inserts a vertex in an edge
@@ -492,42 +500,6 @@ namespace GEO {
          */
         void swap_edge(index_t t1);
     
-        /**
-         * \brief Consistency check for a triangle
-         * \details in debug mode, aborts if inconsistency is detected
-         * \param[in] t the triangle to be tested
-         */
-        void Tcheck(index_t t) {
-            geo_argused(t);
-#ifdef GEO_DEBUG
-            if(t == index_t(-1)) {
-                return;
-            }
-            for(index_t e=0; e<3; ++e) {
-                geo_debug_assert(Tv(t,e) != Tv(t,(e+1)%3));
-                if(Tadj(t,e) == index_t(-1)) {
-                    continue;
-                }
-                geo_debug_assert(Tadj(t,e) != Tadj(t,(e+1)%3));
-                index_t t2 = Tadj(t,e);
-                index_t e2 = Tadj_find(t2,t);
-                geo_debug_assert(Tadj(t2,e2) == t);
-            }
-#endif
-        }
-
-        /**
-         * \brief Consistency check for all the triangles
-         * \details in debug mode, aborts if inconsistency is detected
-         */        
-        void check_consistency() {
-#ifdef GEO_DEBUG            
-            for(index_t t=0; t<nT(); ++t) {
-                Tcheck(t);
-            }
-#endif            
-        }
-        
         /**
          * \brief Sets a triangle adjacency relation
          * \param[in] t a triangle
@@ -734,14 +706,20 @@ namespace GEO {
         }
 
         void DList_show(const std::string& name, const DList& list) const {
+            save("before_constraint.geogram");
             std::cerr << name << "=";
             for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
+                /*
                 if(Tis_marked(t)) {
                     std::cerr << '*';
                 }
-                std::cerr << t << "("
+                */
+                std::cerr << t << ";";
+/*                
+                          << "("
                           << Tv(t,0) << "," << Tv(t,1) << "," << Tv(t,2)
                           << ") ";
+*/
             }
             std::cerr << std::endl;
         }
@@ -812,6 +790,135 @@ namespace GEO {
             index_t E1, index_t i, index_t j,
             index_t E2, index_t k, index_t l
         ) = 0;
+
+        /******************** Debugging ************************************/
+
+        /**
+         * \brief Consistency check for a triangle
+         * \details in debug mode, aborts if inconsistency is detected
+         * \param[in] t the triangle to be tested
+         */
+        void Tcheck(index_t t) {
+            geo_argused(t);
+#ifdef GEO_DEBUG
+            if(t == index_t(-1)) {
+                return;
+            }
+            for(index_t e=0; e<3; ++e) {
+                geo_debug_assert(Tv(t,e) != Tv(t,(e+1)%3));
+                if(Tadj(t,e) == index_t(-1)) {
+                    continue;
+                }
+                geo_debug_assert(Tadj(t,e) != Tadj(t,(e+1)%3));
+                index_t t2 = Tadj(t,e);
+                index_t e2 = Tadj_find(t2,t);
+                geo_debug_assert(Tadj(t2,e2) == t);
+            }
+#endif
+        }
+
+        /**
+         * \brief Consistency check for all the triangles
+         * \details in debug mode, aborts if inconsistency is detected
+         */        
+        void check_consistency() {
+#ifdef GEO_DEBUG_XXX            
+            for(index_t t=0; t<nT(); ++t) {
+                Tcheck(t);
+            }
+#endif            
+        }
+
+
+        /**
+         * \brief Tests whether two segments have a frank intersection
+         * \param[in] u1 , u2 the two extremities of the first segment
+         * \param[in] v1 , v2 the two extremities of the second segment
+         * \retval true if \p u1 , \p u2 has a frank intersection with
+         *  \p v1 , \p v2
+         * \retval false otherwise
+         */
+        bool segment_segment_intersect(
+            index_t u1, index_t u2, index_t v1, index_t v2
+        ) const {
+            if(orient2d(u1,u2,v1)*orient2d(u1,u2,v2) > 0) {
+                return false;
+            }
+            return (orient2d(v1,v2,u1)*orient2d(v1,v2,u2) < 0);
+        }
+        
+        /**
+         * \brief Tests whether an edge triangle and a segment have a frank
+         *  intersection
+         * \param[in] v1 , v2 the two extremities of the segment
+         * \param[in] t a triangle
+         * \param[in] le local edge index in 0,1,2
+         * \retval true if edge \p le of \p t has a frank intersection with edge
+         *  \p v1 , \p v2
+         * \retval false otherwise
+         */
+        bool segment_edge_intersect(
+            index_t v1, index_t v2, index_t t, index_t le
+        ) const {
+            index_t u1 = Tv(t,(le + 1)%3);
+            index_t u2 = Tv(t,(le + 2)%3);
+            return segment_segment_intersect(u1,u2,v1,v2);
+        }
+
+        /**
+         * \brief Checks that the edges stored in a DList exactly correspond
+         *  to all edge intersections between a segment and the triangle edges
+         * \param[in] v1 , v2 the two vertices of the constrained segment
+         * \param[in] Q a list of triangle. For each triangle in Q, edge 0 
+         *  is supposed to have an intersection with \p v1 , \p v2
+         */
+        void check_edge_intersections(
+            index_t v1, index_t v2, const DList& Q
+        );
+
+        typedef std::pair<index_t, index_t> Edge;
+        
+        /**
+         * \brief Gets a triangle incident a a given edge
+         * \param[in] E the edge
+         * \return a triangle with E as its edge 0
+         */
+        index_t eT(Edge E) {
+            index_t v1 = E.first;
+            index_t v2 = E.second;
+            index_t result = NO_INDEX;
+            for_each_T_around_v(
+                v1, [&](index_t t, index_t lv)->bool {
+                    if(Tv(t, (lv+1)%3) == v2) {
+                        if(Tv(t, (lv+2)%3) != v1) {
+                            Trot(t, (lv+2)%3);
+                        }
+                        result = t;
+                        return true;
+                    } else if(Tv(t, (lv+1)%3) == v1) {
+                        if(Tv(t, (lv+2)%3) != v2) {
+                            Trot(t, (lv+2)%3);
+                        }
+                        result = t;                    
+                        return true;
+                    }
+                    return false;
+                }
+            );
+            geo_debug_assert(result != NO_INDEX);
+            geo_debug_assert(
+                (Tv(result,1) == v1 && Tv(result,2) == v2) ||
+                (Tv(result,1) == v2 && Tv(result,2) == v1) 
+            );
+            return result;
+        }
+
+        /**
+         * \brief Simpler version of constrain_edges(), to have a ground truth
+         *  each time constrain_edges() seems to be bugged
+         * \see constrain_edges()
+         */
+        void constrain_edges_simple(index_t i, index_t j, DList& Q, DList* N);
         
     protected:
         index_t nv_;
@@ -870,6 +977,8 @@ namespace GEO {
     class Experiment_API CDT: public CDTBase {
     public:
 
+        CDT();
+        
         ~CDT() override;
         
         /**
@@ -960,7 +1069,7 @@ namespace GEO {
             geo_debug_assert(v < nv());
             return point_[v];
         }
-        
+
     protected:
         /**
          * \copydoc CDTBase::orient_2d()
@@ -982,7 +1091,9 @@ namespace GEO {
         
     protected:
         vector<vec2> point_;
+        mutable index_t orient_cnt_;
         mutable std::map<trindex, index_t> orient_stat_;
+        mutable index_t incircle_cnt_;
         mutable std::map<quadindex, index_t> incircle_stat_;
         
     };
