@@ -7,8 +7,6 @@
 // Computers and Structures
 //
 // Specificities of this implementation:
-// [NOTE: BUGGED FOR NOW, REVERTED BACK TO STANDARD EDGE-BASED
-//  QUEUE]
 //
 // - Edges are systematically manipulated through triangles,
 // and these triangles are rotated in-place in the mesh,
@@ -32,17 +30,19 @@
 
 
 // TODO:
-// 1) can we avoid computing o ? (stored in Tflags) (probably, but high risk
-//    of super-buggy code, so I won't do that)
+// 1) Cleaner triangle flags, and keep track of which triangle is in which DList,
+//    each DList will know which "bit" it owns in the triangle flags.
 // 2) predicate cache:
-//     - test whether needed
-//       Current implementation for triangles with small number of vertices
+//     - Current implementation for triangles with small number of vertices
 //       and many constraints: yes it is needed. 20% to 60% of calls to predicates
 //       that could be avoided with a cache
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 3) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 4) tag/remove external triangles
-// 5) insert additional vertices with Delaunay refinement
+// 2) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 3) tag/remove external triangles
+// 4) insert additional vertices with Delaunay refinement
+// 5) store the figures for the mesh surgery operations somewhere with the code.
+//    If somebody needs to modify the code later, it is super important !!
+//    Can I do ascii art for that ? Seems to be a bit difficult...
 
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
@@ -173,6 +173,8 @@ namespace GEO {
             return v;
         }
 
+        // Phase 3: recursively restore Delaunay conditions for the neighbors
+        // of the new vertex
         Delaunayize_vertex_neighbors(v,S);
         check_consistency();
         
@@ -447,8 +449,10 @@ namespace GEO {
     void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList* N) {
 
 #ifdef CDT_DEBUG
+        // The function find_edge_intersections() is super complicated,
+        // so in debug mode I make sure it did its job correctly (by testing
+        // *all* edge intersections).
         check_edge_intersections(i,j,Q);
-        // DList_show("Q",Q);
 #endif
         // Edge le of triangle t has no isect with cnstr, it is a new edge
         auto new_edge = [&](index_t t,index_t le) {

@@ -390,7 +390,7 @@ namespace GEO {
          * \details If a vertex k that is exactly on the constraint
          *  is found, then traversal stops there and k is returned.
          *  One can find the remaining intersections by continuing
-         *  to call the function until \p j is returned.
+         *  to call the function with (k,j) until \p j is returned.
          * \return the first vertex on [i,j] encountered when
          *  traversing the segment [i,j]. 
          */
@@ -400,7 +400,8 @@ namespace GEO {
          * \brief Constrains an edge by iteratively flipping
          *  the intersected edges.
          * \param[in] i , j the extremities of the edge
-         * \param[in] Q the list of intersected edges, computed
+         * \param[in] Q the list of intersected edges, computed by
+         *  find_intersected_edges()
          * \param[out] N a pointer to the DList with the new edges 
          *  that need to be re-Delaunized by find_intersected_edges(), 
          *  or nullptr if one does not want to get them
@@ -408,12 +409,12 @@ namespace GEO {
         void constrain_edges(index_t i, index_t j, DList& Q, DList* N);
 
         /**
-         * \brief Restore Delaunay condition starting from the
+         * \brief Restores Delaunay condition starting from the
          *  triangles incident to a given vertex.
          * \param[in] v the vertex
          * \param[in] S a stack of triangles, initialized with 
          *  the triangles incident to the vertex. Each triangle t
-         *  are Trot()-ed in such a way that the vertex 
+         *  is Trot()-ed in such a way that the vertex v
          *  corresponds to Vt(t,0)
          * \details Each time a triangle edge is swapped, the
          *  two new neighbors are recursively examined.
@@ -421,9 +422,8 @@ namespace GEO {
         void Delaunayize_vertex_neighbors(index_t v, DList& S);
         
         /**
-         * \brief Restore Delaunay condition for a set of
-         *  edges after inserting a constrained edge.
-         * \param[in] i , j the extremities of the constraint
+         * \brief Restores Delaunay condition for a set of
+         *  edges after inserting a constrained edge
          * \param[in] N the edges for which Delaunay condition
          *  should be restored.
          */
@@ -432,7 +432,7 @@ namespace GEO {
         
         /**
          * \brief Sets all the combinatorial information
-         *  of a triangle and clears edge flags
+         *  of a triangle and edge flags
          * \param[in] t the triangle
          * \param[in] v1 , v2 , v3 the three vertices 
          * \param[in] adj1 , adj2 , adj3 the three triangles
@@ -505,7 +505,7 @@ namespace GEO {
          *    the two new triangles.
          * \param[in] t1 a triangle index. Its edge
          *    opposite to vertex 0 is swapped
-         * \param[in] swap if set, swap which triangle will be
+         * \param[in] swap_t1_t2 if set, swap which triangle will be
          *    t1 and which triangle will be Tadj(t1,0) in the
          *    new pair of triange (needed for two configurations
          *    of the optimized constraint enforcement algorithm).
@@ -619,11 +619,11 @@ namespace GEO {
 
         
         /**
-         * \brief Tests whether an edge is constrained
+         * \brief Gets the constraint associated with an edge
          * \param[in] t a triangle
          * \param[in] le local edge index, in 0,1,2
-         * \retval true if the edge is constrained
-         * \retval false otherwise
+         * \return the constraint associated with this edge, or
+         *  NO_INDEX if there is no such constraint.
          */
         index_t Tedge_cnstr(index_t t, index_t le) const {
             geo_debug_assert(t < nT());
@@ -717,13 +717,6 @@ namespace GEO {
             }
         }
 
-        void DList_show(const std::string& name, const DList& list) const {
-            std::cerr << name << "=";
-            for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
-                std::cerr << t << ";";
-            }
-            std::cerr << std::endl;
-        }
         
         /**
          * \brief Locates a vertex
@@ -794,6 +787,14 @@ namespace GEO {
 
         /******************** Debugging ************************************/
 
+        void DList_show(const std::string& name, const DList& list) const {
+            std::cerr << name << "=";
+            for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
+                std::cerr << t << ";";
+            }
+            std::cerr << std::endl;
+        }
+        
         /**
          * \brief Consistency check for a triangle
          * \details in debug mode, aborts if inconsistency is detected
@@ -823,7 +824,7 @@ namespace GEO {
          * \details in debug mode, aborts if inconsistency is detected
          */        
         void check_consistency() {
-#ifdef GEO_DEBUG_XXX            
+#ifdef GEO_DEBUG            
             for(index_t t=0; t<nT(); ++t) {
                 Tcheck(t);
             }
@@ -915,7 +916,7 @@ namespace GEO {
         }
 
         /**
-         * \brief Simpler version of locate()
+         * \brief Simpler version of locate() kept for reference
          * \see locate()
          */
         index_t locate_naive(
@@ -923,7 +924,7 @@ namespace GEO {
         ) const;
         
         /**
-         * \brief Simpler version of constrain_edges()
+         * \brief Simpler version of constrain_edges() kept for reference
          * \see constrain_edges()
          */
         void constrain_edges_naive(
@@ -932,7 +933,7 @@ namespace GEO {
 
         /**
          * \brief Simpler version of Delaunayize_new_edges() that uses a vector
-         *  instead of a DList.
+         *  instead of a DList, kept for reference
          */
         void Delaunayize_new_edges_naive(vector<Edge>& N);
         
