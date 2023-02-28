@@ -255,6 +255,14 @@ namespace GEO {
             L.back = NO_INDEX;
             L.front = NO_INDEX;
         }
+
+        index_t DList_size(DList& L) const {
+            index_t result = 0;
+            for(index_t t=L.front; t!=NO_INDEX; t = Tnext_[t]) {
+                ++result;
+            }
+            return result;
+        }
         
         void DList_push_back(DList& L, index_t t) {
             geo_debug_assert(!Tis_in_list(t));
@@ -497,8 +505,12 @@ namespace GEO {
          *    the two new triangles.
          * \param[in] t1 a triangle index. Its edge
          *    opposite to vertex 0 is swapped
+         * \param[in] swap if set, swap which triangle will be
+         *    t1 and which triangle will be Tadj(t1,0) in the
+         *    new pair of triange (needed for two configurations
+         *    of the optimized constraint enforcement algorithm).
          */
-        void swap_edge(index_t t1);
+        void swap_edge(index_t t1, bool swap_t1_t2=false);
     
         /**
          * \brief Sets a triangle adjacency relation
@@ -706,7 +718,6 @@ namespace GEO {
         }
 
         void DList_show(const std::string& name, const DList& list) const {
-            save("before_constraint.geogram");
             std::cerr << name << "=";
             for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
                 /*
