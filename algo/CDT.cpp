@@ -200,7 +200,7 @@ namespace GEO {
             index_t k = find_intersected_edges(i,j,Q);
 
             // Step 2: constrain edges
-            // constrain_edges(i,k,Q,delaunay_ ? &N : nullptr);
+            // constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); // BUGGED
             constrain_edges_simple(i,k,Q,delaunay_ ? &N : nullptr);            
             check_consistency();
             // Step 3: restore Delaunay condition
@@ -432,7 +432,8 @@ namespace GEO {
         geo_assert_not_reached;
         return NO_INDEX;
     }
-    
+
+    // BUGGED
     void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList* N) {
 
 #ifdef CDT_DEBUG
@@ -461,7 +462,6 @@ namespace GEO {
             Trot(t,le);
             DList_push_front(Q,t);
         };
-
 
         index_t iter = 0;
         while(!Q.empty()) {
@@ -500,7 +500,8 @@ namespace GEO {
                     geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
                     new_edge(t1,2);
                 } else {
-                    // See comment at beginning of file (a small variation in Sloan's
+                    // See comment at beginning of file
+                    // (a small variation in Sloan's
                     // method that makes better use of the combinatorics)
                     Sign o = orient2d(i,j,v0);
                     if(t2v0_t1v2) {
@@ -508,13 +509,13 @@ namespace GEO {
                             std::cerr << t1 << " no isect "
                                       << t2 << " isect " << std::endl;
                             geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
-                            geo_debug_assert( segment_edge_intersect(i,j,t2,0));                                                        
+                            geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             new_edge(t1,2);
                         } else {
                             std::cerr << t1 << " isect "
                                       << t2 << " isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,2));
-                            geo_debug_assert( segment_edge_intersect(i,j,t2,0));                                                        
+                            geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             isect_edge(t1,2);
                         }
                     } else {
@@ -523,14 +524,14 @@ namespace GEO {
                             std::cerr << t1 << " isect "
                                       << t2 << " isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,0));
-                            geo_debug_assert( segment_edge_intersect(i,j,t2,1));                                                        
+                            geo_debug_assert( segment_edge_intersect(i,j,t2,1));
                             Trot(t2,1); 
                             isect_edge(t1,0);
                         } else {
                             std::cerr << t1 << " isect "
                                       << t2 << " no isect " << std::endl;
                             geo_debug_assert( segment_edge_intersect(i,j,t1,0));
-                            geo_debug_assert(!segment_edge_intersect(i,j,t2,1));                                                        
+                            geo_debug_assert(!segment_edge_intersect(i,j,t2,1));
                             DList_remove(Q,t2);
                             new_edge(t2,1);
                             isect_edge(t1,0);
@@ -541,7 +542,9 @@ namespace GEO {
         }
     }
 
-    void CDTBase::constrain_edges_simple(index_t i, index_t j, DList& Q_in, DList* N) {
+    void CDTBase::constrain_edges_simple(
+        index_t i, index_t j, DList& Q_in, DList* N
+    ) {
         typedef std::pair<index_t, index_t> Edge;
         std::deque<Edge> Q;
         for(index_t t=Q_in.front; t != NO_INDEX; t = Tnext(t)) {
