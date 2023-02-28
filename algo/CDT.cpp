@@ -32,7 +32,6 @@
 
 
 // TODO:
-// 0) Understand why my edge-as-triangle algorithm does not work.
 // 1) can we avoid computing o ? (stored in Tflags) (probably, but high risk
 //    of super-buggy code, so I won't do that)
 // 2) predicate cache:
@@ -45,11 +44,6 @@
 // 4) tag/remove external triangles
 // 5) insert additional vertices with Delaunay refinement
 
-// Double-check what happens with contraints_100_8.geogram and
-// constraints_100_11.geogram : depending on whether new edges are pushed
-// to the front or to the back of N, there remains a non-Delaunay edge in
-// the end (if pushed to the back).
-
 // NOTE - TOREAD:
 // https://www.sciencedirect.com/science/article/pii/S0890540112000752
 // (other ways of doing exact computations using FP)
@@ -60,13 +54,16 @@
 #include <geogram/mesh/mesh_io.h>
 #include <geogram/basic/numeric.h>
 
-// Used by debugging functions
+// Used by debugging functions and statistics
 #include <geogram/mesh/index.h>
 #include <set>
 #include <deque>
 
+// #define CDT_NAIVE // use naive per-edge method
+// #define CDT_STAT // display predicates statistics
+
 #ifdef GEO_DEBUG
-#define CDT_DEBUG
+#define CDT_DEBUG // display *lots* of messages
 #endif
 
 #ifdef CDT_DEBUG
@@ -191,42 +188,40 @@ namespace GEO {
         // (keep track of it to re-Delaunayize their neighborhoods).
         index_t first_v_isect = nv_;
 
-#define SIMPLE
-        
+#ifndef CDT_NAIVE        
         DList Q; // Queue of edges to constrain
-#ifdef SIMPLE
-        vector<Edge> N; // New edges to re-Delaunayize
-#else        
         DList N; // New edges to re-Delaunayize
-#endif
-
         while(i != j) {
             // Step 1: find all the edges that have an intersection 
             // with the constraint [i,j], enqueue them in Q.
             // Stop at vertex on constraint or constraint intersection
             // if any (returned in k)
             index_t k = find_intersected_edges(i,j,Q);
-
             // Step 2: constrain edges
-#ifdef SIMPLE            
-            constrain_edges_simple(i,k,Q,N);
-#else            
             constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); // BUGGED
-#endif
-
             check_consistency();
             // Step 3: restore Delaunay condition
             if(delaunay_) {
-#ifdef SIMPLE                
-                Delaunayize_new_edges_simple(N);
-#else                
                 Delaunayize_new_edges(N);
-#endif                
             }
             check_consistency();            
             i = k;
         }
-
+#else
+        DList Q;        // Queue of edges to constrain
+        vector<Edge> N; // New edges to re-Delaunayize
+        while(i != j) {
+            index_t k = find_intersected_edges(i,j,Q);
+            constrain_edges_naive(i,k,Q,N);
+            check_consistency();
+            if(delaunay_) {
+                Delaunayize_new_edges_naive(N);
+            }
+            check_consistency();            
+            i = k;
+        }
+#endif        
+        
         if(!delaunay_) {
             return;
         }
@@ -449,15 +444,12 @@ namespace GEO {
         return NO_INDEX;
     }
 
-    // BUGGED
     void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList* N) {
 
 #ifdef CDT_DEBUG
         check_edge_intersections(i,j,Q);
         // DList_show("Q",Q);
 #endif
-        std::string log_event;
-        
         // Edge le of triangle t has no isect with cnstr, it is a new edge
         auto new_edge = [&](index_t t,index_t le) {
             Trot(t,le);
@@ -466,10 +458,8 @@ namespace GEO {
                 (Tv(t,1) == i && Tv(t,2) == j) ||
                 (Tv(t,1) == j && Tv(t,2) == i)
             ) {
-                log_event = "constrained-edge";
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
-                log_event = "new-edge";
                 if(N != nullptr) {
                     DList_push_back(*N,t);
                 }
@@ -478,33 +468,17 @@ namespace GEO {
 
         // Edge le of triangle t still has an isect with cnstr
         auto isect_edge = [&](index_t t, index_t le) {
-            log_event = "still-intersects";
             Trot(t,le);
             DList_push_front(Q,t);
         };
 
-        index_t iter = 0;
         while(!Q.empty()) {
-            ++iter;
-
-            index_t log_Q_size = DList_size(Q);
-            
-            geo_debug_assert(iter < 1000);
-            
             index_t t1 = DList_pop_back(Q);
             geo_debug_assert(Tis_marked(t1));
-
-            index_t log_v1 = Tv(t1,1);
-            index_t log_v2 = Tv(t1,2);            
-            if(log_v2 < log_v1) {
-                std::swap(log_v1,log_v2);
-            }
-            
             if(!is_convex_quad(t1)) {
                 // If the only remaining edge to flip does not form a convex
                 // quad, it means we are going to flip forever ! (shoud not
                 // happen)
-                log_event="non-convex";
                 geo_assert(!Q.empty());
                 DList_push_front(Q,t1);
             } else {
@@ -515,10 +489,7 @@ namespace GEO {
                 bool t2v0_t1v1 = (Tis_marked(t2) && Tv(t2,0) == Tv(t1,1));
                 geo_argused(t2v0_t1v1);
 
-                // swap_edge(t1);
-                
                 if(no_isect) {
-                    log_event="new-edge";
                     swap_edge(t1);
                     geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
                     new_edge(t1,2);
@@ -530,12 +501,10 @@ namespace GEO {
                     if(t2v0_t1v2) {
                         swap_edge(t1,false); // "new t1 on top"
                         if(o >= 0) {
-                            log_event="new-edge";
                             geo_debug_assert(!segment_edge_intersect(i,j,t1,2));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             new_edge(t1,2);
                         } else {
-                            log_event="still-intersects";
                             geo_debug_assert( segment_edge_intersect(i,j,t1,2));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             isect_edge(t1,2);
@@ -544,12 +513,10 @@ namespace GEO {
                         geo_debug_assert(t2v0_t1v1);
                         swap_edge(t1,true); // "new t1 on bottom"    
                         if(o > 0) {
-                            log_event="still-intersects";
                             geo_debug_assert( segment_edge_intersect(i,j,t1,1));                            
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             isect_edge(t1,1); 
                         } else {
-                            log_event="new-edge**";
                             geo_debug_assert(!segment_edge_intersect(i,j,t1,1));                            
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             new_edge(t1,1);
@@ -557,79 +524,9 @@ namespace GEO {
                     }
                 }
             }
-            CDT_LOG(
-                "iter_" << iter << " "
-                << log_v1 << "-" << log_v2
-                << " Q.size=" << log_Q_size << " "
-                << log_event
-            );            
         }
     }
 
-    void CDTBase::constrain_edges_simple(
-        index_t i, index_t j, DList& Q_in, vector<Edge>& N
-    ) {
-        CDT_LOG("Q size=" << DList_size(Q_in));
-        
-        std::deque<Edge> Q;
-        for(index_t t=Q_in.front; t != NO_INDEX; t = Tnext(t)) {
-            Q.push_back(std::make_pair(Tv(t,1), Tv(t,2)));
-        }
-        DList_clear(Q_in);
-
-        for(index_t t=0; t<nT(); ++t) {
-            geo_debug_assert(!Tis_in_list(t));
-        }
-
-        index_t iter = 0;
-        while(Q.size() != 0) {
-            ++iter;
-            
-            // CDT_LOG("iter_" << iter << ":" << Q.size());
-            index_t log_Q_size = index_t(Q.size());
-            std::string log_event;
-            
-            Edge E = Q.back();
-            index_t log_v1 = std::min(E.first,E.second);
-            index_t log_v2 = std::max(E.first,E.second);
-            Q.pop_back();
-            if(!is_convex_quad(eT(E))) {
-                log_event = "non-convex";
-                if(Q.size() == 0) {
-                    CDT_LOG("... infinite iteration");
-                    abort();
-                }
-                Q.push_front(E);
-            } else {
-                index_t t = eT(E);                                
-                swap_edge(t);
-                E = std::make_pair(Tv(t,0), Tv(t,1));
-                if(segment_segment_intersect(i,j,E.first,E.second)) {
-                    log_event = "still-intersects";                    
-                    Q.push_front(E);
-                } else {
-                    if(
-                        (E.first == i && E.second == j) ||
-                        (E.first == j && E.second == i)
-                    ) {
-                        log_event = "constrained-edge";                                            
-                        index_t t = eT(E);                
-                        Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
-                    } else {
-                        log_event = "new-edge";                                                                    
-                        N.push_back(E);
-                    }
-                }
-            }
-            CDT_LOG(
-                "iter_" << iter << " "
-                << log_v1 << "-" << log_v2
-                << " Q.size=" << log_Q_size << " "
-                << log_event
-            );            
-        }
-    }
-    
     void CDTBase::Delaunayize_vertex_neighbors(index_t v, DList& S) {
         while(!S.empty()) {
             index_t t1 = DList_pop_back(S);
@@ -653,14 +550,6 @@ namespace GEO {
     }
     
     void CDTBase::Delaunayize_new_edges(DList& N) {
-        for(index_t t=N.front; t!=NO_INDEX; t=Tnext(t)) {
-            index_t v1 = Tv(t,1);
-            index_t v2 = Tv(t,2);
-            if(v2 < v1) {
-                std::swap(v1,v2);
-            }
-            CDT_LOG("new edge: " << v1 << " " << v2);
-        }
         bool swap_occured = true;
         while(swap_occured) {
             swap_occured = false;
@@ -678,7 +567,15 @@ namespace GEO {
                 index_t e2 = Tadj_find(t2,t1);
                 index_t v3 = Tv(t2,e2);
                 if(incircle(v0,v1,v2,v3) == POSITIVE) {
-                    swap_edge(t1);
+                    // t2 may also encode a new edge, we need to preserve it,
+                    // by chosing the right swap:
+                    if(Tv(t2,0) == Tv(t1,1)) {
+                        swap_edge(t1, true); // t2 on top
+                        Trot(t1,1);
+                    } else {
+                        swap_edge(t1, false); // t1 on top
+                        Trot(t1,2);
+                    }
                     swap_occured = true;
                 } 
             }
@@ -686,68 +583,13 @@ namespace GEO {
         DList_clear(N);
     }
 
-    void CDTBase::Delaunayize_new_edges_simple(vector<Edge>& N) {
-        for(Edge E: N) {
-            index_t v1 = std::min(E.first,E.second);
-            index_t v2 = std::max(E.first,E.second);
-            if(v2 < v1) {
-                std::swap(v1,v2);
-            }
-            CDT_LOG("new edge: " << v1 << " " << v2);
-        }
-        bool swap_occured = true;
-        while(swap_occured) {
-            swap_occured = false;
-            for(Edge& E: N) {
-                index_t t1 = eT(E);
-                if(Tedge_is_constrained(t1,0)) {
-                    continue;
-                }
-                index_t v1 = Tv(t1,1);
-                index_t v2 = Tv(t1,2);
-                index_t v0 = Tv(t1,0);
-                index_t t2 = Tadj(t1,0);
-                if(t2 == NO_INDEX) {
-                    continue;
-                }
-                index_t e2 = Tadj_find(t2,t1);
-                index_t v3 = Tv(t2,e2);
-                if(incircle(v0,v1,v2,v3) == POSITIVE) {
-                    swap_edge(t1);
-                    E = std::make_pair(Tv(t1,0), Tv(t1,1));
-                    swap_occured = true;
-                } 
-            }
-        }
-        N.resize(0);
-    }
-    
     index_t CDTBase::locate(index_t v, index_t hint, Sign* o) const {
         Sign o_local[3];
         if(o == nullptr) {
             o = o_local;
         }
 
-        // Simple locate, linear scan
-        /*
-        {
-            for(index_t t=0; t<nT(); ++t) {
-                index_t i = Tv(t,0);
-                index_t j = Tv(t,1);
-                index_t k = Tv(t,2);
-                o[0] = orient2d(v,j,k);
-                o[1] = orient2d(v,k,i);
-                o[2] = orient2d(v,i,j);
-                if(o[0]*o[1] >= 0 && o[1]*o[2] >= 0 && o[2]*o[0] >= 0) {
-                    return t;
-                    break;
-                }
-            }
-            geo_assert_not_reached;
-        }
-        */
-
-        // More efficient locate, "walking the triangulation"
+        // Efficient locate, "walking the triangulation"
         index_t nb_traversed_t = 0;
         index_t t_pred = nT()+1; // Needs to be different from NO_INDEX
         index_t t = (hint == NO_INDEX) ?
@@ -937,7 +779,6 @@ namespace GEO {
             Tadj_back_connect(t2,0,t2);
             Tadj_back_connect(t2,2,t1);
         }
-        
         Tcheck(t1);
         Tcheck(t2);        
     }
@@ -968,7 +809,7 @@ namespace GEO {
     }
 
     /**  Debugging ******************************************************/
-    
+
     bool CDTBase::Tedge_is_Delaunay(index_t t1, index_t le1) const {
         if(Tedge_is_constrained(t1,le1)) {
             return true;
@@ -1003,6 +844,111 @@ namespace GEO {
             }
         }
     }
+
+    /*** Naive versions of algorithms, for reference / debugging if need be ***/
+    
+    index_t CDTBase::locate_naive(index_t v, index_t hint, Sign* o) const {
+        geo_argused(hint);
+        Sign o_local[3];
+        if(o == nullptr) {
+            o = o_local;
+        }
+
+        for(index_t t=0; t<nT(); ++t) {
+            index_t i = Tv(t,0);
+            index_t j = Tv(t,1);
+            index_t k = Tv(t,2);
+            o[0] = orient2d(v,j,k);
+            o[1] = orient2d(v,k,i);
+            o[2] = orient2d(v,i,j);
+            if(o[0]*o[1] >= 0 && o[1]*o[2] >= 0 && o[2]*o[0] >= 0) {
+                return t;
+                break;
+            }
+        }
+        geo_assert_not_reached;
+    }
+    
+    void CDTBase::Delaunayize_new_edges_naive(vector<Edge>& N) {
+        for(Edge E: N) {
+            index_t v1 = std::min(E.first,E.second);
+            index_t v2 = std::max(E.first,E.second);
+            if(v2 < v1) {
+                std::swap(v1,v2);
+            }
+            CDT_LOG("new edge: " << v1 << " " << v2);
+        }
+        bool swap_occured = true;
+        while(swap_occured) {
+            swap_occured = false;
+            for(Edge& E: N) {
+                index_t t1 = eT(E);
+                if(Tedge_is_constrained(t1,0)) {
+                    continue;
+                }
+                index_t v1 = Tv(t1,1);
+                index_t v2 = Tv(t1,2);
+                index_t v0 = Tv(t1,0);
+                index_t t2 = Tadj(t1,0);
+                if(t2 == NO_INDEX) {
+                    continue;
+                }
+                index_t e2 = Tadj_find(t2,t1);
+                index_t v3 = Tv(t2,e2);
+                if(incircle(v0,v1,v2,v3) == POSITIVE) {
+                    swap_edge(t1);
+                    E = std::make_pair(Tv(t1,0), Tv(t1,1));
+                    swap_occured = true;
+                } 
+            }
+        }
+        N.resize(0);
+    }
+    
+    void CDTBase::constrain_edges_naive(
+        index_t i, index_t j, DList& Q_in, vector<Edge>& N
+    ) {
+        CDT_LOG("Q size=" << DList_size(Q_in));
+        
+        std::deque<Edge> Q;
+        for(index_t t=Q_in.front; t != NO_INDEX; t = Tnext(t)) {
+            Q.push_back(std::make_pair(Tv(t,1), Tv(t,2)));
+        }
+        DList_clear(Q_in);
+
+        for(index_t t=0; t<nT(); ++t) {
+            geo_debug_assert(!Tis_in_list(t));
+        }
+
+        while(Q.size() != 0) {
+            Edge E = Q.back();
+            Q.pop_back();
+            if(!is_convex_quad(eT(E))) {
+                if(Q.size() == 0) {
+                    CDT_LOG("... infinite iteration");
+                    abort();
+                }
+                Q.push_front(E);
+            } else {
+                index_t t = eT(E);                                
+                swap_edge(t);
+                E = std::make_pair(Tv(t,0), Tv(t,1));
+                if(segment_segment_intersect(i,j,E.first,E.second)) {
+                    Q.push_front(E);
+                } else {
+                    if(
+                        (E.first == i && E.second == j) ||
+                        (E.first == j && E.second == i)
+                    ) {
+                        index_t t = eT(E);                
+                        Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
+                    } else {
+                        N.push_back(E);
+                    }
+                }
+            }
+        }
+    }
     
     /********************************************************************/
 
@@ -1014,7 +960,7 @@ namespace GEO {
     
     CDT::~CDT() {
 
-#ifdef GEO_DEBUG        
+#ifdef CDT_STAT
         double dup_orient_cnt =
             double(orient_cnt_) - double(orient_stat_.size());
         
@@ -1065,7 +1011,7 @@ namespace GEO {
         geo_debug_assert(i < nv());
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
-#ifdef GEO_DEBUG        
+#ifdef CDT_STAT
         ++orient_cnt_;
         ++orient_stat_[trindex(i,j,k)];
 #endif        
@@ -1077,7 +1023,7 @@ namespace GEO {
         geo_debug_assert(j < nv());
         geo_debug_assert(k < nv());
         geo_debug_assert(l < nv());
-#ifdef GEO_DEBUG                
+#ifdef CDT_STAT
         ++incircle_cnt_;
         ++incircle_stat_[quadindex(i,j,k,l)];
 #endif        

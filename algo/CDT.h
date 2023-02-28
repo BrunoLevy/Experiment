@@ -12,7 +12,7 @@
 #include <geogram/mesh/index.h>
 #include <map>
 
-// See documentation of CDT class at the end of this file.
+// Usage: see documentation of the CDT class at the end of this file.
 
 namespace GEO {
 
@@ -720,17 +720,7 @@ namespace GEO {
         void DList_show(const std::string& name, const DList& list) const {
             std::cerr << name << "=";
             for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
-                /*
-                if(Tis_marked(t)) {
-                    std::cerr << '*';
-                }
-                */
                 std::cerr << t << ";";
-/*                
-                          << "("
-                          << Tv(t,0) << "," << Tv(t,1) << "," << Tv(t,2)
-                          << ") ";
-*/
             }
             std::cerr << std::endl;
         }
@@ -925,19 +915,26 @@ namespace GEO {
         }
 
         /**
-         * \brief Simpler version of constrain_edges(), to have a ground truth
-         *  each time constrain_edges() seems to be bugged
+         * \brief Simpler version of locate()
+         * \see locate()
+         */
+        index_t locate_naive(
+            index_t v, index_t hint = NO_INDEX, Sign* orient = nullptr
+        ) const;
+        
+        /**
+         * \brief Simpler version of constrain_edges()
          * \see constrain_edges()
          */
-        void constrain_edges_simple(
+        void constrain_edges_naive(
             index_t i, index_t j, DList& Q, vector<Edge>& N
         );
 
         /**
          * \brief Simpler version of Delaunayize_new_edges() that uses a vector
-         *  instead of a DList
+         *  instead of a DList.
          */
-        void Delaunayize_new_edges_simple(vector<Edge>& N);
+        void Delaunayize_new_edges_naive(vector<Edge>& N);
         
     protected:
         index_t nv_;
@@ -961,12 +958,12 @@ namespace GEO {
      *   Example:
      *   \code
      *    CDT cdt;
-     *    vec2 p1 = ..., p2 = ..., p3 = ...;
+     *    vec2 p1(.,.), p2(.,.), p3(.,.);
      *    cdt.create_enclosing_triangle(p1,p2,p3); 
      *         // or create_enclosing_quad() or create_enclosing_rect()
      *    // insert points
      *    for(...) {
-     *      vec2 p = ...;
+     *      vec2 p(.,.);
      *      index_t v = cdt.insert(p);
      *      ...
      *    }
@@ -990,8 +987,15 @@ namespace GEO {
      *   (nv1 corresponds to the number of times CDT::insert() was called plus
      *   the number of points in the enclosing polygon).
      *
-     *   If one only wants a constrained triangulation (not Delaunay), 
-     *   one can call CDT::set_Delaunay(false) before inserting the points.
+     *   If you want only a constrained triangulation (not Delaunay), 
+     *   you can call CDT::set_Delaunay(false) before inserting the points.
+     *
+     *   If you have many points to insert, you can use the function:
+     *   \code
+     *     void CDT::insert(index_t nb_points, const double* points);
+     *   \endcode
+     *   It is much much faster than inserting the points one by one. Internally
+     *   it uses Amenta et.al's BRIO method (multi-resolution spatial sort).
      */
     class Experiment_API CDT: public CDTBase {
     public:
