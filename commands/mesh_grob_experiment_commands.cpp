@@ -27,11 +27,12 @@
  
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
-#include <OGF/Experiment/algo/CDT.h>
 
 #include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/delaunay/delaunay.h>
+#include <geogram/delaunay/CDT_2d.h>
+
 
 namespace OGF {
 
@@ -112,7 +113,7 @@ namespace OGF {
         }
 
         if(use_my_code) {
-            CDT cdt;
+            CDT2d cdt;
             cdt.set_delaunay(Delaunay);
 
             index_t n=0;

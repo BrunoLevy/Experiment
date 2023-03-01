@@ -32,15 +32,14 @@
 
 // TODO:
 
-// 1) better error message when locate() fails
-// 2) predicate cache:
+// 1) predicate cache:
 //     - Current implementation for triangles with small number of vertices
 //       and many constraints: yes it is needed. 20% to 60% of calls to
 //       predicates that could be avoided with a cache
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 3) insert additional vertices with Delaunay refinement
-// 4) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 5) store the figures for the mesh surgery operations somewhere with the code.
+// 2) insert additional vertices with Delaunay refinement
+// 3) management of boundary: can we have "vertex at infinity" like in CGAL ?
+// 4) store the figures for the mesh surgery operations somewhere with the code.
 //    If somebody needs to modify the code later, it is super important !!
 //    Can I do ascii art for that ? Seems to be a bit difficult...
 
@@ -632,8 +631,9 @@ namespace GEO {
             
             // You will land here if we try to locate a point outside
             // the boundary
-            geo_debug_assert(t != NO_INDEX);
-            
+            bool point_outside_boundary = (t == NO_INDEX);
+            geo_assert(!point_outside_boundary);
+             
             index_t tv[3];
             tv[0] = Tv(t,0);
             tv[1] = Tv(t,1);
