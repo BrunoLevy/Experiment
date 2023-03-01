@@ -207,156 +207,222 @@ namespace GEO {
 
         /**
          * \brief Constants for triangle flags
+         * \details The first eight flags reserved for the DLists
          */
-        enum {T_MARKED_MASK = 1, T_IN_LIST_MASK = 2};
+        enum {T_MARKED_FLAG = 8};
 
-        index_t Tnext(index_t t) const {
+        /**
+         * \brief Sets a triangle flag 
+         * \param[in] t the triangle
+         * \param[in] t the flag, in 0..7
+         */
+        void Tset_flag(index_t t, index_t flag) {
             geo_debug_assert(t < nT());
-            geo_debug_assert(Tis_in_list(t));
-            return Tnext_[t];
+            geo_debug_assert(flag < 31);
+            Tflags_[t] |= (1u << flag);
         }
 
-        index_t Tprev(index_t t) const {
+        /**
+         * \brief Resets a triangle flag 
+         * \param[in] t the triangle
+         * \param[in] t the flag, in 0..7
+         */
+        void Treset_flag(index_t t, index_t flag) {
             geo_debug_assert(t < nT());
-            geo_debug_assert(Tis_in_list(t));            
-            return Tprev_[t];
+            geo_debug_assert(flag < 31);
+            Tflags_[t] &= Numeric::uint8(~(1u << flag));
         }
+
+        /**
+         * \brief Tests a triangle flag 
+         * \param[in] t the triangle
+         * \param[in] t the flag, in 0..7
+         * \retval true if the flag is set
+         * \retval false otherwise
+         */
+        bool Tflag_is_set(index_t t, index_t flag) {
+            return ((Tflags_[t] & (1u << flag)) != 0);
+        }
+
+        /**
+         * \brief Tests whether a triangle is in a DList
+         * \param[in] t the triangle
+         * \retval true if the triangle is in a list
+         * \retval false otherwise
+         */
+        bool Tis_in_list(index_t t) const {
+            return ((Tflags_[t] & 255) != 0);
+        }
+
+        /**
+         * \brief list_ids
+         */
+        enum {DLIST_S_ID=0, DLIST_Q_ID=1, DLIST_N_ID=2};
         
         /**
          * \brief Doubly connected triangle list
-         * \details The same triangle can be only
-         *  in a single DList at the same time. 
-         *  Used to implement:
+         * \details DList is used to implement:
          *  - the stack S of triangles to flip in insert()
          *  - the queue Q of intersected edges in 
          *    detect_intersected_edges() and constrain_edges()
          *  - the list N of new edges in constrain_edges()
+         *  Everything is stored in CDBase
+         *  vectors Tnext_, Tprev_ and Tflags_. As
+         *  a consequence, the same triangle can be only
+         *  in a single DList at the same time. 
          */
         struct DList {
             /**
              * \brief Constructs an empty DList
+             * \param[in] cdt a reference to the CDTBase
+             * \param[in] list_id the DList id, in 0..7
              */
-            DList() : back(NO_INDEX), front(NO_INDEX) {
+            DList(CDTBase& cdt, index_t list_id) :
+                cdt_(cdt), list_id_(list_id),
+                back_(NO_INDEX), front_(NO_INDEX) {
             }
+
+            ~DList() {
+                clear();
+            }
+            
             bool empty() const {
                 geo_debug_assert(
-                    (back==NO_INDEX)==(front==NO_INDEX)
+                    (back_==NO_INDEX)==(front_==NO_INDEX)
                 );
-                return (back==NO_INDEX);
+                return (back_==NO_INDEX);
             }
-            index_t back;
-            index_t front;
+
+            bool contains(index_t t) const {
+                return cdt_.Tflag_is_set(t, list_id_);
+            }
+
+            index_t front() const {
+                return front_;
+            }
+            
+            index_t back() const {
+                return back_;
+            }
+            
+            index_t next(index_t t) const {
+                geo_debug_assert(contains(t));
+                return cdt_.Tnext_[t];
+            }
+            
+            index_t prev(index_t t) const {
+                geo_debug_assert(contains(t));
+                return cdt_.Tprev_[t];
+            }
+
+            void clear() {
+                for(index_t t=front_; t!=NO_INDEX; t = cdt_.Tnext_[t]) {
+                    cdt_.Treset_flag(t,list_id_);
+                }
+                back_ = NO_INDEX;
+                front_ = NO_INDEX;
+            }
+
+            index_t size() const {
+                index_t result = 0;
+                for(index_t t=front(); t!=NO_INDEX; t = next(t)) {
+                    ++result;
+                }
+                return result;
+            }
+        
+            void push_back(index_t t) {
+                geo_debug_assert(!cdt_.Tis_in_list(t));
+                cdt_.Tset_flag(t,list_id_);
+                if(empty()) {
+                    back_ = t;
+                    front_ = t;
+                    cdt_.Tnext_[t] = NO_INDEX;
+                    cdt_.Tprev_[t] = NO_INDEX;
+                } else {
+                    cdt_.Tnext_[t] = NO_INDEX;
+                    cdt_.Tnext_[back_] = t;
+                    cdt_.Tprev_[t] = back_;
+                    back_ = t;
+                }
+            }
+
+            index_t pop_back() {
+                geo_debug_assert(!empty());
+                index_t t = back_;
+                back_ = cdt_.Tprev_[back_];
+                if(back_ == NO_INDEX) {
+                    geo_debug_assert(front_ == t);
+                    front_ = NO_INDEX;
+                } else {
+                    cdt_.Tnext_[back_] = NO_INDEX;
+                }
+                geo_debug_assert(contains(t));
+                cdt_.Treset_flag(t,list_id_);
+                return t;
+            }
+
+            void push_front(index_t t) {
+                geo_debug_assert(!cdt_.Tis_in_list(t));
+                cdt_.Tset_flag(t,list_id_);
+                if(empty()) {
+                    back_ = t;
+                    front_ = t;
+                    cdt_.Tnext_[t] = NO_INDEX;
+                    cdt_.Tprev_[t] = NO_INDEX;
+                } else {
+                    cdt_.Tprev_[t] = NO_INDEX;
+                    cdt_.Tprev_[front_] = t;
+                    cdt_.Tnext_[t] = front_;
+                    front_ = t;
+                }
+            }
+
+            index_t pop_front() {
+                geo_debug_assert(!empty());
+                index_t t = front_;
+                front_ = cdt_.Tnext_[front_];
+                if(front_ == NO_INDEX) {
+                    geo_debug_assert(back_ == t);
+                    back_ = NO_INDEX;
+                } else {
+                    cdt_.Tprev_[front_] = NO_INDEX;
+                }
+                geo_debug_assert(contains(t));
+                cdt_.Treset_flag(t,list_id_);
+                return t;
+            }
+
+            void remove(index_t t) {
+                if(t == front_) {
+                    pop_front();
+                } else if(t == back_) {
+                    pop_back();
+                } else {
+                    geo_debug_assert(contains(t));
+                    index_t t_prev = cdt_.Tprev_[t];
+                    index_t t_next = cdt_.Tnext_[t];
+                    cdt_.Tprev_[t_next] = t_prev;
+                    cdt_.Tnext_[t_prev] = t_next;
+                    cdt_.Treset_flag(t,list_id_);
+                }
+            }
+
+            void show(std::ostream& out = std::cerr) const {
+                out << "DList_" << list_id_ << "=";
+                for(index_t t=front(); t!=NO_INDEX; t = next(t)) {
+                    out << t << ";";
+                }
+                out << std::endl;
+            }
+            
+        private:
+            CDTBase& cdt_;
+            index_t list_id_;
+            index_t back_;
+            index_t front_;
         };
 
-        void DList_clear(DList& L) {
-            for(index_t t=L.front; t!=NO_INDEX; t = Tnext_[t]) {
-                Tunflag_as_in_list(t);
-            }
-            L.back = NO_INDEX;
-            L.front = NO_INDEX;
-        }
-
-        index_t DList_size(DList& L) const {
-            index_t result = 0;
-            for(index_t t=L.front; t!=NO_INDEX; t = Tnext_[t]) {
-                ++result;
-            }
-            return result;
-        }
-        
-        void DList_push_back(DList& L, index_t t) {
-            geo_debug_assert(!Tis_in_list(t));
-            Tflag_as_in_list(t);
-            if(L.empty()) {
-                L.back = t;
-                L.front = t;
-                Tnext_[t] = NO_INDEX;
-                Tprev_[t] = NO_INDEX;
-            } else {
-                Tnext_[t] = NO_INDEX;
-                Tnext_[L.back] = t;
-                Tprev_[t] = L.back;
-                L.back = t;
-            }
-        }
-
-        index_t DList_pop_back(DList& L) {
-            geo_debug_assert(!L.empty());
-            index_t t = L.back;
-            L.back = Tprev_[L.back];
-            if(L.back == NO_INDEX) {
-                geo_debug_assert(L.front == t);
-                L.front = NO_INDEX;
-            } else {
-                Tnext_[L.back] = NO_INDEX;
-            }
-            geo_debug_assert(Tis_in_list(t));
-            Tunflag_as_in_list(t);
-            return t;
-        }
-
-        void DList_push_front(DList& L, index_t t) {
-            geo_debug_assert(!Tis_in_list(t));
-            Tflag_as_in_list(t);
-            if(L.empty()) {
-                L.back = t;
-                L.front = t;
-                Tnext_[t] = NO_INDEX;
-                Tprev_[t] = NO_INDEX;
-            } else {
-                Tprev_[t] = NO_INDEX;
-                Tprev_[L.front] = t;
-                Tnext_[t] = L.front;
-                L.front = t;
-            }
-        }
-
-        index_t DList_pop_front(DList& L) {
-            geo_debug_assert(!L.empty());
-            index_t t = L.front;
-            L.front = Tnext_[L.front];
-            if(L.front == NO_INDEX) {
-                geo_debug_assert(L.back == t);
-                L.back = NO_INDEX;
-            } else {
-                Tprev_[L.front] = NO_INDEX;
-            }
-            geo_debug_assert(Tis_in_list(t));
-            Tunflag_as_in_list(t);
-            return t;
-        }
-
-
-        /**
-         * \brief Removes a triangle from a DList
-         * \pre \p The triangle t is in the DList \p L
-         * \details The triangle can be anywhere in the DList
-         * \param[in] t the triangle to be removed
-         * \param[in,out] L the DList
-         */
-        void DList_remove(DList& L, index_t t) {
-            if(t == L.front) {
-                DList_pop_front(L);
-            } else if(t == L.back) {
-                DList_pop_back(L);
-            } else {
-                geo_debug_assert(Tis_in_list(t));
-                index_t t_prev = Tprev(t);
-                index_t t_next = Tnext(t);
-                Tprev_[t_next] = t_prev;
-                Tnext_[t_prev] = t_next;
-                Tunflag_as_in_list(t);
-            }
-        }
-
-        index_t DList_size(const DList& L) const {
-            index_t result = 0;
-            for(index_t t = L.front; t != NO_INDEX; t = Tnext(t)) {
-                ++result;
-            }
-            return result;
-        }
-        
         /**
          * \brief Inserts a vertex in an edge
          * \param[in] v the vertex to be inserted
@@ -568,56 +634,6 @@ namespace GEO {
             return t;
         }
 
-        
-        /**
-         * \brief Marks a triangle as intersected by the constraint
-         */
-        void Tmark(index_t t) {
-            geo_debug_assert(t < nT());            
-            Tflags_[t] |= T_MARKED_MASK;
-        }
-
-        /**
-         * \brief Unmarks a triangle as intersected by the constraint
-         */
-        void Tunmark(index_t t) {
-            geo_debug_assert(t < nT());            
-            Tflags_[t] &= Numeric::uint8(~T_MARKED_MASK);
-        }
-
-        /**
-         * \brief Tests whether a triangle is marked as intersected
-         */
-        bool Tis_marked(index_t t) const {
-            geo_debug_assert(t < nT());            
-            return ((Tflags_[t] & T_MARKED_MASK) != 0);
-        }
-
-        /**
-         * \brief Marks a triangle as in a DList
-         */
-        void Tflag_as_in_list(index_t t) {
-            geo_debug_assert(t < nT());            
-            Tflags_[t] |= T_IN_LIST_MASK;
-        }
-
-        /**
-         * \brief Unmarks a triangle as in a DList
-         */
-        void Tunflag_as_in_list(index_t t) {
-            geo_debug_assert(t < nT());            
-            Tflags_[t] &= Numeric::uint8(~T_IN_LIST_MASK);
-        }
-        
-        /**
-         * \brief Tests whether a triangle is in a DList
-         */
-        bool Tis_in_list(index_t t) const {
-            geo_debug_assert(t < nT());            
-            return ((Tflags_[t] & T_IN_LIST_MASK) != 0);
-        }
-
-        
         /**
          * \brief Gets the constraint associated with an edge
          * \param[in] t a triangle
@@ -787,14 +803,6 @@ namespace GEO {
 
         /******************** Debugging ************************************/
 
-        void DList_show(const std::string& name, const DList& list) const {
-            std::cerr << name << "=";
-            for(index_t t=list.front; t!=NO_INDEX; t = Tnext(t)) {
-                std::cerr << t << ";";
-            }
-            std::cerr << std::endl;
-        }
-        
         /**
          * \brief Consistency check for a triangle
          * \details in debug mode, aborts if inconsistency is detected
