@@ -54,6 +54,12 @@ namespace GEO {
         void insert_constraint(index_t i, index_t j);
 
         /**
+         * \brief Recursively removes all the triangles adjacent to
+         *  the border, and keeps what's surrounded by constraints
+         */
+        void remove_external_triangles();
+        
+        /**
          * \brief Specifies whether a constrained Delaunay
          *  triangulation should be constructed, or just a
          *  plain constrained triangulation
@@ -206,19 +212,13 @@ namespace GEO {
         );
 
         /**
-         * \brief Constants for triangle flags
-         * \details The first eight flags reserved for the DLists
-         */
-        enum {T_MARKED_FLAG = 8};
-
-        /**
          * \brief Sets a triangle flag 
          * \param[in] t the triangle
          * \param[in] t the flag, in 0..7
          */
         void Tset_flag(index_t t, index_t flag) {
             geo_debug_assert(t < nT());
-            geo_debug_assert(flag < 31);
+            geo_debug_assert(flag < 8);
             Tflags_[t] |= (1u << flag);
         }
 
@@ -229,7 +229,7 @@ namespace GEO {
          */
         void Treset_flag(index_t t, index_t flag) {
             geo_debug_assert(t < nT());
-            geo_debug_assert(flag < 31);
+            geo_debug_assert(flag < 8);
             Tflags_[t] &= Numeric::uint8(~(1u << flag));
         }
 
@@ -241,11 +241,13 @@ namespace GEO {
          * \retval false otherwise
          */
         bool Tflag_is_set(index_t t, index_t flag) {
+            geo_debug_assert(t < nT());
+            geo_debug_assert(flag < 8);
             return ((Tflags_[t] & (1u << flag)) != 0);
         }
 
         /**
-         * \brief list_ids
+         * \brief Constants for list_id
          */
         enum {
             DLIST_S_ID=0,
@@ -254,7 +256,12 @@ namespace GEO {
             DLIST_MAX_NB=3
         };
         
-        
+
+        /**
+         * \brief Constants for triangle flags
+         */
+        enum {T_MARKED_FLAG = DLIST_MAX_NB};
+
         /**
          * \brief Tests whether a triangle is in a DList
          * \param[in] t the triangle

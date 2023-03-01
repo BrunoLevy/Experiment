@@ -109,7 +109,8 @@ namespace OGF {
             bool use_my_code=true,
             bool Delaunay=true,
             bool constrained=true,
-            bool quad=false
+            bool quad=false,
+            bool remove_external_triangles=false
         );
 
 

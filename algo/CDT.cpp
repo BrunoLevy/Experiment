@@ -32,7 +32,7 @@
 
 // TODO:
 
-// 1) tag/remove external triangles
+// 1) better error message when locate() fails
 // 2) predicate cache:
 //     - Current implementation for triangles with small number of vertices
 //       and many constraints: yes it is needed. 20% to 60% of calls to
@@ -685,6 +685,83 @@ namespace GEO {
         return t;
     }
 
+    void CDTBase::remove_external_triangles() {
+        DList S(*this, DLIST_S_ID);
+
+        // Step 1: get triangles adjacent to the border
+        for(index_t t=0; t<nT(); ++t) {
+            if(
+                Tadj(t,0) == NO_INDEX ||
+                Tadj(t,1) == NO_INDEX ||
+                Tadj(t,2) == NO_INDEX
+            ) {
+                Tset_flag(t, T_MARKED_FLAG);
+                S.push_back(t);
+            }
+        }
+
+        // Step 2: recursive traversal
+        while(!S.empty()) {
+            index_t t1 = S.pop_back();
+            for(index_t le=0; le<3; ++le) {
+                index_t t2 = Tadj(t1,le); 
+                if(
+                    t2 != NO_INDEX &&
+                    !Tedge_is_constrained(t1,le) && 
+                    !Tflag_is_set(t2,T_MARKED_FLAG)
+                ) {
+                    Tset_flag(t2, T_MARKED_FLAG);
+                    S.push_back(t2);
+                }
+            }
+        }
+
+        // Step 3: compute old2new map
+        // (use Tnext_'s storage, that we do not need now)
+        vector<index_t>& old2new = Tnext_;
+        index_t cur_t_new = 0;
+        for(index_t t=0; t<nT(); ++t) {
+            if(Tflag_is_set(t,T_MARKED_FLAG)) {
+                old2new[t] = NO_INDEX;
+            } else {
+                old2new[t] = cur_t_new;
+                ++cur_t_new;
+            }
+        }
+        index_t nT_new = cur_t_new;
+
+        // Step 4: translate adjacency and move triangles
+        for(index_t t=0; t<nT(); ++t) {
+            index_t t_new = old2new[t];
+            if(t_new == NO_INDEX) {
+                continue;
+            }
+            Tset(
+                t_new,
+                Tv(t,0), Tv(t,1), Tv(t,2),
+                old2new[Tadj(t,0)], old2new[Tadj(t,1)], old2new[Tadj(t,2)],
+                Tedge_cnstr(t,0), Tedge_cnstr(t,1), Tedge_cnstr(t,2)
+            );
+            Tflags_[t_new] = 0;
+        }
+
+        // Step 5: resize arrays
+        T_.resize(3*nT_new);
+        Tadj_.resize(3*nT_new);
+        Tflags_.resize(nT_new);
+        Tecnstr_.resize(3*nT_new);
+        Tnext_.resize(nT_new);
+        Tprev_.resize(nT_new);
+
+        // Step 6: fix v2T_
+        for(index_t t=0; t<nT(); ++t) {
+            v2T_[Tv(t,0)] = t;
+            v2T_[Tv(t,1)] = t;
+            v2T_[Tv(t,2)] = t;            
+        }
+    }
+
+    
     /***************** Triangulation surgery (boring code ahead) *********/
     
     void CDTBase::insert_vertex_in_edge(

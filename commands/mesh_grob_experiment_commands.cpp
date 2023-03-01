@@ -104,7 +104,8 @@ namespace OGF {
         bool use_my_code,
         bool Delaunay,
         bool constrained,
-        bool quad
+        bool quad,
+        bool remove_external_triangles
     ) {
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
@@ -149,12 +150,6 @@ namespace OGF {
                     );
                 }
             }
-            for(index_t t=0; t<cdt.nT(); ++t) {
-                index_t i = cdt.Tv(t,0);
-                index_t j = cdt.Tv(t,1);
-                index_t k = cdt.Tv(t,2);
-                mesh_grob()->facets.create_triangle(i,j,k);
-            }
 
             // Check whether all edges are Delaunay
 #ifdef GEO_DEBUG            
@@ -173,7 +168,21 @@ namespace OGF {
                 }
                 cdt.save("CDT_result.geogram");
             }
-#endif            
+#endif
+            
+            if(remove_external_triangles) {
+                cdt.remove_external_triangles();
+            }
+            
+            for(index_t t=0; t<cdt.nT(); ++t) {
+                index_t i = cdt.Tv(t,0);
+                index_t j = cdt.Tv(t,1);
+                index_t k = cdt.Tv(t,2);
+                mesh_grob()->facets.create_triangle(i,j,k);
+            }
+
+
+            
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(mesh_grob());
