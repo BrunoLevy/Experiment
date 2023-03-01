@@ -877,41 +877,107 @@ namespace GEO {
 
         /**
          * \brief Consistency check for a triangle
-         * \details in debug mode, aborts if inconsistency is detected
+         * \details aborts if inconsistency is detected
          * \param[in] t the triangle to be tested
          */
-        void Tcheck(index_t t) {
-            geo_argused(t);
-#ifdef GEO_DEBUG
+        void Tcheck(index_t t) const {
             if(t == index_t(-1)) {
                 return;
             }
             for(index_t e=0; e<3; ++e) {
-                geo_debug_assert(Tv(t,e) != Tv(t,(e+1)%3));
+                geo_assert(Tv(t,e) != Tv(t,(e+1)%3));
                 if(Tadj(t,e) == index_t(-1)) {
                     continue;
                 }
-                geo_debug_assert(Tadj(t,e) != Tadj(t,(e+1)%3));
+                geo_assert(Tadj(t,e) != Tadj(t,(e+1)%3));
                 index_t t2 = Tadj(t,e);
                 index_t e2 = Tadj_find(t2,t);
-                geo_debug_assert(Tadj(t2,e2) == t);
+                geo_assert(Tadj(t2,e2) == t);
             }
-#endif
         }
 
         /**
-         * \brief Consistency check for all the triangles
-         * \details in debug mode, aborts if inconsistency is detected
+         * \brief Consistency check for a triangle in debug mode,
+         *  ignored in release mode
+         * \details aborts if inconsistency is detected
+         * \param[in] t the triangle to be tested
+         */
+        void debug_Tcheck(index_t t) const {
+#ifdef GEO_DEBUG
+            Tcheck(t);
+#else
+            geo_argused(t);
+#endif            
+        }
+        
+        /**
+         * \brief Consistency combinatorial check for all the triangles
+         * \details aborts if inconsistency is detected
          */        
-        void check_consistency() {
-#ifdef GEO_DEBUG            
+        void check_combinatorics() const {
             for(index_t t=0; t<nT(); ++t) {
                 Tcheck(t);
             }
+        }
+
+        /**
+         * \brief Consistency combinatorial check for all the triangles
+         *  in debug mode, ignored in release mode
+         * \details aborts if inconsistency is detected
+         */        
+        void debug_check_combinatorics() const {
+#ifdef GEO_DEBUG
+            check_combinatorics();
+#endif            
+        }
+
+        /**
+         * \brief Consistency geometrical check for all the triangles
+         * \details aborts if inconsistency is detected
+         */        
+        void check_geometry() const {
+            for(index_t t=0; t<nT(); ++t) {
+                for(index_t le=0; le<3; ++le) {
+                    geo_assert(Tedge_is_Delaunay(t,le));
+                }
+            }
+        }
+
+        /**
+         * \brief Consistency geometrical check for all the triangles
+         *  in debug mode, ignored in release mode
+         * \details aborts if inconsistency is detected
+         */        
+        void debug_check_geometry() const {
+#ifdef GEO_DEBUG
+            check_geometry();
 #endif            
         }
 
 
+        /**
+         * \brief Checks both combinatorics and geometry,
+         *  aborts on unconsistency
+         */
+        void check_consistency() const {
+            check_combinatorics();
+            if(delaunay_) {
+                check_geometry();
+            }
+        }
+
+        /**
+         * \brief Checks both combinatorics and geometry
+         *  in debug mode, ignored in release mode,
+         *  aborts on unconsistency
+         */
+        void debug_check_consistency() const {
+            debug_check_combinatorics();
+            if(delaunay_) {            
+                debug_check_geometry();
+            }
+        }
+        
         /**
          * \brief Tests whether two segments have a frank intersection
          * \param[in] u1 , u2 the two extremities of the first segment
@@ -1138,6 +1204,7 @@ namespace GEO {
          *  detected (and them the index of the existing point is returned)
          */
         index_t insert(const vec2& p, index_t hint = NO_INDEX) {
+            debug_check_consistency();            
             point_.push_back(p);
             index_t v = CDTBase::insert(point_.size()-1, hint);
             // If inserted point already existed in
@@ -1145,6 +1212,7 @@ namespace GEO {
             if(point_.size() > nv()) {
                 point_.pop_back();
             }
+            debug_check_consistency();                        
             return v;
         }
 

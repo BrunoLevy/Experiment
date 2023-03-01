@@ -30,7 +30,7 @@
 
 
 // TODO:
-// 0) functions to test combinatorics and geometry for the whole triangulation
+
 // 1) predicate cache:
 //     - Current implementation for triangles with small number of vertices
 //       and many constraints: yes it is needed. 20% to 60% of calls to predicates
@@ -62,7 +62,7 @@
 // #define CDT_STAT // display predicates statistics
 
 #ifdef GEO_DEBUG
-#define CDT_DEBUG // display *lots* of messages
+// #define CDT_DEBUG // display *lots* of messages and activates costly checks
 #endif
 
 #ifdef CDT_DEBUG
@@ -166,8 +166,6 @@ namespace GEO {
             insert_vertex_in_triangle(v,t,delaunay_ ? &S : nullptr);
         }
 
-        check_consistency();
-        
         if(!delaunay_) {
             return v;
         }
@@ -175,14 +173,14 @@ namespace GEO {
         // Phase 3: recursively restore Delaunay conditions for the neighbors
         // of the new vertex
         Delaunayize_vertex_neighbors(v,S);
-        check_consistency();
-        
+
         return v;
     }
 
     
     void CDTBase::insert_constraint(index_t i, index_t j) {
         CDT_LOG("insert constraint: " << i << "-" << j);
+        debug_check_consistency();
         ++ncnstr_;
 
         // Index of first vertex coming from constraints intersection
@@ -199,13 +197,13 @@ namespace GEO {
             // if any (returned in k)
             index_t k = find_intersected_edges(i,j,Q);
             // Step 2: constrain edges
-            constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); // BUGGED
-            check_consistency();
+            constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); 
+            debug_check_combinatorics();
             // Step 3: restore Delaunay condition
             if(delaunay_) {
                 Delaunayize_new_edges(N);
             }
-            check_consistency();            
+            debug_check_combinatorics();            
             i = k;
         }
 #else
@@ -214,14 +212,16 @@ namespace GEO {
         while(i != j) {
             index_t k = find_intersected_edges(i,j,Q);
             constrain_edges_naive(i,k,Q,N);
-            check_consistency();
+            debug_check_combinatorics();
             if(delaunay_) {
                 Delaunayize_new_edges_naive(N);
             }
-            check_consistency();            
+            debug_check_combinatorics();            
             i = k;
         }
 #endif        
+
+        debug_check_combinatorics();
         
         if(!delaunay_) {
             return;
@@ -249,6 +249,7 @@ namespace GEO {
             Delaunayize_vertex_neighbors(v,S);
         }
 
+        debug_check_consistency();        
     }
 
     index_t CDTBase::find_intersected_edges(
@@ -760,8 +761,10 @@ namespace GEO {
         index_t v4 = Tv(t2,le2);
         geo_debug_assert(Tv(t2,(le2+1)%3) == v3);
         geo_debug_assert(Tv(t2,(le2+2)%3) == v2);
-        Tcheck(t1);
-        Tcheck(t2);
+        
+        debug_Tcheck(t1);
+        debug_Tcheck(t2);
+        
         index_t t2_adj2 = Tadj(t2,(le2+1)%3);
         index_t t2_adj3 = Tadj(t2,(le2+2)%3);
         if(swap_t1_t2) {
@@ -779,8 +782,9 @@ namespace GEO {
             Tadj_back_connect(t2,0,t2);
             Tadj_back_connect(t2,2,t1);
         }
-        Tcheck(t1);
-        Tcheck(t2);        
+
+        debug_Tcheck(t1);
+        debug_Tcheck(t2);
     }
 
     /***************** Geometry ***********************/
@@ -1060,6 +1064,7 @@ namespace GEO {
 
     void CDT::insert(index_t nb_points, const double* points) {
         CDT_LOG("Inserting " << nb_points << " points");
+        debug_check_consistency();
         index_t v_offset = nv();
         point_.reserve(point_.size()+nb_points);
         v2T_.resize(v2T_.size()+nb_points, NO_INDEX);
@@ -1075,6 +1080,7 @@ namespace GEO {
             hint = vT(v);
         }
         CDT_LOG("Inserted.");
+        debug_check_consistency();        
     }
     
     void CDT::save(const std::string& filename) const {
