@@ -500,12 +500,20 @@ namespace GEO {
          * \param[in] v the vertex to be inserted
          * \param[in] t a triangle incident to the edge
          * \param[in] le the local index of the edge in \p t
-         * \param[out] S optional DList of created triangles
+         * \param[out] S DList of created triangles, ignored if uninitialized
          */
-        void insert_vertex_in_edge(
-            index_t v, index_t t, index_t le,
-            DList* S = nullptr
-        );
+        void insert_vertex_in_edge(index_t v, index_t t, index_t le, DList& S);
+
+        /**
+         * \brief Inserts a vertex in an edge
+         * \param[in] v the vertex to be inserted
+         * \param[in] t a triangle incident to the edge
+         * \param[in] le the local index of the edge in \p t
+         */
+        void insert_vertex_in_edge(index_t v, index_t t, index_t le) {
+            DList S(*this);
+            insert_vertex_in_edge(v,t,le,S);
+        }
 
         /**
          * \brief Inserts a vertex in a triangle
@@ -513,10 +521,7 @@ namespace GEO {
          * \param[in] t the triangle
          * \param[out] S optional DList of created triangles
          */
-        void insert_vertex_in_triangle(
-            index_t v, index_t t,
-            DList* S = nullptr
-        );
+        void insert_vertex_in_triangle(index_t v, index_t t, DList& S);
         
         /**
          * \brief Finds the edges intersected by a constraint
@@ -540,11 +545,11 @@ namespace GEO {
          * \param[in] i , j the extremities of the edge
          * \param[in] Q the list of intersected edges, computed by
          *  find_intersected_edges()
-         * \param[out] N a pointer to the DList with the new edges 
+         * \param[out] N optional  DList with the new edges 
          *  that need to be re-Delaunized by find_intersected_edges(), 
-         *  or nullptr if one does not want to get them
+         *  ignored if uninitialized
          */
-        void constrain_edges(index_t i, index_t j, DList& Q, DList* N);
+        void constrain_edges(index_t i, index_t j, DList& Q, DList& N);
 
         /**
          * \brief Restores Delaunay condition starting from the

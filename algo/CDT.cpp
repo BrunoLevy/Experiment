@@ -25,20 +25,21 @@
 //    - t2 was always in Q already (because it has an edge
 //      that has an intersection with the constraint), but
 //      there is one case where it leaves Q
-// We need to mark/unmark triangles for one case: when t2 is unmarked,
-// it means there is no intersection.
+// DList as an O(1) function to test whether an element is in the list (using
+// flags associated with the elements). It is used in one case: when t2 is
+// is not in Q, it means there is no intersection.
 
 
 // TODO:
 
-// 1) predicate cache:
+// 1) tag/remove external triangles
+// 2) predicate cache:
 //     - Current implementation for triangles with small number of vertices
-//       and many constraints: yes it is needed. 20% to 60% of calls to predicates
-//       that could be avoided with a cache
+//       and many constraints: yes it is needed. 20% to 60% of calls to
+//       predicates that could be avoided with a cache
 //     - find a "noalloc" implementation (std::make_heap ?)
-// 2) management of boundary: can we have "vertex at infinity" like in CGAL ?
-// 3) tag/remove external triangles
-// 4) insert additional vertices with Delaunay refinement
+// 3) insert additional vertices with Delaunay refinement
+// 4) management of boundary: can we have "vertex at infinity" like in CGAL ?
 // 5) store the figures for the mesh surgery operations somewhere with the code.
 //    If somebody needs to modify the code later, it is super important !!
 //    Can I do ascii art for that ? Seems to be a bit difficult...
@@ -149,10 +150,14 @@ namespace GEO {
             return v;
         }
 
-        // Stack of triangle edges to examine for flipping
+        // Stack of triangle edges to examine for flipping. Ignored in
+        // non-Delaunay mode (ignored if !delaunay_)
         // Note: it is always edge 0 that we examine, since new
         // triangles are always created with v as vertex 0.
-        DList S(*this, DLIST_S_ID);
+        DList S(*this);
+        if(delaunay_) {
+            S.initialize(DLIST_S_ID);
+        }
 
         // Phase 2: split triangle
         // Particular case: v is on edge
@@ -161,18 +166,16 @@ namespace GEO {
             index_t le = (o[0] == ZERO) ? 0 :
                          (o[1] == ZERO) ? 1 :
                           2 ;
-            insert_vertex_in_edge(v,t,le,delaunay_ ? &S : nullptr);
+            insert_vertex_in_edge(v,t,le,S);
         } else {
-            insert_vertex_in_triangle(v,t,delaunay_ ? &S : nullptr);
-        }
-
-        if(!delaunay_) {
-            return v;
+            insert_vertex_in_triangle(v,t,S);
         }
 
         // Phase 3: recursively restore Delaunay conditions for the neighbors
         // of the new vertex
-        Delaunayize_vertex_neighbors(v,S);
+        if(delaunay_) {
+            Delaunayize_vertex_neighbors(v,S);
+        }
 
         return v;
     }
@@ -189,21 +192,30 @@ namespace GEO {
 
 #ifndef CDT_NAIVE        
         DList Q(*this, DLIST_Q_ID); // Queue of edges to constrain
-        DList N(*this, DLIST_N_ID); // New edges to re-Delaunayize
+        DList N(*this); // New edges to re-Delaunayize (ignored if !delaunay_)
+        if(delaunay_) {
+            N.initialize(DLIST_N_ID);
+        }
         while(i != j) {
+            
             // Step 1: find all the edges that have an intersection 
             // with the constraint [i,j], enqueue them in Q.
             // Stop at vertex on constraint or constraint intersection
             // if any (returned in k)
             index_t k = find_intersected_edges(i,j,Q);
+            
             // Step 2: constrain edges
-            constrain_edges(i,k,Q,delaunay_ ? &N : nullptr); 
-            debug_check_combinatorics();
+            constrain_edges(i,k,Q,N);
+            
+            debug_check_combinatorics(); // It is good to be paranoid 
+            
             // Step 3: restore Delaunay condition
             if(delaunay_) {
                 Delaunayize_new_edges(N);
             }
-            debug_check_combinatorics();            
+            
+            debug_check_combinatorics(); // Still paranoid...
+            
             i = k;
         }
 #else
@@ -260,7 +272,8 @@ namespace GEO {
         // Walk from i to j, detect intersected edges and push
         // them to Q. At each step, we are either on a triangle
         // (generic case) or on a vertex (when we start from i, or
-        // when there is a vertex that is exactly on [i,k]).
+        // when there is a vertex that is exactly on [i,k], or when
+        // there was a constraint intersection).
         // We keep track of the previous triangle or previous vertex
         // to make sure we don't go backwards.
         
@@ -279,7 +292,8 @@ namespace GEO {
         // the whole intersected segment, but stopping at first
         // vertex makes it easier to schedule constraint
         // enforcement / re-Delaunay (especially in the case of 
-        // constraint intersection that needs to insert a new vertex)
+        // constraint intersection that needs to insert a new vertex),
+        // see the loop in insert_constraint().
 
         while(v == NO_INDEX || v == i) {
             CDT_LOG(
@@ -293,12 +307,20 @@ namespace GEO {
             //   traverse all the triangles around v and find the one that
             //   has an intersection. For instance, when we start from vertex i,
             //   and also when the previous step encountered a vertex exactly on
-            //   the constrained segment
+            //   the constrained segment. It is the annoying case where one has
+            //   to traverse the triangles incident to v (using the function
+            //   for_each_T_around_v() that takes a lambda).
             // - on an edge intersection (v == NO_INDEX, t != NO_INDEX)
-            //   propagate to the neighbor of t accross the intersected edge
-            // What makes things slightly more complicated is that each case
-            // has two sub-cases, depending on whether the constraint segment
-            // passes exactly through a vertex
+            //   propagate to the neighbor of t accross the intersected edge.
+            //   It is the "generic" case, simpler (the next triangle is
+            //   determined by the edge of t that is intersected).
+            // There are three things that makes things slightly
+            // more complicated:
+            // - each case has two sub-cases, depending on whether the next
+            //   intersection is an existing vertex.
+            // - if an existing edge is embedded in the constraint, one needs
+            //   to flag that edge as a constraint.
+            // - we need to test whether we are arrived at vertex j
 
             
             if(v != NO_INDEX) {
@@ -445,7 +467,7 @@ namespace GEO {
         return NO_INDEX;
     }
 
-    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList* N) {
+    void CDTBase::constrain_edges(index_t i, index_t j, DList& Q, DList& N) {
 
 #ifdef CDT_DEBUG
         // The function find_edge_intersections() is super complicated,
@@ -453,22 +475,26 @@ namespace GEO {
         // *all* edge intersections).
         check_edge_intersections(i,j,Q);
 #endif
-        // Edge le of triangle t has no isect with cnstr, it is a new edge
+        // Called each time edge le of triangle t has no isect with cnstr,
+        // (then it is a "new edge")
         auto new_edge = [&](index_t t,index_t le) {
             Trot(t,le);
             if(
                 (Tv(t,1) == i && Tv(t,2) == j) ||
                 (Tv(t,1) == j && Tv(t,2) == i)
             ) {
+                // Set constraint flag if the new edge is the constrained edge
                 Tset_edge_cnstr_with_neighbor(t,0,ncnstr_-1);
             } else {
-                if(N != nullptr) {
-                    N->push_back(t);
+                // Memorize new edge as "to be Delaunayized"
+                if(N.initialized()) {
+                    N.push_back(t);
                 }
             }
         };
 
-        // Edge le of triangle t still has an isect with cnstr
+        // Called each time edge le of triangle t still has an isect with cnstr
+        // (then it is queued again)
         auto isect_edge = [&](index_t t, index_t le) {
             Trot(t,le);
             Q.push_front(t);
@@ -514,11 +540,11 @@ namespace GEO {
                         geo_debug_assert(t2v0_t1v1);
                         swap_edge(t1,true); // "new t1 on bottom"    
                         if(o > 0) {
-                            geo_debug_assert( segment_edge_intersect(i,j,t1,1));                            
+                            geo_debug_assert( segment_edge_intersect(i,j,t1,1));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             isect_edge(t1,1); 
                         } else {
-                            geo_debug_assert(!segment_edge_intersect(i,j,t1,1));                            
+                            geo_debug_assert(!segment_edge_intersect(i,j,t1,1));
                             geo_debug_assert( segment_edge_intersect(i,j,t2,0));
                             new_edge(t1,1);
                         }
@@ -662,8 +688,7 @@ namespace GEO {
     /***************** Triangulation surgery (boring code ahead) *********/
     
     void CDTBase::insert_vertex_in_edge(
-        index_t v, index_t t, index_t le1,
-        DList* S
+        index_t v, index_t t, index_t le1, DList& S
     ) {
         index_t cnstr = Tedge_cnstr(t,le1);
         index_t t1 = t;
@@ -698,11 +723,11 @@ namespace GEO {
             Tset_edge_cnstr(t2,2,cnstr);
             Tset_edge_cnstr(t3,1,cnstr);
             Tset_edge_cnstr(t4,2,cnstr);
-            if(S != nullptr) {
-                S->push_back(t1);
-                S->push_back(t2);
-                S->push_back(t3);
-                S->push_back(t4);                
+            if(S.initialized()) {
+                S.push_back(t1);
+                S.push_back(t2);
+                S.push_back(t3);
+                S.push_back(t4);                
             }
         } else {
             // New vertex is on an edge of t1 and t1 has no neighbor
@@ -715,16 +740,14 @@ namespace GEO {
             Tadj_back_connect(t2,0,t1);            
             Tset_edge_cnstr(t1,1,cnstr);
             Tset_edge_cnstr(t2,2,cnstr);
-            if(S != nullptr) {
-                S->push_back(t1);
-                S->push_back(t2);
+            if(S.initialized()) {
+                S.push_back(t1);
+                S.push_back(t2);
             }
         }
     }
 
-    void CDTBase::insert_vertex_in_triangle(
-        index_t v, index_t t, DList* S
-    ) {
+    void CDTBase::insert_vertex_in_triangle(index_t v, index_t t, DList& S) {
         // New vertex is in t1. Discard t1 and replace it with three
         // new triangles (recycle t1).
         index_t t1 = t;
@@ -742,10 +765,10 @@ namespace GEO {
         Tadj_back_connect(t1,0,t1);
         Tadj_back_connect(t2,0,t1);
         Tadj_back_connect(t3,0,t1);
-        if(S != nullptr) {
-            S->push_back(t1);
-            S->push_back(t2);
-            S->push_back(t3);            
+        if(S.initialized()) {
+            S.push_back(t1);
+            S.push_back(t2);
+            S.push_back(t3);            
         }
     }
     
