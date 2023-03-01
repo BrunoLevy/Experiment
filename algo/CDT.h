@@ -245,20 +245,30 @@ namespace GEO {
         }
 
         /**
+         * \brief list_ids
+         */
+        enum {
+            DLIST_S_ID=0,
+            DLIST_Q_ID=1,
+            DLIST_N_ID=2,
+            DLIST_MAX_NB=3
+        };
+        
+        
+        /**
          * \brief Tests whether a triangle is in a DList
          * \param[in] t the triangle
          * \retval true if the triangle is in a list
          * \retval false otherwise
          */
         bool Tis_in_list(index_t t) const {
-            return ((Tflags_[t] & 255) != 0);
+            return (
+                (Tflags_[t] &
+                 Numeric::uint8((1 << DLIST_MAX_NB)-1)
+                ) != 0
+            );
         }
 
-        /**
-         * \brief list_ids
-         */
-        enum {DLIST_S_ID=0, DLIST_Q_ID=1, DLIST_N_ID=2};
-        
         /**
          * \brief Doubly connected triangle list
          * \details DList is used to implement:
@@ -275,18 +285,52 @@ namespace GEO {
             /**
              * \brief Constructs an empty DList
              * \param[in] cdt a reference to the CDTBase
-             * \param[in] list_id the DList id, in 0..7
+             * \param[in] list_id the DList id, in 0..DLIST_MAX_NB-1
              */
             DList(CDTBase& cdt, index_t list_id) :
                 cdt_(cdt), list_id_(list_id),
                 back_(NO_INDEX), front_(NO_INDEX) {
+                geo_debug_assert(list_id < DLIST_MAX_NB);
             }
 
-            ~DList() {
-                clear();
+            /**
+             * \brief Creates an uninitialized DList
+             * \details One cannot do anything with an 
+             *   uninitialized Dlist, except:
+             *   - initializing it with DList::initialize()
+             *   - testing its status with DList::initialized()
+             *   - display it with DList::show()
+             */
+            DList(CDTBase& cdt) :
+                cdt_(cdt), list_id_(NO_INDEX),
+                back_(NO_INDEX), front_(NO_INDEX) {
+            }
+
+            /**
+             * \brief Initializes a list
+             * \param[in] list_id the DList id, in 0..DLIST_MAX_NB-1
+             */
+            void initialize(index_t list_id) {
+                geo_debug_assert(!initialized());
+                geo_debug_assert(list_id < DLIST_MAX_NB);
+                list_id_ = list_id;
+            }
+
+            /**
+             * \brief Tests whether a DList is initialized
+             */
+            bool initialized() const {
+                return (list_id_ != NO_INDEX);
             }
             
+            ~DList() {
+                if(initialized()) {
+                    clear();
+                }
+            }
+
             bool empty() const {
+                geo_debug_assert(initialized());
                 geo_debug_assert(
                     (back_==NO_INDEX)==(front_==NO_INDEX)
                 );
@@ -294,23 +338,28 @@ namespace GEO {
             }
 
             bool contains(index_t t) const {
+                geo_debug_assert(initialized());                
                 return cdt_.Tflag_is_set(t, list_id_);
             }
 
             index_t front() const {
+                geo_debug_assert(initialized());
                 return front_;
             }
             
             index_t back() const {
+                geo_debug_assert(initialized());
                 return back_;
             }
             
             index_t next(index_t t) const {
+                geo_debug_assert(initialized());
                 geo_debug_assert(contains(t));
                 return cdt_.Tnext_[t];
             }
             
             index_t prev(index_t t) const {
+                geo_debug_assert(initialized());
                 geo_debug_assert(contains(t));
                 return cdt_.Tprev_[t];
             }
@@ -324,6 +373,7 @@ namespace GEO {
             }
 
             index_t size() const {
+                geo_debug_assert(initialized());
                 index_t result = 0;
                 for(index_t t=front(); t!=NO_INDEX; t = next(t)) {
                     ++result;
@@ -332,6 +382,7 @@ namespace GEO {
             }
         
             void push_back(index_t t) {
+                geo_debug_assert(initialized());
                 geo_debug_assert(!cdt_.Tis_in_list(t));
                 cdt_.Tset_flag(t,list_id_);
                 if(empty()) {
@@ -348,6 +399,7 @@ namespace GEO {
             }
 
             index_t pop_back() {
+                geo_debug_assert(initialized());
                 geo_debug_assert(!empty());
                 index_t t = back_;
                 back_ = cdt_.Tprev_[back_];
@@ -363,6 +415,7 @@ namespace GEO {
             }
 
             void push_front(index_t t) {
+                geo_debug_assert(initialized());
                 geo_debug_assert(!cdt_.Tis_in_list(t));
                 cdt_.Tset_flag(t,list_id_);
                 if(empty()) {
@@ -379,6 +432,7 @@ namespace GEO {
             }
 
             index_t pop_front() {
+                geo_debug_assert(initialized());
                 geo_debug_assert(!empty());
                 index_t t = front_;
                 front_ = cdt_.Tnext_[front_];
@@ -394,6 +448,7 @@ namespace GEO {
             }
 
             void remove(index_t t) {
+                geo_debug_assert(initialized());
                 if(t == front_) {
                     pop_front();
                 } else if(t == back_) {
@@ -409,7 +464,24 @@ namespace GEO {
             }
 
             void show(std::ostream& out = std::cerr) const {
-                out << "DList_" << list_id_ << "=";
+                switch(list_id_) {
+                case DLIST_S_ID:
+                    out << "S";
+                    break;
+                case DLIST_Q_ID:
+                    out << "Q";
+                    break;
+                case DLIST_N_ID:
+                    out << "N";
+                    break;
+                case NO_INDEX:
+                    out << "<uninitialized list>";
+                    break;
+                default:
+                    out << "<unknown list id:" << list_id_ << ">";
+                    break;
+                }
+                out << "=";
                 for(index_t t=front(); t!=NO_INDEX; t = next(t)) {
                     out << t << ";";
                 }

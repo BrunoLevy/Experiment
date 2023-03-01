@@ -30,9 +30,8 @@
 
 
 // TODO:
-// 1) Cleaner triangle flags, and keep track of which triangle is in which DList,
-//    each DList will know which "bit" it owns in the triangle flags.
-// 2) predicate cache:
+// 0) functions to test combinatorics and geometry for the whole triangulation
+// 1) predicate cache:
 //     - Current implementation for triangles with small number of vertices
 //       and many constraints: yes it is needed. 20% to 60% of calls to predicates
 //       that could be avoided with a cache
