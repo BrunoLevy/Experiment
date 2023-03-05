@@ -316,19 +316,19 @@ namespace GEO {
             vec2HE W = p2-p3;
 
             expansion& Uxw = expansion_product(U.x.rep(), U.w.rep());
-            expansion& Uyw = expansion_product(U.x.rep(), U.w.rep());
+            expansion& Uyw = expansion_product(U.y.rep(), U.w.rep());
             expansion& Ux2 = expansion_square(U.x.rep());
             expansion& Uy2 = expansion_square(U.y.rep());
             expansion& Ul  = expansion_sum(Ux2,Uy2);
 
             expansion& Vxw = expansion_product(V.x.rep(), V.w.rep());
-            expansion& Vyw = expansion_product(V.x.rep(), V.w.rep());
+            expansion& Vyw = expansion_product(V.y.rep(), V.w.rep());
             expansion& Vx2 = expansion_square(V.x.rep());
             expansion& Vy2 = expansion_square(V.y.rep());
             expansion& Vl  = expansion_sum(Vx2,Vy2);
             
             expansion& Wxw = expansion_product(W.x.rep(), W.w.rep());
-            expansion& Wyw = expansion_product(W.x.rep(), W.w.rep());
+            expansion& Wyw = expansion_product(W.y.rep(), W.w.rep());
             expansion& Wx2 = expansion_square(W.x.rep());
             expansion& Wy2 = expansion_square(W.y.rep());
             expansion& Wl  = expansion_sum(Wx2,Wy2);

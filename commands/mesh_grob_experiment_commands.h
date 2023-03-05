@@ -82,6 +82,7 @@ namespace OGF {
             bool barycentric=false,
             bool per_component_ids=true,
             bool use_halfedges=false,
+            bool delaunay=false,
             bool verbose=false
         );
 

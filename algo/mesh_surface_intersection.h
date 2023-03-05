@@ -76,6 +76,8 @@ namespace GEO {
          * \brief Alternative triangle remesher (under test)
          */
         bool use_halfedges = false;
+
+        bool delaunay = false;
     };
 
     void Experiment_API mesh_intersect_surface(

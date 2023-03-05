@@ -52,6 +52,7 @@ namespace OGF {
         bool barycentric,
         bool per_component_ids,
         bool use_halfedges,
+        bool delaunay,
         bool verbose
     ) {
         MeshSurfaceIntersectionParams params;
@@ -66,6 +67,7 @@ namespace OGF {
         params.barycentric = barycentric;
         params.per_component_ids = per_component_ids;
         params.use_halfedges = use_halfedges;
+        params.delaunay = delaunay;
         params.verbose = verbose;
         
         GEO::mesh_intersect_surface(*mesh_grob(),params);

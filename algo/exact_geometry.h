@@ -265,8 +265,7 @@ namespace GEO {
         }
 
         bool Experiment_API same_point(const vec2HE& v1, const vec2HE& v2);
-        
-        bool Experiment_API same_point(const vec3HE& v1, const vec3HE& v2);        
+        bool Experiment_API same_point(const vec3HE& v1, const vec3HE& v2);  
         
         Sign Experiment_API orient_2d(
             const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
