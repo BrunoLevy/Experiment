@@ -57,6 +57,10 @@ namespace GEO {
             x(rhs.x), y(rhs.y), w(rhs.w) {
         }
 
+        explicit vec2HE(const vec2& rhs) : 
+            x(rhs.x), y(rhs.y), w(1.0) {
+        }
+        
         vec2HE& operator=(const vec2HE& rhs) {
             if(&rhs != this) {
                 x=rhs.x;
@@ -143,6 +147,10 @@ namespace GEO {
             x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
         }
 
+        explicit vec3HE(const vec3& rhs) : 
+            x(rhs.x), y(rhs.y), z(rhs.z), w(1.0) {
+        }
+        
         vec3HE& operator=(const vec3HE& rhs) {
             if(&rhs != this) {
                 x=rhs.x;
@@ -424,7 +432,18 @@ namespace GEO {
             Pden
         );
     }
-    
+
+    /**
+     * \brief Computes the intersection between the support
+     *  planes of three triangles
+     * \param[in] p1 , p2 , p3 the three vertices of the first triangle
+     * \param[in] q1 , q2 , q3 the three vertices of the second triangle
+     * \param[in] r1 , r2 , r3 the three vertices of the third triangle
+     * \param[out] result the exact intersection between the three planes
+     *  if it exsists
+     * \retval true if the planes have an intersection
+     * \retval false otherwise
+     */
     bool Experiment_API get_three_planes_intersection(
         vec3HE& result,
         const vec3& p1, const vec3& p2, const vec3& p3,
@@ -434,6 +453,23 @@ namespace GEO {
 
     /************************************************************************/
 
+    inline vec3HE plane_line_intersection(
+        const vec3& p1, const vec3& p2, const vec3& p3,
+        const vec3& q1, const vec3& q2
+    ) {
+        // Moller & Trumbore's algorithm
+        // see: https://stackoverflow.com/questions/42740765/
+        //  intersection-between-line-and-triangle-in-3d
+        vec3E D   = make_vec3<vec3E>(q1,q2);
+        vec3E E1  = make_vec3<vec3E>(p1,p2);
+        vec3E E2  = make_vec3<vec3E>(p1,p3);
+        vec3E AO  = make_vec3<vec3E>(p1,q1);
+        vec3E N   = cross(E1,E2);
+        expansion_nt d = -dot(D,N);
+        geo_debug_assert(d.sign() != ZERO);
+        rational_nt t(dot(AO,N),d);
+        return mix(t,q1,q2);
+    }
     
 }
 

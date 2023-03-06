@@ -107,8 +107,9 @@ namespace {
         /**
          * \brief A vertex of the triangulation
          * \details Stores geometric information in exact precision, both
-         *  in 3D and in local 2D coordinates. It also stores symbolic information, 
-         *  that is, facet indices and regions that generated the vertex.
+         *  in 3D and in local 2D coordinates. It also stores symbolic 
+         *  information, that is, facet indices and regions that generated 
+         *  the vertex.
          */
         class Vertex {
         public:
@@ -125,16 +126,12 @@ namespace {
              */
             Vertex(
                 MeshInTriangle* M, index_t f, index_t lv
-            ) :
-                point_exact(vec3HE_noinit()),
-                UV_exact(vec2HE_noinit())
-            {
+            ) : point_exact(vec3HE_noinit()) {
                 geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
                 mesh_in_triangle = M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
-                init_geometry();
-                init_geometry_UV();
+                init_geometry(compute_geometry());
             }
 
             /**
@@ -147,41 +144,33 @@ namespace {
                 MeshInTriangle* M,
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
-            ) :
-                point_exact(vec3HE_noinit()),
-                UV_exact(vec2HE_noinit())
-            {
+            ) : point_exact(vec3HE_noinit()) {
                 geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
                 mesh_in_triangle = M;
                 init_sym(f1,f2,R1,R2);
-                init_geometry();
-                init_geometry_UV();
+                init_geometry(compute_geometry());
             }
 
             /**
              * \brief Constructor for intersections between constraints.
              * \param[in] point_exact_in exact 3D coordinates 
              *   of the intersection
-             * \param[in] UV_exact_in exact 2D coordinates. 
              */
             Vertex(
                 MeshInTriangle* M,
                 const vec3HE& point_exact_in
-            ) : point_exact(point_exact_in) {
+            ) {
                 type = SECONDARY_ISECT;                
                 mesh_in_triangle = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
-                init_geometry_UV();
+                init_geometry(point_exact_in);
             }
 
             /**
              * \brief Default constructor
              */
-            Vertex() :
-                point_exact(vec3HE_noinit()),
-                UV_exact(vec2HE_noinit())
-            {
+            Vertex() : point_exact(vec3HE_noinit()) {
                 type = UNINITIALIZED;                
                 mesh_in_triangle = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
@@ -227,6 +216,21 @@ namespace {
                 print(out);
                 return out.str();
             }
+
+            vec2HE get_UV_exact() const {
+                return vec2HE(
+                    point_exact[u_coord()],
+                    point_exact[v_coord()],
+                    point_exact.w
+                );
+            }
+
+            vec2 get_UV_approx() const {
+                double u = point_exact[u_coord()].estimate();
+                double v = point_exact[v_coord()].estimate();
+                double w = point_exact.w.estimate();
+                return vec2(u/w,v/w);
+            }
             
         protected:
 
@@ -258,11 +262,11 @@ namespace {
             }
 
             /**
-             * \brief Initializes the geometry of this vertex
-             * \details Computes the exact 3D and 2D position of this vertex
+             * \brief Gets the geometry of this vertex
+             * \details Computes the exact 3D position of this vertex
              *  based on the mesh and the combinatorial information
              */
-            void init_geometry() {
+            vec3HE compute_geometry() {
 
                 mesh_vertex_index = NO_INDEX;
                 
@@ -271,8 +275,7 @@ namespace {
                     index_t lv = index_t(sym.R1);
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f1,lv);
-                    point_exact = mesh_vertex_vec3HE(mesh_vertex_index);
-                    return;
+                    return vec3HE(mesh_vertex(mesh_vertex_index));
                 }
 
                 geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
@@ -282,8 +285,7 @@ namespace {
                     index_t lv = index_t(sym.R2)-3;
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f2, lv);
-                    point_exact = mesh_vertex_vec3HE(mesh_vertex_index);
-                    return;
+                    return vec3HE(mesh_vertex(mesh_vertex_index));
                 }
 
                 // case 3: f1 /\ f2 edge or f1 edge /\ f2 edge in 3D
@@ -310,17 +312,7 @@ namespace {
                         PCK::orient_3d(p1,p2,p3,q2) == ZERO) ;
 
                     if(!seg_seg_two_D) {
-                        vec3E D   = make_vec3<vec3E>(q1,q2);
-                        vec3E E1  = make_vec3<vec3E>(p1,p2);
-                        vec3E E2  = make_vec3<vec3E>(p1,p3);
-                        vec3E AO  = make_vec3<vec3E>(p1,q1);
-                        vec3E N   = cross(E1,E2);
-                    
-                        expansion_nt d = -dot(D,N);
-                        geo_debug_assert(d.sign() != ZERO);
-                        rational_nt t(dot(AO,N),d);
-                        point_exact = mix(t,q1,q2);
-                        return;
+                        return plane_line_intersection(p1,p2,p3,q1,q2);
                     }
                 }
 
@@ -328,25 +320,13 @@ namespace {
                 if(region_dim(sym.R1) == 1 && region_dim(sym.R2) == 2) {
                     index_t e = index_t(sym.R1)-index_t(T1_RGN_E0);
                     geo_debug_assert(e<3);
-                    vec3 p1 = mesh_facet_vertex(sym.f1, (e+1)%3);
-                    vec3 p2 = mesh_facet_vertex(sym.f1, (e+2)%3);
-
-                    vec3 q1 = mesh_facet_vertex(sym.f2,0);
-                    vec3 q2 = mesh_facet_vertex(sym.f2,1);
-                    vec3 q3 = mesh_facet_vertex(sym.f2,2);
-                    
-                    vec3E E1  = make_vec3<vec3E>(q1,q2);
-                    vec3E E2  = make_vec3<vec3E>(q1,q3);
-                    vec3E N   = cross(E1,E2);
-
-                    vec3E D   = make_vec3<vec3E>(p1,p2);
-                    vec3E AO  = make_vec3<vec3E>(q1,p1);
-
-                    expansion_nt d = -dot(D,N);
-                    rational_nt t(dot(AO,N),d);
-
-                    point_exact = mix(t, p1, p2);
-                    return;
+                    return plane_line_intersection(
+                        mesh_facet_vertex(sym.f2,0),
+                        mesh_facet_vertex(sym.f2,1),
+                        mesh_facet_vertex(sym.f2,2),
+                        mesh_facet_vertex(sym.f1, (e+1)%3),
+                        mesh_facet_vertex(sym.f1, (e+2)%3)
+                    );
                 }
 
                 // case 5: f1 edge /\ f2 edge in 2D
@@ -380,8 +360,7 @@ namespace {
                     vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
                     vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
                     rational_nt t(det(AO,D2),d);
-                    point_exact = mix(t,P1,P2);
-                    return;
+                    return mix(t,P1,P2);
                 }
 
                 // Normally we enumerated all possible cases
@@ -392,19 +371,20 @@ namespace {
              * \brief Optimizes exact numbers in generated
              *  points and computes approximate coordinates.
              */
-            void init_geometry_UV() {
+            void init_geometry(const vec3HE& P) {
+                point_exact = P;
                 point_exact.x.optimize();
                 point_exact.y.optimize();
                 point_exact.z.optimize();
                 point_exact.w.optimize();
-                UV_exact.x = point_exact[u_coord()];
-                UV_exact.y = point_exact[v_coord()];
-                UV_exact.w = point_exact.w;
-                if(mesh_in_triangle->delaunay_) {
-                    double w = UV_exact.w.estimate();
-                    UV_approx.x = UV_exact.x.estimate()/w;
-                    UV_approx.y = UV_exact.y.estimate()/w;                    
-                }
+
+                // Lifted coordinate for incircle
+                double u = point_exact[u_coord()].estimate();
+                double v = point_exact[v_coord()].estimate();
+                double w = point_exact.w.estimate();
+                u /= w;
+                v /= w;
+                h_approx = u*u+v*v;
             }
             
             /**
@@ -479,8 +459,7 @@ namespace {
             MeshInTriangle* mesh_in_triangle;
 
             vec3HE point_exact;
-            vec2HE UV_exact;
-            vec2   UV_approx;
+            double h_approx; // lifting coordinate for incircle
 
             Type type;
             
@@ -686,13 +665,8 @@ namespace {
             if(M.vertices.nb() == 0) {
                 M.vertices.set_dimension(2);
                 for(index_t v=0; v<vertex_.size(); ++v) {
-		   vec2 p;
-                   double w = vertex_[v].UV_exact.w.estimate();
-                   p = vec2(
-                       vertex_[v].UV_exact.x.estimate() / w,
-                       vertex_[v].UV_exact.y.estimate() / w
-                   );
-                   M.vertices.create_vertex(p.data());
+                    vec2 p = vertex_[v].get_UV_approx();
+                    M.vertices.create_vertex(p.data());
                 }
             }
             if(with_edges && M.edges.nb() == 0) {
@@ -852,9 +826,9 @@ namespace {
         
         Sign orient2d(index_t v1,index_t v2,index_t v3) const override {
             return PCK::orient_2d(
-                vertex_[v1].UV_exact,
-                vertex_[v2].UV_exact,
-                vertex_[v3].UV_exact
+                vertex_[v1].get_UV_exact(),
+                vertex_[v2].get_UV_exact(),
+                vertex_[v3].get_UV_exact()
             );
         }
 
@@ -873,33 +847,29 @@ namespace {
         ) const override {
 
             if(approx_incircle_) {
-               const vec2& p1 = vertex_[v1].UV_approx;
-               const vec2& p2 = vertex_[v2].UV_approx;
-               const vec2& p3 = vertex_[v3].UV_approx;
-               const vec2& p4 = vertex_[v4].UV_approx;            
-               return PCK::orient_2dlifted_SOS(
-                  p1.data(), p2.data(), p3.data(), p4.data(),
-                  length2(p1), length2(p2), length2(p3), length2(p4)
-               );
+                return PCK::orient_2dlifted_SOS(
+                    vertex_[v1].get_UV_approx().data(),
+                    vertex_[v2].get_UV_approx().data(),
+                    vertex_[v3].get_UV_approx().data(),
+                    vertex_[v4].get_UV_approx().data(),
+                    vertex_[v1].h_approx,
+                    vertex_[v2].h_approx,
+                    vertex_[v3].h_approx,
+                    vertex_[v4].h_approx
+                );
             }
 
-            // Exact version (using approximated
-            // lifted coordinates, but its OK as soon
-            // as it always the same for the same
-            // vertex).
-            
-            const vec2HE& p0 = vertex_[v1].UV_exact;
-            const vec2HE& p1 = vertex_[v2].UV_exact;
-            const vec2HE& p2 = vertex_[v3].UV_exact;
-            const vec2HE& p3 = vertex_[v4].UV_exact;            
-                
-            double h0 = length2(vertex_[v1].UV_approx);
-            double h1 = length2(vertex_[v2].UV_approx);
-            double h2 = length2(vertex_[v3].UV_approx);
-            double h3 = length2(vertex_[v4].UV_approx);
-            
+            // Exact version (using approximate lifted coordinates,
+            // but its OK as soon as it always the same for the same vertex).
             return PCK::orient_2dlifted_SOS(
-                p0,p1,p2,p3,h0,h1,h2,h3
+                vertex_[v1].get_UV_exact(),
+                vertex_[v2].get_UV_exact(),
+                vertex_[v3].get_UV_exact(),
+                vertex_[v4].get_UV_exact(),
+                vertex_[v1].h_approx,
+                vertex_[v2].h_approx,
+                vertex_[v3].h_approx,
+                vertex_[v4].h_approx
             );
         }
 
@@ -947,12 +917,7 @@ namespace {
             Mesh M;
             M.vertices.set_dimension(2);
             for(index_t v=0; v<CDTBase2d::nv(); ++v) {
-                vec2 p;
-                double w = vertex_[v].UV_exact.w.estimate();
-                p = vec2(
-                    vertex_[v].UV_exact.x.estimate() / w,
-                    vertex_[v].UV_exact.y.estimate() / w
-                );
+                vec2 p = vertex_[v].get_UV_approx();
                 M.vertices.create_vertex(p.data());
             }
             for(index_t t=0; t<CDTBase2d::nT(); ++t) {
