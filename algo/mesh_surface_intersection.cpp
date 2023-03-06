@@ -11,8 +11,6 @@
 //       points that have their coordinates stored in the
 //       stack.
 
-
-
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
 #include <OGF/Experiment/algo/exact_geometry.h>
 
@@ -30,10 +28,6 @@
 
 #include <sstream>
 #include <stack>
-
-namespace GEO {
-    void GEOGRAM_API SOS_sort(const double** begin, const double** end, GEO::index_t dim);
-}
 
 namespace {
     using namespace GEO;
@@ -129,7 +123,7 @@ namespace {
             ) : point_exact(vec3HE_noinit()) {
                 geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
-                mesh_in_triangle = M;
+                mit = M;
                 init_sym(f, NO_INDEX, TriangleRegion(lv), T2_RGN_T);
                 init_geometry(compute_geometry());
             }
@@ -147,7 +141,7 @@ namespace {
             ) : point_exact(vec3HE_noinit()) {
                 geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
-                mesh_in_triangle = M;
+                mit = M;
                 init_sym(f1,f2,R1,R2);
                 init_geometry(compute_geometry());
             }
@@ -162,7 +156,7 @@ namespace {
                 const vec3HE& point_exact_in
             ) {
                 type = SECONDARY_ISECT;                
-                mesh_in_triangle = M;
+                mit = M;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 init_geometry(point_exact_in);
             }
@@ -172,7 +166,7 @@ namespace {
              */
             Vertex() : point_exact(vec3HE_noinit()) {
                 type = UNINITIALIZED;                
-                mesh_in_triangle = nullptr;
+                mit = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
                 mesh_vertex_index = NO_INDEX;
             }
@@ -182,7 +176,7 @@ namespace {
              * \return a reference to the mesh
              */
             Mesh& mesh() const {
-                return mesh_in_triangle->mesh();
+                return mit->mesh();
             }
 
             /**
@@ -219,15 +213,15 @@ namespace {
 
             vec2HE get_UV_exact() const {
                 return vec2HE(
-                    point_exact[u_coord()],
-                    point_exact[v_coord()],
+                    point_exact[mit->u_],
+                    point_exact[mit->v_],
                     point_exact.w
                 );
             }
 
             vec2 get_UV_approx() const {
-                double u = point_exact[u_coord()].estimate();
-                double v = point_exact[v_coord()].estimate();
+                double u = point_exact[mit->u_].estimate();
+                double v = point_exact[mit->v_].estimate();
                 double w = point_exact.w.estimate();
                 return vec2(u/w,v/w);
             }
@@ -275,7 +269,7 @@ namespace {
                     index_t lv = index_t(sym.R1);
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f1,lv);
-                    return vec3HE(mesh_vertex(mesh_vertex_index));
+                    return vec3HE(mit->mesh_vertex(mesh_vertex_index));
                 }
 
                 geo_assert(sym.f1 != NO_INDEX && sym.f2 != NO_INDEX);
@@ -285,26 +279,22 @@ namespace {
                     index_t lv = index_t(sym.R2)-3;
                     geo_assert(lv < 3);
                     mesh_vertex_index = mesh().facets.vertex(sym.f2, lv);
-                    return vec3HE(mesh_vertex(mesh_vertex_index));
+                    return vec3HE(mit->mesh_vertex(mesh_vertex_index));
                 }
 
-                // case 3: f1 /\ f2 edge or f1 edge /\ f2 edge in 3D
+                // case 3: f1 /\ f2 edge in 3D or f1 edge /\ f2 edge in 3D
                 if(
                     (region_dim(sym.R1) == 2 || region_dim(sym.R1) == 1) &&
                      region_dim(sym.R2) == 1
                 ) {
-                    // Compute u,v,t using Moller & Trumbore's algorithm
-                    // see: https://stackoverflow.com/questions/42740765/
-                    //  intersection-between-line-and-triangle-in-3d
-
-                    vec3 p1 = mesh_facet_vertex(sym.f1, 0);
-                    vec3 p2 = mesh_facet_vertex(sym.f1, 1);
-                    vec3 p3 = mesh_facet_vertex(sym.f1, 2);
+                    vec3 p1 = mit->mesh_facet_vertex(sym.f1, 0);
+                    vec3 p2 = mit->mesh_facet_vertex(sym.f1, 1);
+                    vec3 p3 = mit->mesh_facet_vertex(sym.f1, 2);
                     
                     index_t e = index_t(sym.R2)-index_t(T2_RGN_E0);
                     geo_debug_assert(e<3);
-                    vec3 q1 = mesh_facet_vertex(sym.f2, (e+1)%3);
-                    vec3 q2 = mesh_facet_vertex(sym.f2, (e+2)%3);
+                    vec3 q1 = mit->mesh_facet_vertex(sym.f2, (e+1)%3);
+                    vec3 q2 = mit->mesh_facet_vertex(sym.f2, (e+2)%3);
 
                     bool seg_seg_two_D = (
                         region_dim(sym.R1) == 1 &&
@@ -321,11 +311,11 @@ namespace {
                     index_t e = index_t(sym.R1)-index_t(T1_RGN_E0);
                     geo_debug_assert(e<3);
                     return plane_line_intersection(
-                        mesh_facet_vertex(sym.f2,0),
-                        mesh_facet_vertex(sym.f2,1),
-                        mesh_facet_vertex(sym.f2,2),
-                        mesh_facet_vertex(sym.f1, (e+1)%3),
-                        mesh_facet_vertex(sym.f1, (e+2)%3)
+                        mit->mesh_facet_vertex(sym.f2,0),
+                        mit->mesh_facet_vertex(sym.f2,1),
+                        mit->mesh_facet_vertex(sym.f2,2),
+                        mit->mesh_facet_vertex(sym.f1, (e+1)%3),
+                        mit->mesh_facet_vertex(sym.f1, (e+2)%3)
                     );
                 }
 
@@ -335,30 +325,17 @@ namespace {
                     geo_debug_assert(e1 < 3);
                     index_t e2 = index_t(sym.R2) - index_t(T2_RGN_E0);
                     geo_debug_assert(e2 < 3);
-
-                    vec2 p1 = mesh_facet_vertex_project(
-                        sym.f1, (e1+1)%3
-                    );
-                    vec2 p2 = mesh_facet_vertex_project(
-                        sym.f1, (e1+2)%3
-                    );
-
-                    vec2 q1 = mesh_facet_vertex_project(
-                        sym.f2, (e2+1)%3
-                    );
-                    vec2 q2 = mesh_facet_vertex_project(
-                        sym.f2, (e2+2)%3
-                    );
-
+                    vec2 p1 = mit->mesh_facet_vertex_UV(sym.f1, (e1+1)%3);
+                    vec2 p2 = mit->mesh_facet_vertex_UV(sym.f1, (e1+2)%3);
+                    vec2 q1 = mit->mesh_facet_vertex_UV(sym.f2, (e2+1)%3);
+                    vec2 q2 = mit->mesh_facet_vertex_UV(sym.f2, (e2+2)%3);
                     vec2E D1 = make_vec2<vec2E>(p1,p2);
                     vec2E D2 = make_vec2<vec2E>(q1,q2);
-
                     expansion_nt d = det(D1,D2);
                     geo_debug_assert(d.sign() != ZERO);
-                    
                     vec2E AO = make_vec2<vec2E>(p1,q1);
-                    vec3 P1 = mesh_facet_vertex(sym.f1, (e1+1)%3);
-                    vec3 P2 = mesh_facet_vertex(sym.f1, (e1+2)%3);
+                    vec3 P1 = mit->mesh_facet_vertex(sym.f1, (e1+1)%3);
+                    vec3 P2 = mit->mesh_facet_vertex(sym.f1, (e1+2)%3);
                     rational_nt t(det(AO,D2),d);
                     return mix(t,P1,P2);
                 }
@@ -379,84 +356,16 @@ namespace {
                 point_exact.w.optimize();
 
                 // Lifted coordinate for incircle
-                double u = point_exact[u_coord()].estimate();
-                double v = point_exact[v_coord()].estimate();
+                double u = point_exact[mit->u_].estimate();
+                double v = point_exact[mit->v_].estimate();
                 double w = point_exact.w.estimate();
                 u /= w;
                 v /= w;
                 h_approx = u*u+v*v;
             }
-            
-            /**
-             * \brief Gets the coordinate used for the U axis
-             * \return one of 0,1,2
-             */
-            coord_index_t u_coord() const {
-                return mesh_in_triangle->u_;
-            }
 
-            /**
-             * \brief Gets the coordinate used for the V axis
-             * \return one of 0,1,2
-             */
-            coord_index_t v_coord() const {
-                return mesh_in_triangle->v_;                
-            }
-
-            template <class VEC = vec3> VEC
-            mesh_vertex(index_t v) const {
-                typedef typename VEC::value_type value_type;
-                const double* p = mesh().vertices.point_ptr(v);
-                return VEC(
-                    value_type(p[0]),
-                    value_type(p[1]),
-                    value_type(p[2])                    
-                );
-            }
-            
-            vec3HE mesh_vertex_vec3HE(index_t v) const {
-                const double* p = mesh().vertices.point_ptr(v);
-                return vec3HE(
-                    expansion_nt(p[0]),
-                    expansion_nt(p[1]),
-                    expansion_nt(p[2]),
-                    expansion_nt(1.0)
-                );
-            }
-
-            template <class VEC = vec3> VEC
-            mesh_facet_vertex(index_t f, index_t lv) const {
-                index_t v = mesh().facets.vertex(f,lv);
-                return mesh_vertex<VEC>(v);
-            }
-
-            template <class VEC = vec2> VEC
-            mesh_vertex_project(index_t v) const {
-                typedef typename VEC::value_type value_type;
-                const double* p = mesh().vertices.point_ptr(v);
-                return VEC(
-                    value_type(p[u_coord()]),
-                    value_type(p[v_coord()])
-                );
-            }
-
-            vec2HE mesh_vertex_project_vec2HE(index_t v) const {
-                const double* p = mesh().vertices.point_ptr(v);
-                return vec2HE(
-                    expansion_nt(p[u_coord()]),
-                    expansion_nt(p[v_coord()]),
-                    expansion_nt(1.0)
-                );
-            }
-            
-            template <class VEC = vec2> VEC
-            mesh_facet_vertex_project(index_t f, index_t lv) const {
-                index_t v = mesh().facets.vertex(f,lv);
-                return mesh_vertex_project<VEC>(v);
-            }
-            
         public:
-            MeshInTriangle* mesh_in_triangle;
+            MeshInTriangle* mit;
 
             vec3HE point_exact;
             double h_approx; // lifting coordinate for incircle
@@ -724,10 +633,10 @@ namespace {
                 geo_assert(le1 < 3);
                 geo_assert(le2 < 3);
 
-                vec2 p1_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+1)%3);
-                vec2 p2_uv = mesh_facet_vertex_project(E1.sym.f2, (le1+2)%3);
-                vec2 q1_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+1)%3);
-                vec2 q2_uv = mesh_facet_vertex_project(E2.sym.f2, (le2+2)%3);
+                vec2 p1_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+1)%3);
+                vec2 p2_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+2)%3);
+                vec2 q1_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+1)%3);
+                vec2 q2_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+2)%3);
                 vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
                 vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
                 vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
@@ -774,38 +683,24 @@ namespace {
                 return;
             }
         }
-        
-        template <class VEC = vec3> VEC
-        mesh_vertex(index_t v) const {
-            typedef typename VEC::value_type value_type;
-            const double* p = mesh().vertices.point_ptr(v);
-            return VEC(
-                value_type(p[0]),
-                value_type(p[1]),
-                value_type(p[2])                    
-            );
-        }
-            
-        template <class VEC = vec3> VEC
-        mesh_facet_vertex(index_t f, index_t lv) const {
-            index_t v = mesh().facets.vertex(f,lv);
-            return mesh_vertex<VEC>(v);
+
+        vec3 mesh_vertex(index_t v) const {
+            return vec3(mesh().vertices.point_ptr(v));
         }
         
-        template <class VEC = vec2> VEC
-        mesh_vertex_project(index_t v) const {
-            typedef typename VEC::value_type value_type;
+        vec3 mesh_facet_vertex(index_t f, index_t lv) const {
+            index_t v = mesh().facets.vertex(f,lv);
+            return mesh_vertex(v);
+        }
+
+        vec2 mesh_vertex_UV(index_t v) const {
             const double* p = mesh().vertices.point_ptr(v);
-            return VEC(
-                value_type(p[u_]),
-                value_type(p[v_])
-            );
+            return vec2(p[u_], p[v_]);
         }
             
-        template <class VEC = vec2> VEC
-        mesh_facet_vertex_project(index_t f, index_t lv) const {
+        vec2 mesh_facet_vertex_UV(index_t f, index_t lv) const {
             index_t v = mesh().facets.vertex(f,lv);
-            return mesh_vertex_project<VEC>(v);
+            return mesh_vertex_UV(v);
         }
         
         void clear() override {
@@ -900,9 +795,7 @@ namespace {
             geo_argused(j);
             geo_argused(k);
             geo_argused(l);
-
             vec3HE I  = vec3HE_noinit();
-            vec2HE UV = vec2HE_noinit();
             get_edge_edge_intersection(e1,e2,I);
             vertex_.push_back(Vertex(this,I));
             index_t x = vertex_.size()-1;
