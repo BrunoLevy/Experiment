@@ -31,6 +31,10 @@
 #include <sstream>
 #include <stack>
 
+namespace GEO {
+    void GEOGRAM_API SOS_sort(const double** begin, const double** end, GEO::index_t dim);
+}
+
 namespace {
     using namespace GEO;
 
@@ -398,6 +402,10 @@ namespace {
                 geo_assert_not_reached;
             }
 
+            /**
+             * \brief Optimizes exact numbers in generated
+             *  points and computes approximate coordinates.
+             */
             void post_init_geometry() {
                 point_exact.x.optimize();
                 point_exact.y.optimize();
@@ -428,7 +436,7 @@ namespace {
             coord_index_t v_coord() const {
                 return mesh_in_triangle->v_;                
             }
-            
+
             template <class VEC = vec3> VEC
             mesh_vertex(index_t v) const {
                 typedef typename VEC::value_type value_type;
@@ -439,7 +447,7 @@ namespace {
                     value_type(p[2])                    
                 );
             }
-
+            
             vec3HE mesh_vertex_vec3HE(index_t v) const {
                 const double* p = mesh().vertices.point_ptr(v);
                 return vec3HE(
@@ -449,7 +457,7 @@ namespace {
                     expansion_nt(1.0)
                 );
             }
-            
+
             template <class VEC = vec3> VEC
             mesh_facet_vertex(index_t f, index_t lv) const {
                 index_t v = mesh().facets.vertex(f,lv);
@@ -880,20 +888,175 @@ namespace {
         Sign incircle(
             index_t v1,index_t v2,index_t v3,index_t v4
         ) const override {
+
             /*
-            return PCK::in_circle_2d(
-                vertex_[v1].UV_exact,
-                vertex_[v2].UV_exact,
-                vertex_[v3].UV_exact,
-                vertex_[v4].UV_exact
-            );
-            */
             return PCK::in_circle_2d_SOS(
                 vertex_[v1].UV_approx.data(),
                 vertex_[v2].UV_approx.data(),
                 vertex_[v3].UV_approx.data(),
                 vertex_[v4].UV_approx.data()
             );
+            */
+
+
+            /*
+            {
+                const vec2& p1 = vertex_[v1].UV_approx;
+                const vec2& p2 = vertex_[v2].UV_approx;
+                const vec2& p3 = vertex_[v3].UV_approx;
+                const vec2& p4 = vertex_[v4].UV_approx;            
+                return PCK::orient_2dlifted_SOS(
+                    p1.data(), p2.data(), p3.data(), p4.data(),
+                    length2(p1), length2(p2), length2(p3), length2(p4)
+                );
+            }
+            */
+
+
+            if(false) {
+                const vec2& p0 = vertex_[v1].UV_approx;
+                const vec2& p1 = vertex_[v2].UV_approx;
+                const vec2& p2 = vertex_[v3].UV_approx;
+                const vec2& p3 = vertex_[v4].UV_approx;            
+                
+                double h0 = length2(vertex_[v1].UV_approx);
+                double h1 = length2(vertex_[v2].UV_approx);
+                double h2 = length2(vertex_[v3].UV_approx);
+                double h3 = length2(vertex_[v4].UV_approx);            
+                
+                expansion_nt a11(expansion_nt::DIFF, p1.x, p0.x);
+                expansion_nt a12(expansion_nt::DIFF, p1.y, p0.y);
+                expansion_nt a13(expansion_nt::DIFF, h0, h1);
+                
+                expansion_nt a21(expansion_nt::DIFF, p2.x, p0.x);
+                expansion_nt a22(expansion_nt::DIFF, p2.y, p0.y);
+                expansion_nt a23(expansion_nt::DIFF, h0, h2);
+                
+                expansion_nt a31(expansion_nt::DIFF, p3.x, p0.x);
+                expansion_nt a32(expansion_nt::DIFF, p3.y, p0.y);
+                expansion_nt a33(expansion_nt::DIFF, h0, h3);
+
+                expansion_nt Delta1 = det2x2(a21, a22, a31, a32);
+                expansion_nt Delta2 = det2x2(a11, a12, a31, a32);
+                expansion_nt Delta3 = det2x2(a11, a12, a21, a22);
+                
+                Sign Delta3_sign = Delta3.sign();
+                geo_assert(Delta3_sign != ZERO);
+                
+                expansion_nt r = a13*Delta1-a23*Delta2+a33*Delta3;
+                Sign r_sign = r.sign();
+                
+                if(r_sign == ZERO) {
+                    const double* p_sort[4];
+                    p_sort[0] = p0.data();
+                    p_sort[1] = p1.data();
+                    p_sort[2] = p2.data();
+                    p_sort[3] = p3.data();
+                    GEO::SOS_sort(p_sort, p_sort + 4, 3);
+                    
+                    for(index_t i = 0; i < 4; ++i) {
+                        if(p_sort[i] == p0.data()) {
+                            expansion_nt z = Delta2-Delta1+Delta3;
+                            Sign z_sign = z.sign();
+                            if(z_sign != ZERO) {
+                                return Sign(Delta3_sign*z_sign);
+                            }
+                        } else if(p_sort[i] == p1.data()) {
+                            Sign Delta1_sign = Delta1.sign();
+                            if(Delta1_sign != ZERO) {
+                                return Sign(Delta3_sign * Delta1_sign);
+                            }
+                        } else if(p_sort[i] == p2.data()) {
+                            Sign Delta2_sign = Delta2.sign();
+                            if(Delta2_sign != ZERO) {
+                                return Sign(-Delta3_sign * Delta2_sign);
+                            }
+                        } else if(p_sort[i] == p3.data()) {
+                            return NEGATIVE;
+                        }
+                    }
+                }
+                return Sign(Delta3_sign * r_sign);
+            }
+
+            if(true) {
+                const vec2HE& p0 = vertex_[v1].UV_exact;
+                const vec2HE& p1 = vertex_[v2].UV_exact;
+                const vec2HE& p2 = vertex_[v3].UV_exact;
+                const vec2HE& p3 = vertex_[v4].UV_exact;
+                
+                double h0 = length2(vertex_[v1].UV_approx);
+                double h1 = length2(vertex_[v2].UV_approx);
+                double h2 = length2(vertex_[v3].UV_approx);
+                double h3 = length2(vertex_[v4].UV_approx);            
+
+                expansion_nt a13(expansion_nt::DIFF, h0, h1);
+                expansion_nt a23(expansion_nt::DIFF, h0, h2);
+                expansion_nt a33(expansion_nt::DIFF, h0, h3);                
+                
+                vec2HE U1 = p1-p0;
+                const expansion_nt& w1 = U1.w;
+                Sign sw1 = w1.sign();
+                
+                vec2HE U2 = p2-p0;
+                const expansion_nt& w2 = U2.w;
+                Sign sw2 = w2.sign();
+
+                vec2HE U3 = p3-p0;
+                const expansion_nt& w3 = U3.w;
+                Sign sw3 = w3.sign();                
+
+                expansion_nt w2w3Delta1 = det2x2(U2.x, U2.y, U3.x, U3.y);
+                expansion_nt w1w3Delta2 = det2x2(U1.x, U1.y, U3.x, U3.y);
+                expansion_nt w1w2Delta3 = det2x2(U1.x, U1.y, U2.x, U2.y);
+                
+                Sign Delta3_sign = Sign(w1w2Delta3.sign()*sw1*sw2);
+                geo_assert(Delta3_sign != ZERO);
+                
+                expansion_nt w1w2w3R = a13*w1*w2w3Delta1-a23*w2*w1w3Delta2+a33*w3*w1w2Delta3;
+                Sign R_sign = Sign(w1w2w3R.sign()*sw1*sw2*sw3);
+
+                // Simulation of simplicity
+                if(R_sign == ZERO) {
+                    const vec2HE* p_sort[4] = {
+                        &vertex_[v1].UV_exact,
+                        &vertex_[v2].UV_exact,
+                        &vertex_[v3].UV_exact,
+                        &vertex_[v4].UV_exact,
+                    };
+                    std::sort(
+                        p_sort, p_sort+4,
+                        [](const vec2HE* p1, const vec2HE* p2)->bool{
+                            vec2HELexicoCompare cmp;
+                            return cmp(*p1,*p2);
+                        }
+                    );
+                    for(index_t i = 0; i < 4; ++i) {
+                        if(p_sort[i] == &p0) {
+                            expansion_nt w1w2w3Z = w2*w1w3Delta2-w1*w2w3Delta1+w3*w1w2Delta3;
+                            Sign Z_sign = Sign(w1w2w3Z.sign()*sw1*sw2*sw3);
+                            if(Z_sign != ZERO) {
+                                return Sign(Delta3_sign*Z_sign);
+                            }
+                        } else if(p_sort[i] == &p1) {
+                            Sign Delta1_sign = Sign(w2w3Delta1.sign()*sw2*sw3);
+                            if(Delta1_sign != ZERO) {
+                                return Sign(Delta3_sign * Delta1_sign);
+                            }
+                        } else if(p_sort[i] == &p2) {
+                            Sign Delta2_sign = Sign(w1w3Delta2.sign()*sw1*sw3);
+                            if(Delta2_sign != ZERO) {
+                                return Sign(-Delta3_sign * Delta2_sign);
+                            }
+                        } else if(p_sort[i] == &p3) {
+                            return NEGATIVE;
+                        }
+                    }
+                }
+                
+                return Sign(Delta3_sign * R_sign);
+            }
+
         }
 
         /**

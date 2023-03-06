@@ -201,6 +201,21 @@ namespace GEO {
     vec2HE Experiment_API operator-(const vec2HE& p1, const vec2HE& p2);
     
     vec3HE Experiment_API operator-(const vec3HE& p1, const vec3HE& p2);
+
+    /**
+     * \brief Comparator class for vec3HE
+     * \detail Used to create maps indexed by vec3HE
+     */
+    class Experiment_API vec2HELexicoCompare {
+    public:
+       /**
+        * \brief Compares two vec3HE
+        * \retval true if \p v1 is before \p v2 in the lexicographic
+        *  order
+        * \retval false otherwise
+        */
+       bool operator()(const vec2HE& v1, const vec2HE& v2) const; 
+    };
     
     /**
      * \brief Comparator class for vec3HE
@@ -273,21 +288,6 @@ namespace GEO {
         
         Sign Experiment_API dot_2d(
             const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
-        );
-
-        /**
-         * \brief Tests the relative position of a point with respect
-         *  to the circumscribed circle of a triangle
-         * \param[in] p0 , p1 , p2 the three vertices of the triangle oriented
-         *  anticlockwise
-         * \param[in] p3 the point to be tested
-         * \retval POSITIVE if the point is inside the circle
-         * \retval ZERO if the point is on the circle
-         * \retval NEGATIVE if the point is outside the circle
-         */
-        Sign Experiment_API in_circle_2d(
-            const vec2HE& p0, const vec2HE& p1, const vec2HE& p2,
-            const vec2HE& p3
         );
     }
 
