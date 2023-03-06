@@ -76,21 +76,13 @@ namespace {
                 index_t v2_in = index_t(-1),
                 index_t f2    = index_t(-1),
                 TriangleRegion R2 = T2_RGN_T
-            ) :
-                v1(v1_in),
-                v2(v2_in)
-            {
+            ) : v1(v1_in),
+                v2(v2_in) {
                 sym.f2 = f2;
                 sym.R2 = R2;
             }
-            
-            // The two extremities of the constraint.
-            index_t v1;
-            index_t v2;
-
-            // Symbolic information: this edge was generated
-            // by the intersection with f2's region R2.
-            struct {
+            index_t v1,v2; // The two extremities of the mesh
+            struct {       // Symbolic information: this edge = f1 /\ f2.R2
                 index_t        f2;
                 TriangleRegion R2;
             } sym;
@@ -213,9 +205,7 @@ namespace {
 
             vec2HE get_UV_exact() const {
                 return vec2HE(
-                    point_exact[mit->u_],
-                    point_exact[mit->v_],
-                    point_exact.w
+                    point_exact[mit->u_], point_exact[mit->v_], point_exact.w
                 );
             }
 
@@ -235,8 +225,7 @@ namespace {
              * \param[in] R1 , R2 the two facet regions.
              */
             void init_sym(
-                index_t f1, index_t f2,
-                TriangleRegion R1, TriangleRegion R2
+                index_t f1, index_t f2, TriangleRegion R1, TriangleRegion R2
             ) {
                 sym.f1 = f1;
                 sym.f2 = f2;
@@ -350,10 +339,7 @@ namespace {
              */
             void init_geometry(const vec3HE& P) {
                 point_exact = P;
-                point_exact.x.optimize();
-                point_exact.y.optimize();
-                point_exact.z.optimize();
-                point_exact.w.optimize();
+                point_exact.optimize();
 
                 // Lifted coordinate for incircle
                 double u = point_exact[mit->u_].estimate();
@@ -366,19 +352,13 @@ namespace {
 
         public:
             MeshInTriangle* mit;
-
-            vec3HE point_exact;
-            double h_approx; // lifting coordinate for incircle
-
-            Type type;
-            
-            // Global mesh vertex index once created
-            index_t mesh_vertex_index;
-
-            // Symbolic information - triangle-triangle isect
-            struct {
-                index_t f1,f2;        // global facet indices in mesh
-                TriangleRegion R1,R2; // triangle regions
+            vec3HE point_exact; // Exact homogeneous coords using expansions
+            double h_approx;    // Lifting coordinate for incircle
+            Type type;          // MESH_VERTEX, PRIMARY_ISECT or SECONDARY_ISECT
+            index_t mesh_vertex_index; // Global mesh vertex index once created
+            struct {                   // Symbolic information - tri-tri isect
+                index_t f1,f2;         //   global facet indices in mesh
+                TriangleRegion R1,R2;  //   triangle regions
             } sym;
         };
 
@@ -463,8 +443,8 @@ namespace {
 
             // Create the vertex
             vertex_.push_back(Vertex(this, f1_, f2, R1, R2));
+            
             // Insert it into the triangulation
-
             index_t v = CDTBase2d::insert(vertex_.size()-1);
             
             // If it was an existing vertex, return the existing vertex
@@ -650,7 +630,9 @@ namespace {
                     mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
                 );
             } else {
-                geo_assert(region_dim(E1.sym.R2) == 1 || region_dim(E2.sym.R2) == 1);
+                geo_assert(
+                    region_dim(E1.sym.R2) == 1 || region_dim(E2.sym.R2) == 1
+                );
                 index_t f1 = E1.sym.f2;
                 TriangleRegion R1 = E1.sym.R2;
                 index_t f2 = E2.sym.f2;
@@ -660,27 +642,16 @@ namespace {
                     std::swap(R1,R2);
                 }
 
-                vec3 p1 = mesh_facet_vertex(f1,0);
-                vec3 p2 = mesh_facet_vertex(f1,1);
-                vec3 p3 = mesh_facet_vertex(f1,2);                
-                
                 index_t e = index_t(R2) - index_t(T2_RGN_E0);
                 geo_assert(e < 3);
 
-                vec3 q1 = mesh_facet_vertex(f2,(e+1)%3);
-                vec3 q2 = mesh_facet_vertex(f2,(e+2)%3);
-
-                vec3E D   = make_vec3<vec3E>(q1,q2);
-                vec3E E1  = make_vec3<vec3E>(p1,p2);
-                vec3E E2  = make_vec3<vec3E>(p1,p3);
-                vec3E AO  = make_vec3<vec3E>(p1,q1);
-                vec3E N   = cross(E1,E2);
-                
-                expansion_nt d = -dot(D,N);
-                geo_debug_assert(d.sign() != ZERO);
-                rational_nt t(dot(AO,N),d);
-                I = mix(t,q1,q2);
-                return;
+                I = plane_line_intersection(
+                    mesh_facet_vertex(f1,0),
+                    mesh_facet_vertex(f1,1),
+                    mesh_facet_vertex(f1,2),
+                    mesh_facet_vertex(f2,(e+1)%3),
+                    mesh_facet_vertex(f2,(e+2)%3)
+                );
             }
         }
 
