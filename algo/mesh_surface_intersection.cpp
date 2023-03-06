@@ -512,8 +512,8 @@ namespace {
         
         MeshInTriangle(Mesh& M) :
             mesh_(M),
-            f1_(index_t(-1))
-        {
+            f1_(index_t(-1)),
+            approx_incircle_(false) {
         }
 
         Mesh& mesh() const {
@@ -561,7 +561,6 @@ namespace {
             edges_.push_back(Edge(0,1));
             
             has_planar_isect_ = false;
-            approx_incircle_ = false;
         }
         
         index_t add_vertex(
@@ -899,7 +898,6 @@ namespace {
         ) const override {
 
             if(approx_incircle_) {
-               // commented-out approximated version
                const vec2& p1 = vertex_[v1].UV_approx;
                const vec2& p2 = vertex_[v2].UV_approx;
                const vec2& p3 = vertex_[v3].UV_approx;

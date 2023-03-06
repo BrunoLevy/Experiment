@@ -330,14 +330,17 @@ namespace GEO {
             expansion_nt a33(expansion_nt::DIFF, h0, h3);                
                 
             vec2HE U1 = p1-p0;
+            U1.optimize();
             const expansion_nt& w1 = U1.w;
             Sign sw1 = w1.sign();
             
             vec2HE U2 = p2-p0;
+            U2.optimize();
             const expansion_nt& w2 = U2.w;
             Sign sw2 = w2.sign();
 
             vec2HE U3 = p3-p0;
+            U3.optimize();
             const expansion_nt& w3 = U3.w;
             Sign sw3 = w3.sign();                
 

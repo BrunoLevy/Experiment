@@ -92,6 +92,12 @@ namespace GEO {
             geo_debug_assert(i < 2);
             return data()[i];
         }
+
+        void optimize() {
+            x.optimize();
+            y.optimize();
+            w.optimize();
+        }
         
         expansion_nt x;
         expansion_nt y;
@@ -173,6 +179,13 @@ namespace GEO {
         const expansion_nt& operator[](coord_index_t i) const {
             geo_debug_assert(i < 3);
             return data()[i];
+        }
+
+        void optimize() {
+            x.optimize();
+            y.optimize();
+            z.optimize();            
+            w.optimize();
         }
         
         expansion_nt x;
