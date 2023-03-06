@@ -319,6 +319,76 @@ namespace GEO {
             const expansion& S = expansion_sum(x1x2, y1y2);
             return Sign(S.sign()*U.w.sign()*V.w.sign());
         }
+
+        Sign orient_2dlifted_SOS(
+            const vec2HE& p0, const vec2HE& p1,
+            const vec2HE& p2, const vec2HE& p3,
+            double h0, double h1, double h2, double h3
+        ) {
+            expansion_nt a13(expansion_nt::DIFF, h0, h1);
+            expansion_nt a23(expansion_nt::DIFF, h0, h2);
+            expansion_nt a33(expansion_nt::DIFF, h0, h3);                
+                
+            vec2HE U1 = p1-p0;
+            const expansion_nt& w1 = U1.w;
+            Sign sw1 = w1.sign();
+            
+            vec2HE U2 = p2-p0;
+            const expansion_nt& w2 = U2.w;
+            Sign sw2 = w2.sign();
+
+            vec2HE U3 = p3-p0;
+            const expansion_nt& w3 = U3.w;
+            Sign sw3 = w3.sign();                
+
+            geo_assert(sw1 != ZERO && sw2 != ZERO && sw3 != ZERO);
+            
+            expansion_nt w2w3Delta1 = det2x2(U2.x, U2.y, U3.x, U3.y);
+            expansion_nt w1w3Delta2 = det2x2(U1.x, U1.y, U3.x, U3.y);
+            expansion_nt w1w2Delta3 = det2x2(U1.x, U1.y, U2.x, U2.y);
+                
+            Sign Delta3_sign = Sign(w1w2Delta3.sign()*sw1*sw2);
+            geo_assert(Delta3_sign != ZERO);
+            
+            expansion_nt w1w2w3R = a13*w1*w2w3Delta1-a23*w2*w1w3Delta2+a33*w3*w1w2Delta3;
+            Sign R_sign = Sign(w1w2w3R.sign()*sw1*sw2*sw3);
+            
+            // Simulation of simplicity
+            if(R_sign == ZERO) {
+                const vec2HE* p_sort[4] = {
+                    &p0, &p1, &p2, &p3
+                };
+                std::sort(
+                    p_sort, p_sort+4,
+                    [](const vec2HE* p1, const vec2HE* p2)->bool{
+                        vec2HELexicoCompare cmp;
+                        return cmp(*p1,*p2);
+                    }
+                );
+                for(index_t i = 0; i < 4; ++i) {
+                    if(p_sort[i] == &p0) {
+                        expansion_nt w1w2w3Z = w2*w1w3Delta2-w1*w2w3Delta1+w3*w1w2Delta3;
+                        Sign Z_sign = Sign(w1w2w3Z.sign()*sw1*sw2*sw3);
+                        if(Z_sign != ZERO) {
+                            return Sign(Delta3_sign*Z_sign);
+                        }
+                    } else if(p_sort[i] == &p1) {
+                        Sign Delta1_sign = Sign(w2w3Delta1.sign()*sw2*sw3);
+                        if(Delta1_sign != ZERO) {
+                            return Sign(Delta3_sign * Delta1_sign);
+                        }
+                    } else if(p_sort[i] == &p2) {
+                        Sign Delta2_sign = Sign(w1w3Delta2.sign()*sw1*sw3);
+                        if(Delta2_sign != ZERO) {
+                            return Sign(-Delta3_sign * Delta2_sign);
+                        }
+                    } else if(p_sort[i] == &p3) {
+                        return NEGATIVE;
+                    }
+                }
+            }
+            return Sign(Delta3_sign * R_sign);
+        }
     }
 
     bool get_three_planes_intersection(

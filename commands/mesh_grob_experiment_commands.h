@@ -65,12 +65,11 @@ namespace OGF {
          *  result, and identify/disconnect non-manifold edges
          * \param[in] order_facets spatially order the facets for the AABB
          * \param[in] FPE check floating point exceptions
-         * \param[in] check_constraints double-check the constraints for
-         *  intersections
-         * \param[in] barycentric use barycentric coordinate for local
-         *  triangle geometry
          * \param[in] per_component_ids assign an operand id to each connected
          *  component
+         * \param[in] delaunay compute constrained Delaunay triangulations in
+         *  intersected facets
+         * \param[in] verbose display progress in console
          */
         void intersect_surface(
             bool merge_vertices_and_facets = true,
@@ -78,11 +77,9 @@ namespace OGF {
             bool post_connect_facets=true,
             bool order_facets=true,
             bool FPE=true,
-            bool check_constraints=false,
-            bool barycentric=false,
             bool per_component_ids=true,
-            bool use_halfedges=false,
             bool delaunay=false,
+            bool approx_incircle=false,
             bool verbose=false
         );
 

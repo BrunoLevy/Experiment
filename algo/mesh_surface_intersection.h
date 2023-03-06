@@ -49,19 +49,6 @@ namespace GEO {
         bool debug_enable_FPE = true;
 
         /**
-         * \brief Double-check that the constraints do not self intersect,
-         *  that no vertex is outside the triangle, and that there is no
-         *  duplicated vertex
-         */
-        bool debug_check_constraints = true;
-
-        /**
-         * \brief Use barycentric coordinates in each triangle. The other
-         *  option is projection onto the most normal axis.
-         */
-        bool barycentric = true;
-
-        /**
          * \brief if set, assign an operand id to each connected component
          *  of input.
          */
@@ -73,11 +60,18 @@ namespace GEO {
         bool verbose = true;
 
         /**
-         * \brief Alternative triangle remesher (under test)
+         * \brief If set, compute constrained Delaunay triangulation
+         *  in the intersected triangles. If there are intersections
+         *  in coplanar facets, it guarantees uniqueness of their
+         *  triangulation.
          */
-        bool use_halfedges = false;
-
         bool delaunay = false;
+
+        /**
+         * \brief If set, then Delaunay mode uses approximated incircle
+         *  predicate (else it uses exact arithmetics)
+         */
+        bool approx_incircle = false;
     };
 
     void Experiment_API mesh_intersect_surface(

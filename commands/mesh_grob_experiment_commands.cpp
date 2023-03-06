@@ -48,11 +48,9 @@ namespace OGF {
         bool post_connect_facets,
         bool order_facets,
         bool FPE,
-        bool check_constraints,
-        bool barycentric,
         bool per_component_ids,
-        bool use_halfedges,
         bool delaunay,
+        bool approx_incircle,
         bool verbose
     ) {
         MeshSurfaceIntersectionParams params;
@@ -63,11 +61,9 @@ namespace OGF {
         params.post_connect_facets = post_connect_facets;
         params.debug_do_not_order_facets = !order_facets;
         params.debug_enable_FPE = FPE;
-        params.debug_check_constraints = check_constraints;
-        params.barycentric = barycentric;
         params.per_component_ids = per_component_ids;
-        params.use_halfedges = use_halfedges;
         params.delaunay = delaunay;
+        params.approx_incircle = approx_incircle;
         params.verbose = verbose;
         
         GEO::mesh_intersect_surface(*mesh_grob(),params);

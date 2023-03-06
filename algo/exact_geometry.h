@@ -289,6 +289,12 @@ namespace GEO {
         Sign Experiment_API dot_2d(
             const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
         );
+
+        Sign orient_2dlifted_SOS(
+            const vec2HE& p0, const vec2HE& p1,
+            const vec2HE& p2, const vec2HE& p3,
+            double h0, double h1, double h2, double h3
+        );
     }
 
     /**
