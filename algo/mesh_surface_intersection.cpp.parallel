@@ -121,7 +121,7 @@ namespace {
             for(index_t t=0; t<nb_t; ++t) {
                 mesh_.facets.set_vertex(first_t+t, 0, triangles_[3*t]);
                 mesh_.facets.set_vertex(first_t+t, 1, triangles_[3*t+1]);
-                mesh_.facets.set_vertex(first_t+t, 2, triangles_[3*t+2]);                
+                mesh_.facets.set_vertex(first_t+t, 2, triangles_[3*t+2]);
             }
         }
         

@@ -26,8 +26,8 @@
  */
  
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
-#include <OGF/Experiment/algo/mesh_surface_intersection.h>
 
+#include <geogram/mesh/mesh_surface_intersection.h>
 #include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/delaunay/delaunay.h>
@@ -43,30 +43,40 @@ namespace OGF {
     }        
 
     void MeshGrobExperimentCommands::intersect_surface(
-        bool merge_vertices_and_facets,
-        bool test_neighboring_triangles,
-        bool post_connect_facets,
-        bool order_facets,
         bool FPE,
-        bool per_component_ids,
+        bool remove_external_shell,
+        bool remove_internal_shells,
+        bool detect_intersecting_neighbors,
         bool delaunay,
         bool approx_incircle,
         bool verbose
     ) {
-        MeshSurfaceIntersectionParams params;
+        bool FPE_bkp = Process::FPE_enabled();
+        Process::enable_FPE(FPE);
 
-        params.pre_detect_duplicated_vertices = merge_vertices_and_facets;
-        params.pre_detect_duplicated_facets = merge_vertices_and_facets;
-        params.detect_intersecting_neighbors = test_neighboring_triangles;
-        params.post_connect_facets = post_connect_facets;
-        params.debug_do_not_order_facets = !order_facets;
-        params.debug_enable_FPE = FPE;
-        params.per_component_ids = per_component_ids;
-        params.delaunay = delaunay;
-        params.approx_incircle = approx_incircle;
-        params.verbose = verbose;
-        
-        GEO::mesh_intersect_surface(*mesh_grob(),params);
+        MeshSurfaceIntersection intersection(*mesh_grob());
+        intersection.set_delaunay(delaunay);
+        intersection.set_detect_intersecting_neighbors(
+            detect_intersecting_neighbors
+        );
+        intersection.set_approx_incircle(approx_incircle);
+        intersection.set_verbose(verbose);
+        intersection.intersect();
+        Process::enable_FPE(FPE_bkp);
+
+        if(remove_external_shell) {
+            intersection.remove_external_shell();
+        }
+
+        if(remove_internal_shells) {
+            intersection.remove_internal_shells();
+        }
+
+        // Still need to do that, because snap-rounding may have created
+        // degeneracies
+        if(remove_internal_shells) {
+            mesh_repair(*mesh_grob());
+        }
         
         show_mesh();
         mesh_grob()->update();
@@ -129,58 +139,43 @@ namespace OGF {
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
                 cdt.create_enclosing_triangle(p0,p1,p2);
             }
-            
+
+            vector<index_t> indices(mesh_grob()->vertices.nb()-n);
             cdt.insert(
                 mesh_grob()->vertices.nb()-n,
-                mesh_grob()->vertices.point_ptr(n)
+                mesh_grob()->vertices.point_ptr(n),
+                indices.data()
             );
-            
+
             if(constrained) {
                 for(index_t e: mesh_grob()->edges) {
-                    cdt.insert_constraint(
-                        mesh_grob()->edges.vertex(e,0),
-                        mesh_grob()->edges.vertex(e,1)                    
-                    );
-                }
-                // Create the vertices coming from constraint intersections
-                for(index_t v=mesh_grob()->vertices.nb(); v<cdt.nv(); ++v) {
-                    mesh_grob()->vertices.create_vertex(
-                        cdt.point(v).data()
-                    );
+                    index_t v1=mesh_grob()->edges.vertex(e,0);
+                    index_t v2=mesh_grob()->edges.vertex(e,1);
+                    if(v1 >= n) {
+                        v1 = indices[v1-n];
+                    }
+                    if(v2 >= n) {
+                        v2 = indices[v2-n];
+                    }
+                    cdt.insert_constraint(v1,v2);
                 }
             }
 
-            // Check whether all edges are Delaunay
-#ifdef GEO_DEBUG            
-            {
-                if(Delaunay) {
-                    for(index_t t=0; t<cdt.nT(); ++t) {
-                        for(index_t le=0; le<3; ++le) {
-                            if(!cdt.Tedge_is_Delaunay(t,le)) {
-                                Logger::err("CDT")
-                                    << "Triangle " << t << " edge " << le
-                                    << " is not Delaunay!"
-                                    << std::endl;
-                            }
-                        }
-                    }
-                }
-                cdt.save("CDT_result.geogram");
-            }
-#endif
-            
             if(remove_external_triangles) {
                 cdt.remove_external_triangles();
             }
-            
-            for(index_t t=0; t<cdt.nT(); ++t) {
-                index_t i = cdt.Tv(t,0);
-                index_t j = cdt.Tv(t,1);
-                index_t k = cdt.Tv(t,2);
-                mesh_grob()->facets.create_triangle(i,j,k);
+
+            // Create vertices coming from constraint intersections
+            for(index_t v = mesh_grob()->vertices.nb(); v < cdt.nv(); ++v) {
+                mesh_grob()->vertices.create_vertex(cdt.point(v).data());
             }
 
-
+            // Create triangles
+            for(index_t t=0; t<cdt.nT(); ++t) {
+                mesh_grob()->facets.create_triangle(
+                    cdt.Tv(t,0), cdt.Tv(t,1), cdt.Tv(t,2)
+                );
+            }
             
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");

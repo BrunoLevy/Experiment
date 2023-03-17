@@ -43,7 +43,6 @@
 #define H__OGF_EXPERIMENT_COMMANDS_MESH_GROB_EXPERIMENT_COMMANDS__H
 
 #include <OGF/Experiment/common/common.h>
-#include <OGF/Experiment/algo/mesh_surface_intersection.h>
 #include <OGF/mesh/commands/mesh_grob_commands.h>
 
 namespace OGF {
@@ -57,28 +56,13 @@ namespace OGF {
     gom_slots:
         /**
          * \brief Computes and remeshes intersection in a surface mesh.
-         * \param[in] merge_vertices_and_facets pre-check duplicated
-         *  vertices and facets
-         * \param[in] check_neighboring_triangles check intersections
-         *  also between triangles that share a vertex
-         * \param[in] post_connect_facets connect the facets of the 
-         *  result, and identify/disconnect non-manifold edges
-         * \param[in] order_facets spatially order the facets for the AABB
-         * \param[in] FPE check floating point exceptions
-         * \param[in] per_component_ids assign an operand id to each connected
-         *  component
-         * \param[in] delaunay compute constrained Delaunay triangulations in
-         *  intersected facets
-         * \param[in] verbose display progress in console
          */
         void intersect_surface(
-            bool merge_vertices_and_facets = true,
-            bool check_neighboring_triangles = true,
-            bool post_connect_facets=true,
-            bool order_facets=true,
             bool FPE=true,
-            bool per_component_ids=true,
-            bool delaunay=false,
+            bool remove_external_shell=false,
+            bool remove_internal_shells=false,
+            bool detect_intersecting_neighbors = true,
+            bool delaunay=true,
             bool approx_incircle=false,
             bool verbose=false
         );

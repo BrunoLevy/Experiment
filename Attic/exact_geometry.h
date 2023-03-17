@@ -28,6 +28,9 @@ namespace GEO {
      */
     struct vec2HE {
 
+        /**
+         * \brief Creates an uninitialized vec2HE
+         */
         vec2HE() :
             x(expansion_nt::UNINITIALIZED),
             y(expansion_nt::UNINITIALIZED),
@@ -97,6 +100,10 @@ namespace GEO {
             return data()[i];
         }
 
+        /**
+         * \brief Optimizes the internal storage of the 
+         *  expansions used to store the coordinates.
+         */
         void optimize() {
             x.optimize();
             y.optimize();
@@ -115,6 +122,10 @@ namespace GEO {
      *  multiplying w.
      */
     struct vec3HE {
+
+        /**
+         * \brief Creates an uninitialized vec3HE
+         */
         vec3HE() :
             x(expansion_nt::UNINITIALIZED),
             y(expansion_nt::UNINITIALIZED),
@@ -189,6 +200,10 @@ namespace GEO {
             return data()[i];
         }
 
+        /**
+         * \brief Optimizes the internal storage of the 
+         *  expansions used to store the coordinates.
+         */
         void optimize() {
             x.optimize();
             y.optimize();
@@ -202,23 +217,6 @@ namespace GEO {
         expansion_nt w;
     };
 
-    inline vec3HE vec3HE_noinit() {
-        return vec3HE(
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED)                       
-        );
-    }
-
-    inline vec2HE vec2HE_noinit() {
-        return vec2HE(
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED),
-            expansion_nt(expansion_nt::UNINITIALIZED)                        
-        );
-    }
-    
     vec2HE Experiment_API operator-(const vec2HE& p1, const vec2HE& p2);
     
     vec3HE Experiment_API operator-(const vec3HE& p1, const vec3HE& p2);
@@ -311,6 +309,24 @@ namespace GEO {
             const vec2HE& p0, const vec2HE& p1, const vec2HE& p2
         );
 
+        /**
+         * \brief Computes the 3d orientation test with lifted points.
+         * \details Given three lifted points p0', p1', p2' in 
+         *  R^2, tests if the lifted point p3' in R^3 lies below or above 
+         *  the plane passing through the three points 
+         *  p0', p1', p2'.
+         *  The first two coordinates and the
+         *  third one are specified in separate arguments for each vertex.
+         * \param[in] p0 , p1 , p2 , p3 first 2 coordinates 
+         *   of the vertices of the 3-simplex
+         * \param[in] h0 , h1 , h2 , h3 heights of the vertices of 
+         *  the 3-simplex
+         * \retval POSITIVE if p3' lies below the plane
+         * \retval NEGATIVE if p3' lies above the plane
+         * \retval perturb() if p3' lies exactly on the hyperplane
+         *  where \c perturb() denotes a globally
+         *  consistent perturbation, that returns either POSITIVE or NEGATIVE
+         */
         Sign orient_2dlifted_SOS(
             const vec2HE& p0, const vec2HE& p1,
             const vec2HE& p2, const vec2HE& p3,
@@ -415,26 +431,7 @@ namespace GEO {
     );
 
     /**
-     * \brief Interpolates a point linearly in a triangle
-     * \return \p p1 + \p u * (\p p2 - \p p1) + \p v * (\p p3 - \p p1) 
-     */
-    inline vec2HE u_P1P2_plus_v_P1P3(
-        rational_nt u, rational_nt v,
-        const vec2& p1, const vec2& p2, const vec2& p3
-    ) {
-        vec2E E1 = make_vec2<vec2E>(p1,p2);
-        vec2E E2 = make_vec2<vec2E>(p1,p3);		      
-        vec2E Pnum = (u.num()*v.denom())*E1 + (v.num()*u.denom())*E2;
-        expansion_nt Pden = u.denom()*v.denom();
-        return vec2HE(
-            Pnum.x,
-            Pnum.y,
-            Pden
-        );
-    }
-
-    /**
-     * \brief Computes the intersection between the support
+     * \brief Computes the exact intersection between the support
      *  planes of three triangles
      * \param[in] p1 , p2 , p3 the three vertices of the first triangle
      * \param[in] q1 , q2 , q3 the three vertices of the second triangle
@@ -453,6 +450,14 @@ namespace GEO {
 
     /************************************************************************/
 
+    /**
+     * \brief Computes the exact intersection between the support plane
+     *  of a triangle and the support line of a segment
+     * \pre The intersection exists
+     * \param[in] p1 , p2 , p3 the three vertices of the triangle
+     * \param[in] q1 , q2 the two vertices of the segment
+     * \return the exact intersection between the plane and the line
+     */
     inline vec3HE plane_line_intersection(
         const vec3& p1, const vec3& p2, const vec3& p3,
         const vec3& q1, const vec3& q2

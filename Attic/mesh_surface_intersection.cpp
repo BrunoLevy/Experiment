@@ -12,7 +12,8 @@
 //       stack.
 
 #include <OGF/Experiment/algo/mesh_surface_intersection.h>
-#include <OGF/Experiment/algo/exact_geometry.h>
+
+#include <geogram/numerics/exact_geometry.h>
 
 #include <geogram/mesh/triangle_intersection.h>
 #include <geogram/mesh/mesh_AABB.h>
@@ -112,7 +113,7 @@ namespace {
              */
             Vertex(
                 MeshInTriangle* M, index_t f, index_t lv
-            ) : point_exact(vec3HE_noinit()) {
+            ) {
                 geo_assert(f == M->f1_);
                 type = MESH_VERTEX;
                 mit = M;
@@ -130,7 +131,7 @@ namespace {
                 MeshInTriangle* M,
                 index_t f1, index_t f2,
                 TriangleRegion R1, TriangleRegion R2
-            ) : point_exact(vec3HE_noinit()) {
+            ) {
                 geo_assert(f1 == M->f1_);                
                 type = PRIMARY_ISECT;
                 mit = M;
@@ -156,7 +157,7 @@ namespace {
             /**
              * \brief Default constructor
              */
-            Vertex() : point_exact(vec3HE_noinit()) {
+            Vertex() {
                 type = UNINITIALIZED;                
                 mit = nullptr;
                 init_sym(NO_INDEX, NO_INDEX, T1_RGN_T, T2_RGN_T);
@@ -567,94 +568,6 @@ namespace {
             }
         }
         
-        void get_edge_edge_intersection(
-            index_t e1, index_t e2, vec3HE& I
-        ) const {
-            index_t f1 = f1_;
-            index_t f2 = edges_[e1].sym.f2; 
-            index_t f3 = edges_[e2].sym.f2; 
-            
-            geo_assert(f1 != index_t(-1));
-            geo_assert(f2 != index_t(-1));
-            geo_assert(f3 != index_t(-1));                        
-            
-            vec3 P[9] = {
-                mesh_facet_vertex(f1,0), mesh_facet_vertex(f1,1),
-                mesh_facet_vertex(f1,2),
-                mesh_facet_vertex(f2,0), mesh_facet_vertex(f2,1),
-                mesh_facet_vertex(f2,2),
-                mesh_facet_vertex(f3,0), mesh_facet_vertex(f3,1),
-                mesh_facet_vertex(f3,2)
-            };
-
-            if(!get_three_planes_intersection(
-                    I,
-                    P[0], P[1], P[2],
-                    P[3], P[4], P[5],
-                    P[6], P[7], P[8]
-            )) {
-                get_edge_edge_intersection_2D(e1,e2,I);
-                return;
-            }
-        }             
-
-        void get_edge_edge_intersection_2D(
-            index_t e1, index_t e2, vec3HE& I
-        ) const {
-            const Edge& E1 = edges_[e1];
-            const Edge& E2 = edges_[e2];
-
-            if(
-                region_dim(E1.sym.R2) == 1 &&
-                region_dim(E2.sym.R2) == 1
-            ) {
-                index_t le1 = index_t(E1.sym.R2)-index_t(T2_RGN_E0);
-                index_t le2 = index_t(E2.sym.R2)-index_t(T2_RGN_E0);
-                geo_assert(le1 < 3);
-                geo_assert(le2 < 3);
-
-                vec2 p1_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+1)%3);
-                vec2 p2_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+2)%3);
-                vec2 q1_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+1)%3);
-                vec2 q2_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+2)%3);
-                vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
-                vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
-                vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
-                
-                expansion_nt d = det(C1,C2);
-                geo_debug_assert(d.sign() != ZERO);
-                rational_nt t(det(B,C2),d);
-                I = mix(
-                    t,
-                    mesh_facet_vertex(E1.sym.f2,(le1+1)%3),
-                    mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
-                );
-            } else {
-                geo_assert(
-                    region_dim(E1.sym.R2) == 1 || region_dim(E2.sym.R2) == 1
-                );
-                index_t f1 = E1.sym.f2;
-                TriangleRegion R1 = E1.sym.R2;
-                index_t f2 = E2.sym.f2;
-                TriangleRegion R2 = E2.sym.R2;
-                if(region_dim(R1) == 1) {
-                    std::swap(f1,f2);
-                    std::swap(R1,R2);
-                }
-
-                index_t e = index_t(R2) - index_t(T2_RGN_E0);
-                geo_assert(e < 3);
-
-                I = plane_line_intersection(
-                    mesh_facet_vertex(f1,0),
-                    mesh_facet_vertex(f1,1),
-                    mesh_facet_vertex(f1,2),
-                    mesh_facet_vertex(f2,(e+1)%3),
-                    mesh_facet_vertex(f2,(e+2)%3)
-                );
-            }
-        }
-
         vec3 mesh_vertex(index_t v) const {
             return vec3(mesh().vertices.point_ptr(v));
         }
@@ -766,7 +679,7 @@ namespace {
             geo_argused(j);
             geo_argused(k);
             geo_argused(l);
-            vec3HE I  = vec3HE_noinit();
+            vec3HE I;
             get_edge_edge_intersection(e1,e2,I);
             vertex_.push_back(Vertex(this,I));
             index_t x = vertex_.size()-1;
@@ -774,6 +687,94 @@ namespace {
             geo_debug_assert(x == CDTBase2d::nv_);
             ++CDTBase2d::nv_;
             return x;
+        }
+
+        void get_edge_edge_intersection(
+            index_t e1, index_t e2, vec3HE& I
+        ) const {
+            index_t f1 = f1_;
+            index_t f2 = edges_[e1].sym.f2; 
+            index_t f3 = edges_[e2].sym.f2; 
+            
+            geo_assert(f1 != index_t(-1));
+            geo_assert(f2 != index_t(-1));
+            geo_assert(f3 != index_t(-1));                        
+            
+            vec3 P[9] = {
+                mesh_facet_vertex(f1,0), mesh_facet_vertex(f1,1),
+                mesh_facet_vertex(f1,2),
+                mesh_facet_vertex(f2,0), mesh_facet_vertex(f2,1),
+                mesh_facet_vertex(f2,2),
+                mesh_facet_vertex(f3,0), mesh_facet_vertex(f3,1),
+                mesh_facet_vertex(f3,2)
+            };
+
+            if(!get_three_planes_intersection(
+                    I,
+                    P[0], P[1], P[2],
+                    P[3], P[4], P[5],
+                    P[6], P[7], P[8]
+            )) {
+                get_edge_edge_intersection_2D(e1,e2,I);
+                return;
+            }
+        }             
+
+        void get_edge_edge_intersection_2D(
+            index_t e1, index_t e2, vec3HE& I
+        ) const {
+            const Edge& E1 = edges_[e1];
+            const Edge& E2 = edges_[e2];
+
+            if(
+                region_dim(E1.sym.R2) == 1 &&
+                region_dim(E2.sym.R2) == 1
+            ) {
+                index_t le1 = index_t(E1.sym.R2)-index_t(T2_RGN_E0);
+                index_t le2 = index_t(E2.sym.R2)-index_t(T2_RGN_E0);
+                geo_assert(le1 < 3);
+                geo_assert(le2 < 3);
+
+                vec2 p1_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+1)%3);
+                vec2 p2_uv = mesh_facet_vertex_UV(E1.sym.f2, (le1+2)%3);
+                vec2 q1_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+1)%3);
+                vec2 q2_uv = mesh_facet_vertex_UV(E2.sym.f2, (le2+2)%3);
+                vec2E C1 = make_vec2<vec2E>(p1_uv, p2_uv);
+                vec2E C2 = make_vec2<vec2E>(q2_uv, q1_uv);
+                vec2E B  = make_vec2<vec2E>(p1_uv, q1_uv);
+                
+                expansion_nt d = det(C1,C2);
+                geo_debug_assert(d.sign() != ZERO);
+                rational_nt t(det(B,C2),d);
+                I = mix(
+                    t,
+                    mesh_facet_vertex(E1.sym.f2,(le1+1)%3),
+                    mesh_facet_vertex(E1.sym.f2,(le1+2)%3)
+                );
+            } else {
+                geo_assert(
+                    region_dim(E1.sym.R2) == 1 || region_dim(E2.sym.R2) == 1
+                );
+                index_t f1 = E1.sym.f2;
+                TriangleRegion R1 = E1.sym.R2;
+                index_t f2 = E2.sym.f2;
+                TriangleRegion R2 = E2.sym.R2;
+                if(region_dim(R1) == 1) {
+                    std::swap(f1,f2);
+                    std::swap(R1,R2);
+                }
+
+                index_t e = index_t(R2) - index_t(T2_RGN_E0);
+                geo_assert(e < 3);
+
+                I = plane_line_intersection(
+                    mesh_facet_vertex(f1,0),
+                    mesh_facet_vertex(f1,1),
+                    mesh_facet_vertex(f1,2),
+                    mesh_facet_vertex(f2,(e+1)%3),
+                    mesh_facet_vertex(f2,(e+2)%3)
+                );
+            }
         }
 
     public:
