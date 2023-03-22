@@ -67,6 +67,11 @@ namespace OGF {
             bool verbose=false
         );
 
+
+        void build_Weiler_model(
+            double expand_surfaces = 0.0
+        );
+        
         /**
          * \brief Classifies the charts from a computed mesh intersection
          * \param[in] expr a boolean expression. 

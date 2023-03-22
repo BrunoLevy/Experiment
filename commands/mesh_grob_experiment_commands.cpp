@@ -33,6 +33,7 @@
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/delaunay/CDT_2d.h>
 
+#include <vorpalib/mesh/mesh_weiler_model.h>
 
 namespace OGF {
 
@@ -82,6 +83,33 @@ namespace OGF {
         mesh_grob()->update();
     }
 
+    void MeshGrobExperimentCommands::build_Weiler_model(
+        double expand_surfaces 
+    ) {
+#ifdef GEOGRAM_WITH_VORPALINE        
+        WeilerModel weiler(*mesh_grob());
+        weiler.set_verbose(true);
+        weiler.set_delaunay(true);
+        weiler.expand_surfaces(expand_surfaces);
+        weiler.build();
+
+        index_t nb_regions = weiler.nb_regions();
+        Logger::out("Weiler") << "Found " << nb_regions << " regions" << std::endl;
+        for(index_t i=0; i<nb_regions; ++i) {
+            MeshGrob* region = MeshGrob::find_or_create(scene_graph(), "region_" + String::to_string(i));
+            weiler.copy_region(i,*region);
+            region->update();
+        }
+        
+        show_mesh();
+        mesh_grob()->update();
+#else
+        Logger::err("Weiler") << "Needs to be compiled with Vorpaline"
+                              << std::endl;
+#endif        
+    }
+
+    
     void MeshGrobExperimentCommands::classify_intersections(
         const std::string& expr, bool dry_run, bool reorder
     ) {
