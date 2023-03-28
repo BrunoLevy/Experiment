@@ -62,6 +62,9 @@ namespace OGF {
         );
         intersection.set_approx_incircle(approx_incircle);
         intersection.set_verbose(verbose);
+        intersection.set_radial_sort(
+            remove_external_shell || remove_internal_shells
+        );
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
 

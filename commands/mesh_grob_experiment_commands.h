@@ -58,7 +58,7 @@ namespace OGF {
          * \brief Computes and remeshes intersection in a surface mesh.
          */
         void intersect_surface(
-            bool FPE=true,
+            bool FPE=false,
             bool remove_external_shell=false,
             bool remove_internal_shells=false,
             bool detect_intersecting_neighbors = true,
