@@ -45,6 +45,7 @@
 #include <OGF/scene_graph/types/scene_graph_library.h>
 
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
+#include <OGF/Experiment/tools/mesh_grob_neighbor_tools.h>
 // [includes insertion point] (do not delete this line)
 
 namespace OGF {
@@ -58,6 +59,7 @@ namespace OGF {
         gom_package_initialize(Experiment) ;
 
         ogf_register_grob_commands<OGF::MeshGrob,OGF::MeshGrobExperimentCommands>();
+        ogf_register_grob_tool<OGF::MeshGrob,OGF::MeshGrobNeighborTool>();        
         // [source insertion point] (do not delete this line)
 
         // Insert package initialization stuff here ...

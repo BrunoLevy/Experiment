@@ -61,7 +61,8 @@ namespace OGF {
             bool FPE=false,
             bool remove_external_shell=false,
             bool remove_internal_shells=false,
-            bool detect_intersecting_neighbors = true,
+            bool radial_sort=false,
+            bool detect_intersecting_neighbors=true,
             bool delaunay=true,
             bool approx_incircle=false,
             bool verbose=false
@@ -87,6 +88,9 @@ namespace OGF {
          * Sort facets with AABB.
          */
         void sort_facets();
+
+
+        void classify_facet_normals();
         
         /**
          * Computes a constrained Delaunay triangulation using the vertices

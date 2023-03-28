@@ -32,6 +32,7 @@
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/delaunay/CDT_2d.h>
+#include <geogram/numerics/exact_geometry.h>
 
 #include <vorpalib/mesh/mesh_weiler_model.h>
 
@@ -47,6 +48,7 @@ namespace OGF {
         bool FPE,
         bool remove_external_shell,
         bool remove_internal_shells,
+        bool radial_sort,
         bool detect_intersecting_neighbors,
         bool delaunay,
         bool approx_incircle,
@@ -63,7 +65,7 @@ namespace OGF {
         intersection.set_approx_incircle(approx_incircle);
         intersection.set_verbose(verbose);
         intersection.set_radial_sort(
-            remove_external_shell || remove_internal_shells
+            remove_external_shell || remove_internal_shells || radial_sort
         );
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
@@ -234,4 +236,21 @@ namespace OGF {
         }
         mesh_grob()->update();
     }
+
+    void MeshGrobExperimentCommands::classify_facet_normals() {
+        Attribute<index_t> chart(mesh_grob()->facets.attributes(), "chart");
+        for(index_t f: mesh_grob()->facets) {
+            index_t v1 = mesh_grob()->facets.vertex(f,0);
+            index_t v2 = mesh_grob()->facets.vertex(f,1);
+            index_t v3 = mesh_grob()->facets.vertex(f,2);
+            vec3 p1(mesh_grob()->vertices.point_ptr(v1));
+            vec3 p2(mesh_grob()->vertices.point_ptr(v2));
+            vec3 p3(mesh_grob()->vertices.point_ptr(v3));
+            coord_index_t axis = triangle_normal_axis_exact(p1,p2,p3);
+            chart[f] = index_t(axis);
+        }
+        show_attribute("facets.chart");
+        mesh_grob()->update();        
+    }
+    
 }
