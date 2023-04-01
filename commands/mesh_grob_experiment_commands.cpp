@@ -52,6 +52,7 @@ namespace OGF {
         bool detect_intersecting_neighbors,
         bool delaunay,
         bool approx_incircle,
+        bool approx_radial_sort,
         bool verbose
     ) {
         bool FPE_bkp = Process::FPE_enabled();
@@ -67,6 +68,7 @@ namespace OGF {
         intersection.set_radial_sort(
             remove_external_shell || remove_internal_shells || radial_sort
         );
+        intersection.set_approx_radial_sort(approx_radial_sort);
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
 
