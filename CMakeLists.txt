@@ -57,6 +57,7 @@ aux_source_directories(SOURCES "Source Files\\common" common)
 aux_source_directories(SOURCES "Source Files\\algo" algo)
 aux_source_directories(SOURCES "Source Files\\tools" tools)
 aux_source_directories(SOURCES "Source Files\\commands" commands)
+aux_source_directories(SOURCES "Source Files\\third_party\\BasicInterval" third_party/BasicInterval)
 gomgen(Experiment)
 
 add_library(Experiment ${SOURCES})

@@ -37,9 +37,12 @@
  *
  */
 
+
 #include <OGF/Experiment/algo/interval_nt.h>
 #include <geogram/numerics/expansion_nt.h>
 #include <limits>
+
+#ifndef USE_BASIC_INTERVAL
 
 #ifdef __AVX2__
 
@@ -89,10 +92,12 @@ namespace GEO {
         for(index_t i=1; i<rhs.length(); ++i) {
             *this += rhs.component(i);
         }
+        control_ = rhs;
         return *this;
     }
     
     void interval_nt::adjust(__m128d err) {
+
         __m128d pn_one = _mm_set_pd(1.0, -1.0);
         __m128d pn_x = _mm_mul_pd(pn_one, value_);
         __m128d mask = _mm_cmpgt_pd(
@@ -102,6 +107,14 @@ namespace GEO {
         __m128d next = nextafter_pd(pn_x);
         pn_x = if_pd(mask, next, pn_x);
         value_ = _mm_mul_pd(pn_one, pn_x);
+
+        /*
+        // Try to enlarge the inverval by 1 bit
+        // (makes it twice wider, not good, but let us see...)
+        double i = nextafter(inf(),-1e30);
+        double s = nextafter(sup(), 1e30);
+        value_ = _mm_set_pd(s,i);
+        */
     }
     
     interval_nt::Sign2 interval_nt::sign(__m128d value) {
@@ -247,3 +260,6 @@ namespace GEO {
 }
 
 #endif
+
+#endif
+

@@ -34,6 +34,8 @@
 #include <geogram/delaunay/CDT_2d.h>
 #include <geogram/numerics/exact_geometry.h>
 
+#include <OGF/Experiment/algo/CDT_with_interval.h>
+
 #include <vorpalib/mesh/mesh_weiler_model.h>
 
 namespace OGF {
@@ -146,18 +148,23 @@ namespace OGF {
     
     void MeshGrobExperimentCommands::constrained_delaunay_2d(
         bool use_my_code,
+        bool use_intervals,
         bool Delaunay,
         bool constrained,
         bool quad,
-        bool remove_external_triangles
+        bool remove_external_triangles,
+        bool FPE
     ) {
+        bool FPE_bkp = Process::FPE_enabled();
+        Process::enable_FPE(FPE);
+        
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
         }
 
         if(use_my_code) {
-            CDT2d cdt;
-            cdt.set_delaunay(Delaunay);
+            CDT2d* cdt = (use_intervals) ? new CDT2d_with_interval : new CDT2d;
+            cdt->set_delaunay(Delaunay);
 
             index_t n=0;
             if(quad) {
@@ -166,17 +173,17 @@ namespace OGF {
                 vec2 p1(mesh_grob()->vertices.point_ptr(1));
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
                 vec2 p3(mesh_grob()->vertices.point_ptr(3));                
-                cdt.create_enclosing_quad(p0,p1,p2,p3);
+                cdt->create_enclosing_quad(p0,p1,p2,p3);
             } else {
                 n=3;
                 vec2 p0(mesh_grob()->vertices.point_ptr(0));
                 vec2 p1(mesh_grob()->vertices.point_ptr(1));
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
-                cdt.create_enclosing_triangle(p0,p1,p2);
+                cdt->create_enclosing_triangle(p0,p1,p2);
             }
 
             vector<index_t> indices(mesh_grob()->vertices.nb()-n);
-            cdt.insert(
+            cdt->insert(
                 mesh_grob()->vertices.nb()-n,
                 mesh_grob()->vertices.point_ptr(n),
                 indices.data()
@@ -192,25 +199,27 @@ namespace OGF {
                     if(v2 >= n) {
                         v2 = indices[v2-n];
                     }
-                    cdt.insert_constraint(v1,v2);
+                    cdt->insert_constraint(v1,v2);
                 }
             }
 
             if(remove_external_triangles) {
-                cdt.remove_external_triangles();
+                cdt->remove_external_triangles();
             }
 
             // Create vertices coming from constraint intersections
-            for(index_t v = mesh_grob()->vertices.nb(); v < cdt.nv(); ++v) {
-                mesh_grob()->vertices.create_vertex(cdt.point(v).data());
+            for(index_t v = mesh_grob()->vertices.nb(); v < cdt->nv(); ++v) {
+                mesh_grob()->vertices.create_vertex(cdt->point(v).data());
             }
 
             // Create triangles
-            for(index_t t=0; t<cdt.nT(); ++t) {
+            for(index_t t=0; t<cdt->nT(); ++t) {
                 mesh_grob()->facets.create_triangle(
-                    cdt.Tv(t,0), cdt.Tv(t,1), cdt.Tv(t,2)
+                    cdt->Tv(t,0), cdt->Tv(t,1), cdt->Tv(t,2)
                 );
             }
+
+            delete cdt;
             
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
@@ -227,6 +236,8 @@ namespace OGF {
         mesh_grob()->vertices.set_dimension(3);
         show_mesh();
         mesh_grob()->update();
+
+        Process::enable_FPE(FPE_bkp);
     }
 
     void MeshGrobExperimentCommands::floatify() {

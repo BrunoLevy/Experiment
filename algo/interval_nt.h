@@ -37,11 +37,27 @@
  *
  */
 
+#include <iomanip>
+#include <limits>
+
+//#define USE_BASIC_INTERVAL
+
+#ifdef USE_BASIC_INTERVAL 
+#ifndef GEOGRAM_NUMERICS_INTERVAL_NT
+#define GEOGRAM_NUMERICS_INTERVAL_NT
+#include <OGF/Experiment/third_party/BasicInterval/interval.h>
+namespace GEO {
+    typedef numerics::interval interval_nt;
+}
+#endif
+#endif
+
 #ifndef GEOGRAM_NUMERICS_INTERVAL_NT
 #define GEOGRAM_NUMERICS_INTERVAL_NT
 
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/memory.h>
+#include <geogram/numerics/expansion_nt.h>
 
 /**
  * \file geogram/numerics/expansion_nt.h
@@ -49,8 +65,7 @@
  * \details This file provides a "number-type" that implements interval 
  *   arithmetics.
  * Inspiration:
- *   - https://www.codeproject.com/Articles/1040839/ 
- *      Interval-arithmetic-using-round-to-nearest-mode-pa
+ *   - https://www.codeproject.com/Articles/1040839/Interval-arithmetic-using-round-to-nearest-mode-pa
  * References (thank you Guillaume Moroz):
  *   - https://github.com/goualard-f/GAOL
  *   - Interval Arithmetic: from Principles to Implementation
@@ -63,35 +78,76 @@
 #ifdef __AVX2__
 #include <immintrin.h> 
 
+
+
 namespace GEO {
 
     class expansion_nt;
     
     class Experiment_API interval_nt {
     public:
-        interval_nt() : value_(zero()) {
+        interval_nt() : value_(zero()), control_(0.0) {
+            check();
         }
         
         interval_nt(double rhs) : value_(
             (rhs == 0.0) ? zero() : _mm_set_pd(rhs,rhs)
-        ) {
+        ), control_(rhs) {
+            check();
         }
 
         interval_nt(const interval_nt& rhs) = default;
 
         interval_nt(const expansion_nt& rhs) {
             *this = rhs;
+            check();
         }
         
         interval_nt& operator=(const interval_nt& rhs) = default;
         
         interval_nt& operator=(double rhs) {
             value_=((rhs==0.0) ? zero() : _mm_set_pd(rhs,rhs));
+            control_=expansion_nt(rhs);
+            check();
             return *this;
         }
 
         interval_nt& operator=(const expansion_nt& rhs);        
 
+        static void check(__m128d I) {
+            typedef std::numeric_limits< double > dbl;
+            double i = inf(I);
+            double s = sup(I);
+            if(i > s) {
+                std::cerr.precision(dbl::max_digits10);
+                std::cerr << "i > s !!" << std::endl;
+                std::cerr << "i=" << i << std::endl;
+                std::cerr << "s=" << s << std::endl;
+                geo_assert_not_reached;
+            }
+        }
+        
+        void check() const {
+            typedef std::numeric_limits< double > dbl;
+            if(inf() > sup()) {
+                std::cerr.precision(dbl::max_digits10);
+                std::cerr << "inf() > sup() !!" << std::endl;
+                std::cerr << "inf()=" << inf() << std::endl;
+                std::cerr << "sup()=" << sup() << std::endl;
+                geo_assert_not_reached;
+            }
+            if(control_ < inf() || control_ > sup()) {
+                std::cerr.precision(dbl::max_digits10);
+                std::cerr << "[" << inf() << "," << sup() << "]"
+                          << "   " << control_.estimate() << ":" << control_.rep().length()
+                          << std::endl;
+                expansion_nt control1 = control_ - inf();
+                expansion_nt control2 = sup() - control_;
+                std::cerr << control1.estimate() << " " << control2.estimate() << std::endl;
+                geo_assert_not_reached;
+            }
+        }
+        
 	enum Sign2 {
             SIGN2_ERROR = -1,
             SIGN2_ZERO,
@@ -138,20 +194,39 @@ namespace GEO {
             __m128d swapped = _mm_shuffle_pd(value_, value_, 1);
             // Flip signs
             __m128d sign_mask = _mm_set_pd(-0.0, -0.0);
-            return interval_nt(_mm_xor_pd(swapped,sign_mask));
+            interval_nt result = interval_nt(_mm_xor_pd(swapped,sign_mask));
+            result.control_ = -control_;
+            result.check();
+            return result;
         }
         
         interval_nt& operator+=(const interval_nt& rhs) {
             __m128d err;
             value_ = TwoSum(value_, rhs.value_, err);
+            check(value_);
             adjust(err);
+            control_ += rhs.control_;
+            check();
             return *this;
         }
         
         interval_nt& operator-=(const interval_nt& rhs) {
+            rhs.check();
+            check();
+
+            /*
+            __m128d A = value_;
+            __m128d B = rhs.value_;
+            __m128d E;
+            __m128d C = TwoDiff(A,B,E);
+            */
             __m128d err;
             value_ = TwoDiff(value_, rhs.value_, err);
+            // TODO: check TwoDiff result.
+            
             adjust(err);
+            control_ -= rhs.control_;
+            check();
             return *this;
         }
         
@@ -159,6 +234,8 @@ namespace GEO {
             __m128d err;
             value_ = TwoProd(value_, rhs.value_, err);
             adjust(err);
+            control_ *= rhs.control_;
+            check();
             return *this;
         }
 
@@ -244,6 +321,7 @@ namespace GEO {
         
     private:
         __m128d value_;
+        expansion_nt control_;
     };
 
 

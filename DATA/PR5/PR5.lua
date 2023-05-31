@@ -12,5 +12,5 @@ S.I.Shapes.create_sphere({precision=4,radius=0.5,center='1 1 0'})
 S.I.Shapes.create_sphere({precision=4,radius=0.5,center='1 1 1'})
 
 S.I.Surface.triangulate()
-S.I.Experiment.intersect_surface()
+-- S.I.Experiment.intersect_surface()
 

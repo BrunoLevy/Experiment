@@ -99,10 +99,12 @@ namespace OGF {
          */
         void constrained_delaunay_2d(
             bool use_my_code=true,
+            bool use_intervals=false,
             bool Delaunay=true,
             bool constrained=true,
             bool quad=false,
-            bool remove_external_triangles=false
+            bool remove_external_triangles=false,
+            bool FPE=false
         );
 
 
