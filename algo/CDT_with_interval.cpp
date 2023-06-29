@@ -6,6 +6,7 @@ namespace GEO {
     Sign CDT2d_with_interval::orient2d(
         index_t i, index_t j, index_t k
     ) const {
+        ++orient_cnt_total_;
         const vec2& pi = point_[i];
         const vec2& pj = point_[j];
         const vec2& pk = point_[k];
@@ -26,7 +27,7 @@ namespace GEO {
                           << std::endl;
             }
         } else {
-            ++cnt_fail_;
+            ++orient_cnt_fail_;
         }
 
         return result;
@@ -35,7 +36,8 @@ namespace GEO {
     Sign CDT2d_with_interval::incircle(
         index_t i,index_t j,index_t k,index_t l
     ) const {
-
+        ++incircle_cnt_total_;
+        
         const vec2& pi = point_[i];
         const vec2& pj = point_[j];
         const vec2& pk = point_[k];
@@ -60,14 +62,18 @@ namespace GEO {
         Sign result = CDT2d::incircle(i,j,k,l);
 
         if(interval_nt::sign_is_determined(Delta_s) && Delta_s != interval_nt::Sign2(interval_nt::SIGN2_ZERO)) {
-            Sign result_i = interval_nt::convert_sign(Delta_s);
+            // NEED TO NEGATE, CHECK WHY
+            Sign result_i = Sign(-interval_nt::convert_sign(Delta_s));
             if(result_i != result) {
                 std::cerr << "=============> incircle2d interval disagreement: "
                           << int(result) << " " << int(result_i)
                           << std::endl;
+            } else {
+                std::cerr << "=============> incircle2d interval OK "
+                          << std::endl;
             }
         } else {
-            ++cnt_fail_;
+            ++incircle_cnt_fail_;
         }
         
 
