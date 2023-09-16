@@ -6,7 +6,7 @@
 # - it is the first version that fully supports the specification of Visual
 # Studio toolsets (v110_xp).
 # - it is the version that supports the command string(TIMESTAMP ...)
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 2.8.12)
 
 project(Experiment)
 
@@ -17,7 +17,7 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/../../../../Vorpaline/trunk/)
    )
 else()
    set(
-      GEOGRAM_SOURCE_DIR "${CMAKE_SOURCE_DIR}/../../../geogram/"
+      GEOGRAM_SOURCE_DIR "${CMAKE_SOURCE_DIR}/../../../../geogram/"
       CACHE PATH "full path to the Geogram (or Vorpaline) installation"
    )
 endif()

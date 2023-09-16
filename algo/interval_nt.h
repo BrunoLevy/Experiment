@@ -256,7 +256,7 @@ namespace GEO {
                           << control2.estimate() << std::endl;
                 geo_assert_not_reached;
             }
-            std::cerr << "Ok" << std::flush;
+            // std::cerr << "Ok" << std::flush;
         }
         
     private:

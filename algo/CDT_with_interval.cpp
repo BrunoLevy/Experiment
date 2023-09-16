@@ -59,19 +59,20 @@ namespace GEO {
         );
 
         interval_nt::Sign2 Delta_s = Delta.sign();
-        Sign result = CDT2d::incircle(i,j,k,l);
+        Sign result = CDT2d::incircle(i,j,k,l); // calls PCK::in_circle_2d_SOS() -> PCK::side3_2d()
+                                                // and side3_2d() has triangle orientation
+                                                // --> so we need to multiply with global orientation orient_012_
 
         if(interval_nt::sign_is_determined(Delta_s) && Delta_s != interval_nt::Sign2(interval_nt::SIGN2_ZERO)) {
-            // NEED TO NEGATE, CHECK WHY
-            Sign result_i = Sign(-interval_nt::convert_sign(Delta_s));
+            Sign result_i = Sign(interval_nt::convert_sign(Delta_s) * orient_012_);
             if(result_i != result) {
                 std::cerr << "=============> incircle2d interval disagreement: "
                           << int(result) << " " << int(result_i)
                           << std::endl;
-            } else {
-                std::cerr << "=============> incircle2d interval OK "
-                          << std::endl;
-            }
+            } /* else {
+                 std::cerr << "=============> incircle2d interval OK "
+                           << std::endl;
+            } */
         } else {
             ++incircle_cnt_fail_;
         }
