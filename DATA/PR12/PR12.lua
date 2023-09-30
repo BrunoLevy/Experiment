@@ -33,7 +33,7 @@ function cube(a)
   E.create_quad(o+2,o+0,o+4,o+6)
 end 
 
-for i = 0,2 do
+for i = 0,3 do
    cube(i*0.1)
 end
 

@@ -42,7 +42,7 @@
 
 #include <OGF/Experiment/common/common.h>
 #include <geogram/basic/geometry.h>
-#include <OGF/Experiment/algo/interval_nt.h>
+#include <geogram/numerics/interval_nt.h>
 
 #include <geogram/basic/common.h>
 #include <geogram/basic/geometry.h>
