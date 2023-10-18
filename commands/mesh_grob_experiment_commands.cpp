@@ -36,7 +36,9 @@
 
 #include <OGF/Experiment/algo/CDT_with_interval.h>
 
+#ifdef GEOGRAM_WITH_VORPALINE
 #include <vorpalib/mesh/mesh_weiler_model.h>
+#endif
 
 namespace OGF {
 
@@ -53,7 +55,6 @@ namespace OGF {
         bool radial_sort,
         bool detect_intersecting_neighbors,
         bool delaunay,
-        bool approx_incircle,
         bool approx_radial_sort,
         bool verbose
     ) {
@@ -65,7 +66,6 @@ namespace OGF {
         intersection.set_detect_intersecting_neighbors(
             detect_intersecting_neighbors
         );
-        intersection.set_approx_incircle(approx_incircle);
         intersection.set_verbose(verbose);
         intersection.set_radial_sort(
             remove_external_shell || remove_internal_shells || radial_sort

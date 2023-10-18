@@ -64,7 +64,6 @@ namespace OGF {
             bool radial_sort=false,
             bool detect_intersecting_neighbors=true,
             bool delaunay=true,
-            bool approx_incircle=false,
             bool approx_radial_sort=false,
             bool verbose=false
         );
