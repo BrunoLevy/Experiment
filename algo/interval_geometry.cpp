@@ -42,31 +42,6 @@
 
 namespace GEO {
     
-    vec2HI::vec2HI(
-        const vec2HE& rhs
-    ) : x(rhs.x), y(rhs.y), w(rhs.w) {
-    }
-
-    vec2HI& vec2HI::operator=(const vec2HE& rhs) {
-        x = rhs.x;
-        y = rhs.y;
-        w = rhs.w;
-        return *this;
-    }
-
-    vec3HI::vec3HI(
-        const vec3HE& rhs
-    ) : x(rhs.x), y(rhs.y), z(rhs.z), w(rhs.w) {
-    }
-
-    vec3HI& vec3HI::operator=(const vec3HE& rhs) {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-
     namespace PCK {
         Sign orient_2d_projected(
             const vec3HI& p0, const vec3HI& p1, const vec3HI& p2,
