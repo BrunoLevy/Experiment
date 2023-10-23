@@ -89,9 +89,6 @@ namespace OGF {
          */
         void sort_facets();
 
-
-        void classify_facet_normals();
-        
         /**
          * Computes a constrained Delaunay triangulation using the vertices
          *  and the edges of the mesh as constraints.
