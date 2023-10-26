@@ -30,6 +30,7 @@
 #include <geogram/mesh/mesh_surface_intersection.h>
 #include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh_repair.h>
+#include <geogram/mesh/triangle_intersection.h>
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/delaunay/CDT_2d.h>
 #include <geogram/numerics/exact_geometry.h>
@@ -55,7 +56,6 @@ namespace OGF {
         bool radial_sort,
         bool detect_intersecting_neighbors,
         bool delaunay,
-        bool approx_radial_sort,
         bool verbose
     ) {
         bool FPE_bkp = Process::FPE_enabled();
@@ -70,7 +70,6 @@ namespace OGF {
         intersection.set_radial_sort(
             remove_external_shell || remove_internal_shells || radial_sort
         );
-        intersection.set_approx_radial_sort(approx_radial_sort);
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
 
@@ -248,5 +247,51 @@ namespace OGF {
             p[i] = double(float(p[i]));
         }
         mesh_grob()->update();
+    }
+
+    void MeshGrobExperimentCommands::show_triangle_triangle_intersections() {
+        if(mesh_grob()->facets.nb() < 2) {
+            Logger::out("TT") << "Need at least two triangles"
+                              << std::endl;
+            return;
+        }
+        if(!mesh_grob()->facets.are_simplices()) {
+            Logger::out("TT") << "Mesh is not triangulated"
+                              << std::endl;
+            return;
+        }
+        for(index_t t1: mesh_grob()->facets) {
+            index_t v1 = mesh_grob()->facets.vertex(t1,0);
+            index_t v2 = mesh_grob()->facets.vertex(t1,1);
+            index_t v3 = mesh_grob()->facets.vertex(t1,2);
+            vec3 p1(mesh_grob()->vertices.point_ptr(v1));
+            vec3 p2(mesh_grob()->vertices.point_ptr(v2));
+            vec3 p3(mesh_grob()->vertices.point_ptr(v3));
+            
+            for(index_t t2: mesh_grob()->facets) {
+                if(t1 == t2) {
+                    continue;
+                }
+
+                index_t w1 = mesh_grob()->facets.vertex(t2,0);
+                index_t w2 = mesh_grob()->facets.vertex(t2,1);
+                index_t w3 = mesh_grob()->facets.vertex(t2,2);
+                vec3 q1(mesh_grob()->vertices.point_ptr(w1));
+                vec3 q2(mesh_grob()->vertices.point_ptr(w2));
+                vec3 q3(mesh_grob()->vertices.point_ptr(w3));
+
+                
+                vector<TriangleIsect> II;
+                
+                triangles_intersections(
+                    p1, p2, p3,
+                    q1, q2, q3,
+                    II
+                );
+
+                Logger::out("II") << t1 << " /\\ " << t2
+                                  << "   " << II << std::endl;
+            }
+        }
     }
 }

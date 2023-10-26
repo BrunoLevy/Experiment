@@ -64,7 +64,6 @@ namespace OGF {
             bool radial_sort=false,
             bool detect_intersecting_neighbors=true,
             bool delaunay=true,
-            bool approx_radial_sort=false,
             bool verbose=false
         );
 
@@ -108,6 +107,9 @@ namespace OGF {
          * \brief Snap all point coordinates to 32-bit.
          */
         void floatify();
+
+
+        void show_triangle_triangle_intersections();
     } ;
 }
 
