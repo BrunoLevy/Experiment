@@ -31,6 +31,7 @@
 #include <geogram/mesh/mesh_reorder.h>
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/mesh/triangle_intersection.h>
+#include <geogram/mesh/mesh_geometry.h>
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/delaunay/CDT_2d.h>
 #include <geogram/numerics/exact_geometry.h>
@@ -53,10 +54,14 @@ namespace OGF {
         bool FPE,
         bool remove_external_shell,
         bool remove_internal_shells,
-        bool radial_sort,
+        bool simplify_coplanar_facets,
         bool detect_intersecting_neighbors,
+        bool interpolate_attributes,
         bool delaunay,
-        bool verbose
+        bool verbose,
+        bool post_process,
+        const std::string& expr,
+        const NewMeshGrobName& skeleton
     ) {
         bool FPE_bkp = Process::FPE_enabled();
         Process::enable_FPE(FPE);
@@ -68,22 +73,36 @@ namespace OGF {
         );
         intersection.set_verbose(verbose);
         intersection.set_radial_sort(
-            remove_external_shell || remove_internal_shells || radial_sort
+            remove_external_shell    ||
+            remove_internal_shells   ||
+            simplify_coplanar_facets ||
+            expr != ""
         );
+        intersection.set_interpolate_attributes(interpolate_attributes);
+        if(skeleton != "") {
+            intersection.set_build_skeleton(MeshGrob::find_or_create(scene_graph(),skeleton));
+        }
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
 
-        if(remove_external_shell) {
-            intersection.remove_external_shell();
+        if(expr != "") {
+            intersection.classify(expr);
+        } else {
+            if(remove_external_shell) {
+                intersection.remove_external_shell();
+            }
+            if(remove_internal_shells) {
+                intersection.remove_internal_shells();
+            }
         }
 
-        if(remove_internal_shells) {
-            intersection.remove_internal_shells();
+        if(simplify_coplanar_facets && !interpolate_attributes) {
+            intersection.simplify_coplanar_facets();
         }
-
+        
         // Still need to do that, because snap-rounding may have created
         // degeneracies
-        if(remove_internal_shells) {
+        if(remove_internal_shells || post_process) {
             mesh_repair(*mesh_grob());
         }
         
@@ -117,28 +136,6 @@ namespace OGF {
 #endif        
     }
 
-    
-    void MeshGrobExperimentCommands::classify_intersections(
-        const std::string& expr, bool dry_run, bool reorder
-    ) {
-        std::string attribute = dry_run ? "filter" : "";
-        mesh_classify_intersections(*mesh_grob(),expr,attribute,reorder);
-        if(attribute == "" || attribute == "filter") {
-            Shader* shd = mesh_grob()->get_shader();
-            if(shd != nullptr) {
-                if(shd->has_property("facets_filter")) {
-                    if(attribute == "") {
-                        shd->set_property("facets_filter", "false");
-                    } else {
-                        shd->set_property("facets_filter", "true");
-                    }
-                }
-            }
-        } else {
-            show_attribute("facets." + attribute);
-        }
-        mesh_grob()->update();
-    }
 
     void MeshGrobExperimentCommands::sort_facets() {
         mesh_reorder(*mesh_grob(), MESH_ORDER_MORTON);
@@ -294,4 +291,25 @@ namespace OGF {
             }
         }
     }
+
+    void MeshGrobExperimentCommands::inflate(double howmuch) {
+        compute_normals(*mesh_grob());
+        vector<vec3> N(mesh_grob()->vertices.nb());
+        for(index_t v: mesh_grob()->vertices) {
+            N[v] = howmuch * normalize(
+                Geom::mesh_vertex_normal(*mesh_grob(), v)
+            );
+        }
+
+        N[mesh_grob()->vertices.nb()] = vec3(1,2,3);
+        
+        for(index_t v: mesh_grob()->vertices) {
+            double* p = mesh_grob()->vertices.point_ptr(v);
+            p[0] += N[v].x;
+            p[1] += N[v].y;
+            p[2] += N[v].z;
+        }
+        mesh_grob()->update();
+    }
+    
 }

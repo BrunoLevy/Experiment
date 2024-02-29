@@ -60,27 +60,20 @@ namespace OGF {
         void intersect_surface(
             bool FPE=false,
             bool remove_external_shell=false,
-            bool remove_internal_shells=false,
-            bool radial_sort=false,
+            bool remove_internal_shells=true,
+            bool simplify_coplanar_facets=true,
             bool detect_intersecting_neighbors=true,
+            bool interpolate_attributes=false,
             bool delaunay=true,
-            bool verbose=false
+            bool verbose=false,
+            bool postprocess=false,
+            const std::string& expr = "",
+            const NewMeshGrobName& skeleton = ""
         );
 
 
         void build_Weiler_model(
             double expand_surfaces = 0.0
-        );
-        
-        /**
-         * \brief Classifies the charts from a computed mesh intersection
-         * \param[in] expr a boolean expression. 
-         * \param[in] dry_run if set, just visualize the result
-         */
-        void classify_intersections(
-            const std::string& expr = "union",
-            bool dry_run=true,
-            bool reorder=false
         );
 
         /**
@@ -108,8 +101,12 @@ namespace OGF {
          */
         void floatify();
 
-
+        /**
+         * \brief Debugging triangle triangle intersection code
+         */
         void show_triangle_triangle_intersections();
+
+        void inflate(double howmuch);
     } ;
 }
 
