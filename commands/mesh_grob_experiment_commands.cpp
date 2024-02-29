@@ -80,7 +80,9 @@ namespace OGF {
         );
         intersection.set_interpolate_attributes(interpolate_attributes);
         if(skeleton != "") {
-            intersection.set_build_skeleton(MeshGrob::find_or_create(scene_graph(),skeleton));
+            intersection.set_build_skeleton(
+                MeshGrob::find_or_create(scene_graph(),skeleton)
+            );
         }
         intersection.intersect();
         Process::enable_FPE(FPE_bkp);
@@ -121,9 +123,12 @@ namespace OGF {
         weiler.build();
 
         index_t nb_regions = weiler.nb_regions();
-        Logger::out("Weiler") << "Found " << nb_regions << " regions" << std::endl;
+        Logger::out("Weiler") << "Found " << nb_regions
+                              << " regions" << std::endl;
         for(index_t i=0; i<nb_regions; ++i) {
-            MeshGrob* region = MeshGrob::find_or_create(scene_graph(), "region_" + String::to_string(i));
+            MeshGrob* region = MeshGrob::find_or_create(
+                scene_graph(), "region_" + String::to_string(i)
+            );
             weiler.copy_region(i,*region);
             region->update();
         }
@@ -300,9 +305,6 @@ namespace OGF {
                 Geom::mesh_vertex_normal(*mesh_grob(), v)
             );
         }
-
-        N[mesh_grob()->vertices.nb()] = vec3(1,2,3);
-        
         for(index_t v: mesh_grob()->vertices) {
             double* p = mesh_grob()->vertices.point_ptr(v);
             p[0] += N[v].x;
