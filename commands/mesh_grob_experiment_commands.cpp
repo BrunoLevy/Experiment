@@ -61,7 +61,8 @@ namespace OGF {
         bool verbose,
         bool post_process,
         const std::string& expr,
-        const NewMeshGrobName& skeleton
+        const NewMeshGrobName& skeleton,
+        bool skeleton_trim_fins
     ) {
         bool FPE_bkp = Process::FPE_enabled();
         Process::enable_FPE(FPE);
@@ -76,12 +77,14 @@ namespace OGF {
             remove_external_shell    ||
             remove_internal_shells   ||
             simplify_coplanar_facets ||
-            expr != ""
+            expr != ""               ||
+            skeleton != ""
         );
         intersection.set_interpolate_attributes(interpolate_attributes);
         if(skeleton != "") {
             intersection.set_build_skeleton(
-                MeshGrob::find_or_create(scene_graph(),skeleton)
+                MeshGrob::find_or_create(scene_graph(),skeleton),
+                skeleton_trim_fins
             );
         }
         intersection.intersect();

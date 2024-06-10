@@ -68,7 +68,8 @@ namespace OGF {
             bool verbose=false,
             bool postprocess=false,
             const std::string& expr = "",
-            const NewMeshGrobName& skeleton = ""
+            const NewMeshGrobName& skeleton = "",
+            bool skeleton_trim_fins=false
         );
 
 
