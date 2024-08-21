@@ -24,7 +24,7 @@
  *  Contact for this Plugin: Bruno Levy - Bruno.Levy@inria.fr
  *
  */
- 
+
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
 
 #include <geogram/mesh/mesh_surface_intersection.h>
@@ -34,21 +34,264 @@
 #include <geogram/mesh/mesh_geometry.h>
 #include <geogram/delaunay/delaunay.h>
 #include <geogram/delaunay/CDT_2d.h>
+#include <geogram/delaunay/delaunay_2d.h>
 #include <geogram/numerics/exact_geometry.h>
+#include <geogram/basic/geometry.h>
+
 
 #include <OGF/Experiment/algo/CDT_with_interval.h>
 
 #ifdef GEOGRAM_WITH_VORPALINE
 #include <vorpalib/mesh/mesh_weiler_model.h>
+#include <vorpalib/mesh/mesh_geobodies.h>
 #endif
+
+namespace {
+    using namespace OGF;
+
+    typedef vector<vec2> Polygon;
+
+    static inline Sign point_is_in_half_plane(
+        const vec2& p, const vec2& q1, const vec2& q2
+    ) {
+        return PCK::orient_2d(q1, q2, p);
+    }
+
+    static inline bool intersect_segments(
+        const vec2& p1, const vec2& p2,
+        const vec2& q1, const vec2& q2,
+        vec2& result
+    ) {
+
+        vec2 Vp = p2 - p1;
+        vec2 Vq = q2 - q1;
+        vec2 pq = q1 - p1;
+
+        double a =  Vp.x;
+        double b = -Vq.x;
+        double c =  Vp.y;
+        double d = -Vq.y;
+
+        double delta = a*d-b*c;
+        if(delta == 0.0) {
+            return false ;
+        }
+
+        double tp = (d * pq.x -b * pq.y) / delta;
+
+        result = vec2(
+            (1.0 - tp) * p1.x + tp * p2.x,
+            (1.0 - tp) * p1.y + tp * p2.y
+        );
+
+        return true;
+    }
+
+    void clip_polygon_by_half_plane(
+        const Polygon& P,
+        const vec2& q1,
+        const vec2& q2,
+        Polygon& result
+    ) {
+        result.clear() ;
+
+        if(P.size() == 0) {
+            return ;
+        }
+
+        if(P.size() == 1) {
+            if(point_is_in_half_plane(P[0], q1, q2)) {
+                result.push_back(P[0]) ;
+            }
+            return ;
+        }
+
+        vec2 prev_p = P[P.size() - 1] ;
+        Sign prev_status = point_is_in_half_plane(
+            prev_p, q1, q2
+        );
+
+        for(unsigned int i=0; i<P.size(); i++) {
+            vec2 p = P[i] ;
+            Sign status = point_is_in_half_plane(
+                p, q1, q2
+            );
+            if(
+                status != prev_status &&
+                status != ZERO &&
+                prev_status != ZERO
+            ) {
+                vec2 intersect ;
+                if(intersect_segments(prev_p, p, q1, q2, intersect)) {
+                    result.push_back(intersect) ;
+                }
+            }
+
+            switch(status) {
+            case NEGATIVE:
+                break ;
+            case ZERO:
+                result.push_back(p) ;
+                break ;
+            case POSITIVE:
+                result.push_back(p) ;
+                break ;
+            }
+
+            prev_p = p ;
+            prev_status = status ;
+        }
+    }
+
+    void convex_clip_polygon(
+        const Polygon& P, const Polygon& clip, Polygon& result
+    ) {
+        Polygon tmp1 = P ;
+        Polygon tmp2 ;
+        Polygon* src = &tmp1 ;
+        Polygon* dst = &tmp2 ;
+        for(unsigned int i=0; i<clip.size(); i++) {
+            unsigned int j = ((i+1) % clip.size()) ;
+            const vec2& p1 = clip[i] ;
+            const vec2& p2 = clip[j] ;
+            clip_polygon_by_half_plane(*src, p1, p2, *dst);
+            std::swap(src, dst) ;
+        }
+        result = *src ;
+    }
+
+    class VoronoiDiagram2d {
+    public:
+        VoronoiDiagram2d(
+            Delaunay* delaunay, const Polygon& border
+        ) : delaunay_(delaunay), border_(border) {
+        }
+
+
+        /**
+         * \brief Gets a Voronoi cell of a vertex
+         * \details The vertex is specified by a triangle and a local index in
+         *  the triangle
+         * \param[in] t0 the triangle
+         * \param[in] lv the local index of the vertex in triangle \p t0
+         * \param[out] cell a reference to the Voronoi cell
+         */
+        void get_Voronoi_cell(index_t t0, index_t lv, Polygon& cell) {
+            cell.resize(0);
+            index_t v = index_t(delaunay_->cell_to_v()[3*t0+lv]);
+            bool on_border = false;
+            index_t t = t0;
+
+            // First, we turn around the vertex v. To do that, we compute
+            // lv, the local index of v in the current triangle. Following
+            // the standard numerotation of a triangle, edge number lv is
+            // not incident to vertex v. The two other edges (lv+1)%3 and
+            // (lv+2)%3 of the triangle are indicent to vertex v. By always
+            // traversing (lv+1)%3, we turn around vertex v.
+            do {
+                index_t e = (lv+1)%3;
+                signed_index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
+                if(neigh_t == -1) {
+                    on_border = true;
+                    break;
+                }
+                cell.push_back(circumcenter(t));
+                t = index_t(neigh_t);
+                lv = find_vertex(t,v);
+            } while(t != t0);
+
+
+            // If one traversed edge is on the border of the convex hull, then
+            // we empty the cell, and start turing around the vertex in
+            // the other direction, i.e. by traversing this time
+            // edge (lv+2)%3 until we reach the other edge on the border of
+            // the convex hull that is incident to v.
+            if(on_border) {
+                cell.resize(0);
+                cell.push_back(infinite_vertex(t,(lv + 1)%3));
+                for(;;) {
+                    cell.push_back(circumcenter(t));
+                    index_t e = (lv+2)%3;
+                    signed_index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
+                    if(neigh_t == -1) {
+                        cell.push_back(infinite_vertex(t, e));
+                        break;
+                    }
+                    t = index_t(neigh_t);
+                    lv = find_vertex(t,v);
+                }
+            }
+
+            Polygon clipped;
+            convex_clip_polygon(cell, border_, clipped);
+            cell.swap(clipped);
+        }
+
+        /**
+         * \brief Gets the circumcenter of a triangle.
+         * \param[in] t the index of the triangle, in 0..delaunay->nb_cells()-1
+         * \return the circumcenter of triangle \p t
+         */
+        vec2 circumcenter(index_t t) {
+            signed_index_t v1 = delaunay_->cell_to_v()[3*t];
+            signed_index_t v2 = delaunay_->cell_to_v()[3*t+1];
+            signed_index_t v3 = delaunay_->cell_to_v()[3*t+2];
+            vec2 p1(delaunay_->vertex_ptr(index_t(v1)));
+            vec2 p2(delaunay_->vertex_ptr(index_t(v2)));
+            vec2 p3(delaunay_->vertex_ptr(index_t(v3)));
+            return GEO::Geom::triangle_circumcenter(p1,p2,p3);
+        }
+
+        /**
+         * \brief Gets an infinite vertex in the direction normal to an
+         *  edge on the boundary of the convex hull.
+         * \param[in] t the index of the triangle, in 0..delaunay->nb_cells()-1
+         * \param[in] e the local index of the edge, in {0,1,2}
+         * \return a point located far away along the direction normal to the
+         *  edge \p e of triangle \p t
+         */
+        vec2 infinite_vertex(index_t t, index_t e) {
+            index_t lv1 = (e+1)%3;
+            index_t lv2 = (e+2)%3;
+            index_t v1 = index_t(delaunay_->cell_to_v()[3*t+lv1]);
+            index_t v2 = index_t(delaunay_->cell_to_v()[3*t+lv2]);
+            vec2 p1(delaunay_->vertex_ptr(v1));
+            vec2 p2(delaunay_->vertex_ptr(v2));
+            vec2 n = normalize(p2-p1);
+            n = vec2(n.y, -n.x);
+            return 0.5*(p1+p2)+100000.0*n;
+        }
+
+        /**
+         * \brief Finds the local index of a vertex in a triangle.
+         * \details Throws an assertion failure if the triangle \p t is
+         *  not incident to vertex \p v
+         * \param[in] t the triangle, in 0..delaunay->nb_cells()-1
+         * \param[in] v the vertex, in 0..delaunay->nb_vertices()-1
+         * \return the local index of v in t, in {0,1,2}
+         */
+        index_t find_vertex(index_t t, index_t v) {
+            for(index_t lv=0; lv<3; ++lv) {
+                if(index_t(delaunay_->cell_to_v()[3*t+lv]) == v) {
+                    return lv;
+                }
+            }
+            geo_assert_not_reached;
+        }
+
+    private:
+        Delaunay* delaunay_;
+        Polygon border_;
+    };
+}
 
 namespace OGF {
 
-    MeshGrobExperimentCommands::MeshGrobExperimentCommands() { 
+    MeshGrobExperimentCommands::MeshGrobExperimentCommands() {
     }
-        
-    MeshGrobExperimentCommands::~MeshGrobExperimentCommands() { 
-    }        
+
+    MeshGrobExperimentCommands::~MeshGrobExperimentCommands() {
+    }
 
     void MeshGrobExperimentCommands::intersect_surface(
         bool FPE,
@@ -104,21 +347,21 @@ namespace OGF {
         if(simplify_coplanar_facets && !interpolate_attributes) {
             intersection.simplify_coplanar_facets();
         }
-        
+
         // Still need to do that, because snap-rounding may have created
         // degeneracies
         if(remove_internal_shells || post_process) {
             mesh_repair(*mesh_grob());
         }
-        
+
         show_mesh();
         mesh_grob()->update();
     }
 
     void MeshGrobExperimentCommands::build_Weiler_model(
-        double expand_surfaces 
+        double expand_surfaces
     ) {
-#ifdef GEOGRAM_WITH_VORPALINE        
+#ifdef GEOGRAM_WITH_VORPALINE
         WeilerModel weiler(*mesh_grob());
         weiler.set_verbose(true);
         weiler.set_delaunay(true);
@@ -135,13 +378,13 @@ namespace OGF {
             weiler.copy_region(i,*region);
             region->update();
         }
-        
+
         show_mesh();
         mesh_grob()->update();
 #else
         Logger::err("Weiler") << "Needs to be compiled with Vorpaline"
                               << std::endl;
-#endif        
+#endif
     }
 
 
@@ -149,7 +392,111 @@ namespace OGF {
         mesh_reorder(*mesh_grob(), MESH_ORDER_MORTON);
         mesh_grob()->update();
     }
-    
+
+    void MeshGrobExperimentCommands::add_2d_box(double expansion) {
+           double xyzmin[3];
+           double xyzmax[3];
+           mesh_grob()->vertices.set_dimension(3);
+           get_bbox(*mesh_grob(), xyzmin, xyzmax);
+           mesh_grob()->vertices.set_dimension(2);
+
+           double w = xyzmax[0] - xyzmin[0];
+           double h = xyzmax[1] - xyzmin[1];
+           double x1 = xyzmin[0] - expansion*w;
+           double y1 = xyzmin[1] - expansion*h;
+           double x2 = xyzmax[0] + expansion*w;
+           double y2 = xyzmax[1] + expansion*h;
+
+           mesh_grob()->vertices.create_vertex(vec2(x1,y1).data());
+           mesh_grob()->vertices.create_vertex(vec2(x2,y1).data());
+           mesh_grob()->vertices.create_vertex(vec2(x2,y2).data());
+           mesh_grob()->vertices.create_vertex(vec2(x1,y2).data());
+
+           index_t N = mesh_grob()->vertices.nb();
+           vector<index_t> reorder;
+           reorder.reserve(N);
+           reorder.push_back(N-4);
+           reorder.push_back(N-3);
+           reorder.push_back(N-2);
+           reorder.push_back(N-1);
+           for(index_t i=0; i<N-4; ++i) {
+               reorder.push_back(i);
+           }
+
+           mesh_grob()->vertices.permute_elements(reorder);
+
+           mesh_grob()->update();
+    }
+
+
+    void MeshGrobExperimentCommands::compute_Voronoi_diagram(
+        double expansion,
+        const NewMeshGrobName& voronoi_mesh_name
+    ) {
+
+        MeshGrob* voronoi_mesh = MeshGrob::find_or_create(
+            scene_graph(), voronoi_mesh_name
+        );
+        voronoi_mesh->clear();
+        voronoi_mesh->vertices.set_dimension(2);
+
+
+        double xyzmin[3];
+        double xyzmax[3];
+        mesh_grob()->vertices.set_dimension(3);
+        get_bbox(*mesh_grob(), xyzmin, xyzmax);
+        mesh_grob()->vertices.set_dimension(2);
+
+        double w = xyzmax[0] - xyzmin[0];
+        double h = xyzmax[1] - xyzmin[1];
+        double x1 = xyzmin[0] - expansion*w;
+        double y1 = xyzmin[1] - expansion*h;
+        double x2 = xyzmax[0] + expansion*w;
+        double y2 = xyzmax[1] + expansion*h;
+
+
+        Delaunay_var delaunay = new Delaunay2d();
+        delaunay->set_vertices(
+            mesh_grob()->vertices.nb(),
+            mesh_grob()->vertices.point_ptr(0)
+        );
+
+        Polygon square;
+        square.push_back(vec2(x1,y1));
+        square.push_back(vec2(x2,y1));
+        square.push_back(vec2(x2,y2));
+        square.push_back(vec2(x1,y2));
+
+        VoronoiDiagram2d voronoi(delaunay,square);
+
+        vector<bool> v_visited(mesh_grob()->vertices.nb(),false);
+        for(index_t t=0; t<delaunay->nb_cells(); ++t) {
+            for(index_t lv=0; lv<3; ++lv) {
+                index_t v = index_t(delaunay->cell_to_v()[3*t+lv]);
+                if(!v_visited[v]) {
+                    Polygon C;
+                    v_visited[v] = true;
+                    voronoi.get_Voronoi_cell(t,lv,C);
+                    index_t ofs = voronoi_mesh->vertices.nb();
+                    for(const vec2& p: C) {
+                        voronoi_mesh->vertices.create_vertex(p.data());
+                    }
+                    index_t f = voronoi_mesh->facets.create_polygon(C.size());
+                    for(index_t i=0; i<C.size(); ++i) {
+                        voronoi_mesh->facets.set_vertex(f, i, i+ofs);
+                    }
+                }
+            }
+        }
+
+        voronoi_mesh->vertices.set_dimension(3);
+        mesh_grob()->vertices.set_dimension(3);
+
+        voronoi_mesh->update();
+        mesh_grob()->update();
+    }
+
+
     void MeshGrobExperimentCommands::constrained_delaunay_2d(
         bool use_my_code,
         bool use_intervals,
@@ -161,7 +508,7 @@ namespace OGF {
     ) {
         bool FPE_bkp = Process::FPE_enabled();
         Process::enable_FPE(FPE);
-        
+
         if(mesh_grob()->vertices.dimension() != 2) {
             mesh_grob()->vertices.set_dimension(2);
         }
@@ -176,7 +523,7 @@ namespace OGF {
                 vec2 p0(mesh_grob()->vertices.point_ptr(0));
                 vec2 p1(mesh_grob()->vertices.point_ptr(1));
                 vec2 p2(mesh_grob()->vertices.point_ptr(2));
-                vec2 p3(mesh_grob()->vertices.point_ptr(3));                
+                vec2 p3(mesh_grob()->vertices.point_ptr(3));
                 cdt->create_enclosing_quad(p0,p1,p2,p3);
             } else {
                 n=3;
@@ -218,13 +565,14 @@ namespace OGF {
 
             // Create triangles
             for(index_t t=0; t<cdt->nT(); ++t) {
-                mesh_grob()->facets.create_triangle(
-                    cdt->Tv(t,0), cdt->Tv(t,1), cdt->Tv(t,2)
-                );
+                index_t i = cdt->Tv(t,0);
+                index_t j = cdt->Tv(t,1);
+                index_t k = cdt->Tv(t,2);
+                mesh_grob()->facets.create_triangle(i,j,k);
             }
 
             delete cdt;
-            
+
         } else {
             Delaunay_var del = Delaunay::create(2, "triangle");
             del->set_constraints(mesh_grob());
@@ -272,7 +620,7 @@ namespace OGF {
             vec3 p1(mesh_grob()->vertices.point_ptr(v1));
             vec3 p2(mesh_grob()->vertices.point_ptr(v2));
             vec3 p3(mesh_grob()->vertices.point_ptr(v3));
-            
+
             for(index_t t2: mesh_grob()->facets) {
                 if(t1 == t2) {
                     continue;
@@ -285,9 +633,9 @@ namespace OGF {
                 vec3 q2(mesh_grob()->vertices.point_ptr(w2));
                 vec3 q3(mesh_grob()->vertices.point_ptr(w3));
 
-                
+
                 vector<TriangleIsect> II;
-                
+
                 triangles_intersections(
                     p1, p2, p3,
                     q1, q2, q3,
@@ -316,5 +664,324 @@ namespace OGF {
         }
         mesh_grob()->update();
     }
-    
+
+    /*****************************************************************/
+
+    /**
+     * \brief calls a function for each contour in a polygonal line
+     * \param[in] M a pointer to the mesh. It has edges, that form a
+     *  collection of closed loops. Edges are not necessarily oriented.
+     * \param[in] doit a function to be called for each contour, specified
+     *  as a vector of point indices
+     * \retval true if the edges formed a collection of closed contours
+     * \retval false otherwise
+     */
+    bool for_each_contour(
+        Mesh* M, std::function<void(vector<index_t>& contour)> doit
+    ) {
+        // Step 1: for each vertex v, get its two neighbors
+        //  neigh[0][v] and neigh[1][v]
+        vector<index_t> neigh[2];
+        for(index_t i=0; i<2; ++i) {
+            neigh[i].assign(M->vertices.nb(), NO_INDEX);
+        }
+
+        for(index_t e: M->edges) {
+            for(index_t i=0; i<2; ++i) {
+                index_t v1 = M->edges.vertex(e,i);
+                index_t v2 = M->edges.vertex(e,(i+1)%2);
+                if(neigh[0][v1] == NO_INDEX) {
+                    neigh[0][v1] = v2;
+                } else if(neigh[1][v1] == NO_INDEX) {
+                    neigh[1][v1] = v2;
+                } else {
+                    Logger::err("ContNorm") << "Vertex of degree more than 2"
+                                            << std::endl;
+                    return false;
+                }
+            }
+        }
+
+        // Sanity check: verify that the contour has no dangling edge
+        for(index_t v: M->vertices) {
+            if(neigh[0][v] == NO_INDEX || neigh[1][v] == NO_INDEX) {
+                Logger::err("ContNorm") << "Vertex of degree less than 2"
+                                        << std::endl;
+                return false;
+            }
+        }
+
+        // step 2: get all contours
+        vector<bool> visited(M->vertices.nb(), false);
+        vector<index_t> contour;
+
+        for(index_t e: M->edges) {
+            index_t first = M->edges.vertex(e,0);
+
+            if(visited[first]) {
+                continue;
+            }
+
+            contour.resize(0);
+            index_t v1 = first;
+            index_t v2 = M->edges.vertex(e,1);
+            do {
+                index_t v3 = NO_INDEX;
+                for(index_t i=0; i<2; ++i) {
+                    if(neigh[i][v2] != v1) {
+                        v3 = neigh[i][v2];
+                    }
+                }
+                geo_assert(v3 != NO_INDEX);
+                v1 = v2;
+                v2 = v3;
+                visited[v1] = true;
+                contour.push_back(v1);
+            } while(v1 != first);
+            doit(contour);
+        }
+        return true;
+    }
+
+    /**
+     * \brief computes normals from polygonal contours
+     * \param[in,out] M a pointer to the mesh. It has edges, that form a
+     *  collection of closed loops. Edges are not necessarily oriented.
+     *  On output, creates a "normal" vector attribute attached to the
+     *  vertices.
+     */
+    void compute_contours_normals(Mesh* M) {
+        Attribute<double> normal;
+        normal.bind_if_is_defined(
+            M->vertices.attributes(), "normal"
+        );
+
+        if(!normal.is_bound()) {
+            normal.create_vector_attribute(M->vertices.attributes(),"normal",3);
+        }
+
+        bool OK = for_each_contour(
+            M,
+            [&](vector<index_t>& contour) {
+                index_t N = contour.size();
+
+                // Compute contour's centroid and contour's normal
+                vec3 contour_G(0.0, 0.0, 0.0); // contour centroid
+                vec3 contour_N(0.0, 0.0, 0.0); // contour normal
+                for(index_t i=0; i<N; ++i) {
+                    index_t v_prev = contour[i];
+                    index_t v = contour[(i+1)%N];
+                    index_t v_next = contour[(i+2)%N];
+
+                    vec3 p(M->vertices.point_ptr(v));
+                    vec3 p_prev(M->vertices.point_ptr(v_prev));
+                    vec3 p_next(M->vertices.point_ptr(v_next));
+
+                    contour_G += vec3(M->vertices.point_ptr(v));
+                    contour_N += cross(p_prev-p, p_next-p);
+                }
+                contour_G = (1.0/double(N)) * contour_G;
+
+
+                // Compute vertex normal in contour
+                index_t vote_flip = 0;
+                for(index_t i=0; i<N; ++i) {
+                    index_t v_prev = contour[i];
+                    index_t v = contour[(i+1)%N];
+                    index_t v_next = contour[(i+2)%N];
+
+                    vec3 p(M->vertices.point_ptr(v));
+                    vec3 p_prev(M->vertices.point_ptr(v_prev));
+                    vec3 p_next(M->vertices.point_ptr(v_next));
+
+                    vec3 vN = normalize(cross(p_next - p_prev, contour_N));
+
+                    // If normal points towards the centroid of the contour,
+                    // vote for flipping.
+                    if(dot(p-contour_G,vN) < 0.0) {
+                        ++vote_flip;
+                    }
+
+                    normal[3*v  ] = vN.x;
+                    normal[3*v+1] = vN.y;
+                    normal[3*v+2] = vN.z;
+                }
+
+                // Take flipping votes into account (I love democracy !!)
+                if(vote_flip > N/2) {
+                    for(index_t v: contour) {
+                        normal[3*v  ] = -normal[3*v  ];
+                        normal[3*v+1] = -normal[3*v+1];
+                        normal[3*v+2] = -normal[3*v+2];
+                    }
+                }
+            }
+        );
+
+        if(!OK) {
+            Logger::err("ContNorm") << "Failed" << std::endl;
+            return;
+        }
+    }
+
+    /**
+     * \brief calls a function for each contour in a polygonal line
+     * \param[in] M a pointer to the mesh. It has edges, that form a
+     *  collection of closed loops. Edges are not necessarily oriented.
+     * \param[out] resample the resampled polylines
+     * \param[in] l the desired edge length, relative to the average
+     *  input edge length
+     */
+    void resample_contours(Mesh* M, Mesh* resample, double l) {
+        resample->clear();
+        resample->vertices.set_dimension(3);
+
+        double avg_edge_len = 0.0;
+        for(index_t e: M->edges) {
+            index_t v1 = M->edges.vertex(e,0);
+            index_t v2 = M->edges.vertex(e,1);
+            vec3 p1(M->vertices.point_ptr(v1));
+            vec3 p2(M->vertices.point_ptr(v2));
+            avg_edge_len += length(p2-p1);
+        }
+        avg_edge_len /= double(M->edges.nb());
+
+        l *= avg_edge_len;
+
+        bool OK = for_each_contour(
+            M,
+            [&](vector<index_t>& contour) {
+                index_t N = contour.size();
+
+                double max_s = 0;
+                for(index_t i=0; i<N; ++i) {
+                    index_t v1 = contour[i];
+                    index_t v2 = contour[(i+1)%N];
+                    vec3 p1(M->vertices.point_ptr(v1));
+                    vec3 p2(M->vertices.point_ptr(v2));
+                    max_s += length(p2-p1);
+                }
+
+                double resamp_s = 0.0;
+                index_t v1_index = 0;
+                index_t v1 = contour[0];
+                index_t v2 = contour[1];
+                vec3 p1(M->vertices.point_ptr(v1));
+                vec3 p2(M->vertices.point_ptr(v2));
+                double s1 = 0.0;
+                double s2 = length(p2-p1);
+
+                index_t first_v = resample->vertices.create_vertex(p1.data());
+                index_t last_v = first_v;
+
+                for(resamp_s = l; resamp_s < max_s; resamp_s += l) {
+                    while(s2 < resamp_s) {
+                        v1 = v2;
+                        p1 = p2;
+                        ++v1_index;
+                        v2 = contour[(v1_index+1)%N];
+                        p2 = vec3(M->vertices.point_ptr(v2));
+                        s1 = s2;
+                        s2 += length(p2-p1);
+                    }
+                    vec3 p = (1.0/(s2-s1))*((resamp_s-s1)*p2 + (s2-resamp_s)*p1);
+                    index_t new_v = resample->vertices.create_vertex(p.data());
+                    resample->edges.create_edge(last_v, new_v);
+                    last_v = new_v;
+                }
+                resample->edges.create_edge(last_v, first_v);
+            }
+        );
+
+        if(!OK) {
+            Logger::err("Resample") << "Invalid contours"
+                                    << std::endl;
+        }
+    }
+
+
+    /*****************************************************************/
+
+    void MeshGrobExperimentCommands::compute_contours_normals(
+        bool show, double scale
+    ) {
+#ifdef GEOGRAM_WITH_VORPALINE
+        GEO::compute_contours_normals(mesh_grob());
+        Attribute<double> normal(
+            mesh_grob()->vertices.attributes(), "normal"
+        );
+        mesh_grob()->update();
+        // For debugging
+        // (use scale = 30 with ore_body)
+        if(show) {
+            MeshGrob* normals =
+                MeshGrob::find_or_create(scene_graph(),"normals");
+            normals->clear();
+            normals->vertices.set_dimension(3);
+            for(index_t v: mesh_grob()->vertices) {
+                vec3 p(mesh_grob()->vertices.point_ptr(v));
+                vec3 n(normal[3*v],normal[3*v+1],normal[3*v+2]);
+                index_t v1 = normals->vertices.create_vertex(p.data());
+                index_t v2 = normals->vertices.create_vertex((p+scale*n).data());
+                normals->edges.create_edge(v1,v2);
+            }
+            normals->update();
+        }
+#else
+        geo_argused(show);
+        geo_argused(scale);
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
+
+    void MeshGrobExperimentCommands::resample_contours(
+        const NewMeshGrobName& resample_name, double l
+    ) {
+#ifdef GEOGRAM_WITH_VORPALINE
+        if(resample_name == mesh_grob()->name()) {
+            Logger::err("Resample") << "resample and input cannot be the same"
+                                    << std::endl;
+            return;
+        }
+        MeshGrob* resample = MeshGrob::find_or_create(
+            scene_graph(),resample_name
+        );
+        GEO::resample_contours(mesh_grob(), resample, l);
+        resample->update();
+#else
+        geo_argused(resample_name);
+        geo_argused(l);
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
+
+    void MeshGrobExperimentCommands::reconstruct_from_contours(
+        const NewMeshGrobName& recon_name,
+        double resample_l, index_t Poisson_depth
+    ) {
+#ifdef GEOGRAM_WITH_VORPALINE
+        if(recon_name == mesh_grob()->name()) {
+            Logger::err("Recon") << "recon and input cannot be the same"
+                                    << std::endl;
+            return;
+        }
+        MeshGrob* recon = MeshGrob::find_or_create(scene_graph(),recon_name );
+        recon->clear();
+        GEO::reconstruct_from_contours(
+            mesh_grob(),recon,resample_l, Poisson_depth
+        );
+        recon->update();
+#else
+        geo_argused(recon_name);
+        geo_argused(resample_l);
+        geo_argused(Poisson_depth);
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
 }

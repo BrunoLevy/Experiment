@@ -25,19 +25,19 @@
  *  Contact for this Plugin: Bruno Levy - Bruno.Levy@inria.fr
  *
  *     Project ALICE
- *     LORIA, INRIA Lorraine, 
+ *     LORIA, INRIA Lorraine,
  *     Campus Scientifique, BP 239
- *     54506 VANDOEUVRE LES NANCY CEDEX 
+ *     54506 VANDOEUVRE LES NANCY CEDEX
  *     FRANCE
  *
  *  Note that the GNU General Public License does not permit incorporating
- *  the Software into proprietary programs. 
+ *  the Software into proprietary programs.
  *
  * As an exception to the GPL, Graphite can be linked with the following
  * (non-GPL) libraries:
  *     Qt, tetgen, SuperLU, WildMagic and CGAL
  */
- 
+
 
 #ifndef H__OGF_EXPERIMENT_COMMANDS_MESH_GROB_EXPERIMENT_COMMANDS__H
 #define H__OGF_EXPERIMENT_COMMANDS_MESH_GROB_EXPERIMENT_COMMANDS__H
@@ -96,6 +96,13 @@ namespace OGF {
             bool FPE=false
         );
 
+        void add_2d_box(double expansion=0.0);
+
+        void compute_Voronoi_diagram(
+            double expansion=0.0,
+            const NewMeshGrobName& voronoi = "voronoi"
+        );
+
 
         /**
          * \brief Snap all point coordinates to 32-bit.
@@ -108,8 +115,38 @@ namespace OGF {
         void show_triangle_triangle_intersections();
 
         void inflate(double howmuch);
+
+        /**
+         * \brief Computes the normals of a contour polyline
+         * \param[in] show if set, creates a polyline with normals display
+         * \param[in] scale normals scale used if show is set
+         * \menu Geobodies
+         */
+        void compute_contours_normals(bool show = false, double scale = 30.0);
+
+        /**
+         * \brief Resamples a polyline made of several closed contours
+         * \param[out] resample the name of the resampled mesh
+         * \param[in] l the edge length, relative to input average edge length
+         * \menu Geobodies
+         */
+        void resample_contours(
+            const NewMeshGrobName& resample="resample", double l=0.5
+        );
+
+        /**
+         * \brief Reconstructs a surface from closed contours
+         * \advanced
+         * \param[in] resample_l relative to input average edge length
+         * \param[in] Poisson_depth Poisson octree depth
+         * \menu Geobodies
+         */
+        void reconstruct_from_contours(
+            const NewMeshGrobName& reconstruction="reconstruction",
+            double resample_l=0.1,
+            index_t Poisson_depth=8
+        );
     } ;
 }
 
 #endif
-
