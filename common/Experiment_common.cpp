@@ -25,20 +25,20 @@
  *  Contact for this Plugin: Bruno Levy - Bruno.Levy@inria.fr
  *
  *     Project ALICE
- *     LORIA, INRIA Lorraine, 
+ *     LORIA, INRIA Lorraine,
  *     Campus Scientifique, BP 239
- *     54506 VANDOEUVRE LES NANCY CEDEX 
+ *     54506 VANDOEUVRE LES NANCY CEDEX
  *     FRANCE
  *
  *  Note that the GNU General Public License does not permit incorporating
- *  the Software into proprietary programs. 
+ *  the Software into proprietary programs.
  *
  * As an exception to the GPL, Graphite can be linked with the following
  * (non-GPL) libraries:
  *     Qt, tetgen, SuperLU, WildMagic and CGAL
  */
- 
- 
+
+
 #include <OGF/Experiment/common/common.h>
 #include <OGF/basic/modules/module.h>
 #include <OGF/gom/types/gom_defs.h>
@@ -46,6 +46,7 @@
 
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
 #include <OGF/Experiment/tools/mesh_grob_neighbor_tools.h>
+#include <OGF/Experiment/commands/mesh_grob_geobodies_commands.h>
 // [includes insertion point] (do not delete this line)
 
 namespace OGF {
@@ -59,7 +60,8 @@ namespace OGF {
         gom_package_initialize(Experiment) ;
 
         ogf_register_grob_commands<OGF::MeshGrob,OGF::MeshGrobExperimentCommands>();
-        ogf_register_grob_tool<OGF::MeshGrob,OGF::MeshGrobNeighborTool>();        
+        ogf_register_grob_tool<OGF::MeshGrob,OGF::MeshGrobNeighborTool>();
+        ogf_register_grob_commands<OGF::MeshGrob,OGF::MeshGrobGeobodiesCommands>();
         // [source insertion point] (do not delete this line)
 
         // Insert package initialization stuff here ...
@@ -77,10 +79,10 @@ namespace OGF {
 
         Logger::out("Init") << "</Experiment>" << std::endl;
     }
-    
+
     void Experiment_libinit::terminate() {
         Logger::out("Init") << "<~Experiment>" << std::endl;
-	
+
         //*************************************************************
 
         // Insert package termination stuff here ...
@@ -90,7 +92,7 @@ namespace OGF {
         Module::unbind_module("Experiment");
         Logger::out("Init") << "</~Experiment>" << std::endl;
     }
-    
+
     Experiment_libinit::Experiment_libinit() {
         increment_users();
     }
@@ -98,30 +100,30 @@ namespace OGF {
     Experiment_libinit::~Experiment_libinit() {
         decrement_users();
     }
-    
+
     void Experiment_libinit::increment_users() {
         // Note that count_ is incremented before calling
         // initialize, else it would still be equal to
-        // zero at module initialization time, which 
+        // zero at module initialization time, which
         // may cause duplicate initialization of libraries.
         count_++;
         if(count_ == 1) {
             initialize();
         }
     }
-    
+
     void Experiment_libinit::decrement_users() {
         count_--;
         if(count_ == 0) {
             terminate();
         }
     }
-    
+
     int Experiment_libinit::count_ = 0;
 }
 
 // The initialization and termination functions
-// are also declared using C linkage in order to 
+// are also declared using C linkage in order to
 // enable dynamic linking of modules.
 
 extern "C" void Experiment_API OGF_Experiment_initialize(void);

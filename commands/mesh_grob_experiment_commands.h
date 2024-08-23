@@ -116,36 +116,6 @@ namespace OGF {
 
         void inflate(double howmuch);
 
-        /**
-         * \brief Computes the normals of a contour polyline
-         * \param[in] show if set, creates a polyline with normals display
-         * \param[in] scale normals scale used if show is set
-         * \menu Geobodies
-         */
-        void compute_contours_normals(bool show = false, double scale = 30.0);
-
-        /**
-         * \brief Resamples a polyline made of several closed contours
-         * \param[out] resample the name of the resampled mesh
-         * \param[in] l the edge length, relative to input average edge length
-         * \menu Geobodies
-         */
-        void resample_contours(
-            const NewMeshGrobName& resample="resample", double l=0.5
-        );
-
-        /**
-         * \brief Reconstructs a surface from closed contours
-         * \advanced
-         * \param[in] resample_l relative to input average edge length
-         * \param[in] Poisson_depth Poisson octree depth
-         * \menu Geobodies
-         */
-        void reconstruct_from_contours(
-            const NewMeshGrobName& reconstruction="reconstruction",
-            double resample_l=0.1,
-            index_t Poisson_depth=8
-        );
     } ;
 }
 
