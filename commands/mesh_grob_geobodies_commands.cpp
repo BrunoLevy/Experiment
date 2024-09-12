@@ -61,6 +61,8 @@ namespace OGF {
         Attribute<double> normal(
             mesh_grob()->vertices.attributes(), "normal"
         );
+
+
         mesh_grob()->update();
         // For debugging
         // (use scale = 30 with ore_body)

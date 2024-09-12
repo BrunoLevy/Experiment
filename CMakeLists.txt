@@ -2,11 +2,7 @@
 # CMake file for Experiment
 ##############################################################################
 
-# CMake 2.8.11 is required for 2 reasons:
-# - it is the first version that fully supports the specification of Visual
-# Studio toolsets (v110_xp).
-# - it is the version that supports the command string(TIMESTAMP ...)
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.5)
 
 project(Experiment)
 
@@ -62,6 +58,4 @@ gomgen(Experiment)
 
 add_library(Experiment ${SOURCES})
 
-target_link_libraries(Experiment mesh scene_graph skin gom_gom gom)
-target_link_libraries(Experiment renderer basic)
-target_link_libraries(Experiment geogram_gfx geogram)
+target_link_libraries(Experiment mesh_gfx)

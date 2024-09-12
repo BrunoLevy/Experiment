@@ -2,7 +2,7 @@
 #define H_OGF_MESH_TOOLS_MESH_GROB_NEIGH_TOOLS_H
 
 #include <OGF/Experiment/common/common.h>
-#include <OGF/mesh/tools/mesh_grob_tool.h>
+#include <OGF/mesh_gfx/tools/mesh_grob_tool.h>
 
 namespace OGF {
 
@@ -14,7 +14,7 @@ namespace OGF {
         void grab(const RayPick& p_ndc) override;
         void reset() override;
     };
-    
+
 }
 
 #endif
