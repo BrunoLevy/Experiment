@@ -89,6 +89,24 @@ namespace OGF {
             index_t Poisson_depth=8
         );
 
+        /**
+         * \brief Reconstructs a surface from closed contours and points
+	 * \param[in] points an additional pointset
+         * \advanced
+	 * \param[in] points_weight importance of passing through the points
+         * \param[in] resample_l relative to input average edge length
+         * \param[in] Poisson_depth Poisson octree depth
+         * \menu Geobodies
+         */
+        void reconstruct_from_contours_and_points(
+            const NewMeshGrobName& reconstruction="reconstruction",
+	    const MeshGrobName& points = "",
+	    double points_weight=30.0,
+            double resample_l=0.05,
+            index_t Nsmooth_iter=1000,
+            index_t Poisson_depth=8
+        );
+
     } ;
 }
 

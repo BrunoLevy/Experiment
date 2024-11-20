@@ -112,7 +112,6 @@ namespace OGF {
 #endif
     }
 
-
     void MeshGrobGeobodiesCommands::reconstruct_from_contours(
         const NewMeshGrobName& recon_name,
         double resample_l, index_t Nsmooth_iter, index_t Poisson_depth
@@ -131,6 +130,41 @@ namespace OGF {
         recon->update();
 #else
         geo_argused(recon_name);
+        geo_argused(resample_l);
+        geo_argused(Nsmooth_iter);
+        geo_argused(Poisson_depth);
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
+    void MeshGrobGeobodiesCommands::reconstruct_from_contours_and_points(
+        const NewMeshGrobName& recon_name,
+	const MeshGrobName& points_name,
+	double points_weight,
+        double resample_l, index_t Nsmooth_iter, index_t Poisson_depth
+    ) {
+#ifdef GEOGRAM_WITH_VORPALINE
+        if(recon_name == mesh_grob()->name()) {
+            Logger::err("Recon") << "recon and input cannot be the same"
+                                    << std::endl;
+            return;
+        }
+        MeshGrob* recon = MeshGrob::find_or_create(scene_graph(),recon_name );
+        recon->clear();
+	MeshGrob* points = nullptr;
+	if(points_name != "") {
+	    points = MeshGrob::find(scene_graph(), points_name);
+	}
+        GEO::reconstruct_from_contours_and_points(
+            mesh_grob(), points, recon,
+	    points_weight, resample_l, Nsmooth_iter, Poisson_depth
+        );
+        recon->update();
+#else
+        geo_argused(recon_name);
+	geo_argused(points_name);
+	geo_argused(points_weight);
         geo_argused(resample_l);
         geo_argused(Nsmooth_iter);
         geo_argused(Poisson_depth);
