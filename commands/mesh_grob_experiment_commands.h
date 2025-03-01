@@ -116,6 +116,16 @@ namespace OGF {
 
         void inflate(double howmuch);
 
+	/**
+	 * \menu Debug
+	 */
+	void create_cube();
+
+	/**
+	 * \menu Debug
+	 */
+	void geogram_issue_227();
+
     } ;
 }
 

@@ -138,9 +138,10 @@ namespace OGF {
 #endif
     }
 
-    void MeshGrobGeobodiesCommands::reconstruct_from_contours_and_points(
+    void MeshGrobGeobodiesCommands::reconstruct_from_contours_points_and_lines(
         const NewMeshGrobName& recon_name,
-	const MeshGrobName& points_name,
+	const NewMeshGrobName& points_name,
+	const NewMeshGrobName& lines_name,
 	double points_weight,
         double resample_l, index_t Nsmooth_iter, index_t Poisson_depth
     ) {
@@ -156,8 +157,12 @@ namespace OGF {
 	if(points_name != "") {
 	    points = MeshGrob::find(scene_graph(), points_name);
 	}
-        GEO::reconstruct_from_contours_and_points(
-            mesh_grob(), points, recon,
+	MeshGrob* lines = nullptr;
+	if(lines_name != "") {
+	    lines = MeshGrob::find(scene_graph(), lines_name);
+	}
+        GEO::reconstruct_from_contours_points_and_lines(
+            mesh_grob(), points, lines, recon,
 	    points_weight, resample_l, Nsmooth_iter, Poisson_depth
         );
         recon->update();

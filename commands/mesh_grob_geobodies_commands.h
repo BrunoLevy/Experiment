@@ -98,9 +98,10 @@ namespace OGF {
          * \param[in] Poisson_depth Poisson octree depth
          * \menu Geobodies
          */
-        void reconstruct_from_contours_and_points(
+        void reconstruct_from_contours_points_and_lines(
             const NewMeshGrobName& reconstruction="reconstruction",
-	    const MeshGrobName& points = "",
+	    const NewMeshGrobName& points = "",
+	    const NewMeshGrobName& lines = "",
 	    double points_weight=30.0,
             double resample_l=0.05,
             index_t Nsmooth_iter=1000,

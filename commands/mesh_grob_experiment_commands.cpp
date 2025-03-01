@@ -663,6 +663,105 @@ namespace OGF {
         mesh_grob()->update();
     }
 
-    /*****************************************************************/
+    void MeshGrobExperimentCommands::create_cube() {
+
+	std::cerr << "create vertices" << std::endl;
+
+	Mesh& mesh = *mesh_grob();
+
+	std::cerr << mesh.vertices.dimension() << std::endl;
+
+	// mesh.vertices.set_dimension(3);
+
+	index_t cell_nu = 1464;
+	index_t cell_nv = 744;
+	index_t cell_nw = 376;
+	index_t node_nu = cell_nu + 1;
+	index_t node_nv = cell_nv + 1;
+	index_t node_nw = cell_nw + 1;
+	mesh.vertices.create_vertices(node_nu* node_nv* node_nw);
+
+	std::cerr << "init vertices" << std::endl;
+
+	FOR(k, node_nw) {
+	    FOR(j, node_nv) {
+		FOR (i, node_nu) {
+		    mesh.vertices.point(node_nu* node_nv*k + j* node_nu + i) =
+			vec3(
+			    double(i), //  / double(node_nu),
+			    double(j), //  / double(node_nv),
+			    double(k)  //  / double(node_nw)
+			);
+		}
+	    }
+	}
+
+	vector<index_t> to_kill(node_nu* node_nv* node_nw, 0);
+	FOR(k, 32) {
+	    FOR(j, 248) {
+		FOR(i, 488) {
+		    to_kill[node_nu * node_nv * k + j * node_nu + i] = 1;
+		}
+	    }
+	}
+
+	mesh.vertices.delete_elements(to_kill);
+
+	mesh_grob()->update();
+    }
+
+/*****************************************************************/
+
+    class Geometry {
+    public:
+	Geometry() : vertex_identity{mesh.vertices.attributes(), "identity"} {}
+
+	void make_tetrahedron(double r) {
+	    const double sq2 = std::sqrt(2.0);
+	    const double sq3 = std::sqrt(3.0);
+	    mesh.vertices.create_vertices(4);
+	    mesh.vertices.point(0) =
+		GEO::vec3{ 0,                    r,        0                  };
+	    mesh.vertices.point(1) =
+		GEO::vec3{ 0,                   -r / 3.0,  r * 2.0 * sq2 / 3.0};
+	    mesh.vertices.point(2) =
+		GEO::vec3{-r * sq3 * sq2 / 3.0, -r / 3.0, -r * sq2 / 3.0      };
+	    mesh.vertices.point(3) =
+		GEO::vec3{ r * sq3 * sq2 / 3.0, -r / 3.0, -r * sq2 / 3.0      };
+	    mesh.facets.create_triangle(0, 1, 3);
+	    mesh.facets.create_triangle(0, 2, 1);
+	    mesh.facets.create_triangle(0, 3, 2);
+	    mesh.facets.create_triangle(1, 2, 3);
+	}
+
+	void copy_from(const Geometry& source) {
+	    vertex_identity.unbind();
+	    mesh.copy(source.mesh, false);
+	    vertex_identity.bind(mesh.vertices.attributes(), "identity");
+	    for (const GEO::index_t vertex : source.mesh.vertices) {
+		vertex_identity[vertex] = source.vertex_identity[vertex];
+		// Error: Assertion failed: i < superclass::nb_elements()
+	    }
+	}
+
+	void update_identity() {
+	    for (GEO::index_t vertex : mesh.vertices) {
+		vertex_identity[vertex] = vertex;
+	    }
+	}
+	GEO::Mesh mesh;
+	GEO::Attribute<GEO::index_t> vertex_identity;
+    };
+
+    void MeshGrobExperimentCommands::geogram_issue_227() {
+	Geometry A;
+	A.make_tetrahedron(1.0);
+	A.update_identity();
+	Geometry B;
+	B.copy_from(A);
+    }
+
+
+/*****************************************************************/
 
 }
