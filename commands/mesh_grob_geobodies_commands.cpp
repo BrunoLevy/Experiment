@@ -54,10 +54,10 @@ namespace OGF {
     }
 
     void MeshGrobGeobodiesCommands::compute_contours_normals(
-        index_t Nsmooth_iter, bool show, double scale
+        index_t Nsmooth_iter, bool show, double scale, bool use_DP
     ) {
 #ifdef GEOGRAM_WITH_VORPALINE
-        GEO::compute_contours_normals(mesh_grob(), Nsmooth_iter);
+        GEO::compute_contours_normals(mesh_grob(), Nsmooth_iter, use_DP);
         Attribute<double> normal(
             mesh_grob()->vertices.attributes(), "normal"
         );
@@ -84,6 +84,7 @@ namespace OGF {
         geo_argused(Nsmooth_iter);
         geo_argused(show);
         geo_argused(scale);
+	geo_argused(use_DP);
         Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
                                  << std::endl;
 #endif
@@ -91,7 +92,7 @@ namespace OGF {
 
 
     void MeshGrobGeobodiesCommands::resample_contours(
-        const NewMeshGrobName& resample_name, double l
+        const NewMeshGrobName& resample_name, double l, bool relative_l
     ) {
 #ifdef GEOGRAM_WITH_VORPALINE
         if(resample_name == mesh_grob()->name()) {
@@ -102,11 +103,12 @@ namespace OGF {
         MeshGrob* resample = MeshGrob::find_or_create(
             scene_graph(),resample_name
         );
-        GEO::resample_contours(mesh_grob(), resample, l);
+        GEO::resample_contours(mesh_grob(), resample, l, relative_l);
         resample->update();
 #else
         geo_argused(resample_name);
         geo_argused(l);
+	geo_argused(relative_l);
         Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
                                  << std::endl;
 #endif
@@ -114,7 +116,8 @@ namespace OGF {
 
     void MeshGrobGeobodiesCommands::reconstruct_from_contours(
         const NewMeshGrobName& recon_name,
-        double resample_l, index_t Nsmooth_iter, index_t Poisson_depth
+        double resample_l, bool relative_l,
+	index_t Nsmooth_iter, index_t Poisson_depth
     ) {
 #ifdef GEOGRAM_WITH_VORPALINE
         if(recon_name == mesh_grob()->name()) {
@@ -125,12 +128,14 @@ namespace OGF {
         MeshGrob* recon = MeshGrob::find_or_create(scene_graph(),recon_name );
         recon->clear();
         GEO::reconstruct_from_contours(
-            mesh_grob(), recon, resample_l, Nsmooth_iter, Poisson_depth
+            mesh_grob(), recon, resample_l, relative_l,
+	    Nsmooth_iter, Poisson_depth
         );
         recon->update();
 #else
         geo_argused(recon_name);
         geo_argused(resample_l);
+	geo_argused(relative_l);
         geo_argused(Nsmooth_iter);
         geo_argused(Poisson_depth);
         Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
@@ -143,7 +148,8 @@ namespace OGF {
 	const NewMeshGrobName& points_name,
 	const NewMeshGrobName& lines_name,
 	double points_weight,
-        double resample_l, index_t Nsmooth_iter, index_t Poisson_depth
+        double resample_l, bool relative_l,
+	index_t Nsmooth_iter, index_t Poisson_depth
     ) {
 #ifdef GEOGRAM_WITH_VORPALINE
         if(recon_name == mesh_grob()->name()) {
@@ -163,7 +169,8 @@ namespace OGF {
 	}
         GEO::reconstruct_from_contours_points_and_lines(
             mesh_grob(), points, lines, recon,
-	    points_weight, resample_l, Nsmooth_iter, Poisson_depth
+	    points_weight, resample_l, relative_l,
+	    Nsmooth_iter, Poisson_depth
         );
         recon->update();
 #else
@@ -171,8 +178,29 @@ namespace OGF {
 	geo_argused(points_name);
 	geo_argused(points_weight);
         geo_argused(resample_l);
+	geo_argused(relative_l);
         geo_argused(Nsmooth_iter);
         geo_argused(Poisson_depth);
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
+    void MeshGrobGeobodiesCommands::reconstruct_from_contours_DP() {
+#ifdef GEOGRAM_WITH_VORPALINE
+	GEO::reconstruct_from_contours_DP(mesh_grob());
+	mesh_grob()->update();
+#else
+        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
+                                 << std::endl;
+#endif
+    }
+
+    void MeshGrobGeobodiesCommands::normalize_contours() {
+#ifdef GEOGRAM_WITH_VORPALINE
+	GEO::normalize_contours(mesh_grob());
+	mesh_grob()->update();
+#else
         Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
                                  << std::endl;
 #endif

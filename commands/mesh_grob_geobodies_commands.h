@@ -1,4 +1,3 @@
-
 /*
  *  OGF/Graphite: Geometry and Graphics Programming Library + Utilities
  *  Copyright (C) 2000-2015 INRIA - Project ALICE
@@ -59,32 +58,36 @@ namespace OGF {
          * \brief Computes the normals of a contour polyline
          * \param[in] show if set, creates a polyline with normals display
          * \param[in] scale normals scale used if show is set
+	 * \param[in] use_DP use Dynamic Programming
          * \menu Geobodies
          */
         void compute_contours_normals(
-            index_t Nsmooth_iter=1000, bool show = false, double scale = 30.0
+            index_t Nsmooth_iter=1000, bool show = false, double scale = 30.0,
+	    bool use_DP = false
         );
 
         /**
          * \brief Resamples a polyline made of several closed contours
          * \param[out] resample the name of the resampled mesh
-         * \param[in] l the edge length, relative to input average edge length
-         * \menu Geobodies
+         * \param[in] l the desired edge length
+	 * \param[in] relative_l if set then l is relative to average edge length
          */
         void resample_contours(
-            const NewMeshGrobName& resample="resample", double l=0.05
+            const NewMeshGrobName& resample="resample",
+	    double l=0.05, bool relative_l=true
         );
 
         /**
          * \brief Reconstructs a surface from closed contours
          * \advanced
-         * \param[in] resample_l relative to input average edge length
+         * \param[in] resample_l edge length used internally for resampling
+	 * \param[in] relative_l if set then l is relative to average edge length
          * \param[in] Poisson_depth Poisson octree depth
          * \menu Geobodies
          */
         void reconstruct_from_contours(
             const NewMeshGrobName& reconstruction="reconstruction",
-            double resample_l=0.05,
+            double resample_l=0.05, bool relative_l=true,
             index_t Nsmooth_iter=1000,
             index_t Poisson_depth=8
         );
@@ -94,7 +97,8 @@ namespace OGF {
 	 * \param[in] points an additional pointset
          * \advanced
 	 * \param[in] points_weight importance of passing through the points
-         * \param[in] resample_l relative to input average edge length
+         * \param[in] resample_l edge length used internally for resampling
+	 * \param[in] relative_l if set then l is relative to average edge length
          * \param[in] Poisson_depth Poisson octree depth
          * \menu Geobodies
          */
@@ -103,11 +107,19 @@ namespace OGF {
 	    const NewMeshGrobName& points = "",
 	    const NewMeshGrobName& lines = "",
 	    double points_weight=30.0,
-            double resample_l=0.05,
+            double resample_l=0.05, bool relative_l = true,
             index_t Nsmooth_iter=1000,
             index_t Poisson_depth=8
         );
 
+
+	/**
+	 * \brief Reconstruct from contours using dynamic programming
+	 */
+	void reconstruct_from_contours_DP();
+
+
+	void normalize_contours();
     } ;
 }
 
