@@ -117,9 +117,6 @@ namespace OGF {
 	 * \brief Reconstruct from contours using dynamic programming
 	 */
 	void reconstruct_from_contours_DP();
-
-
-	void normalize_contours();
     } ;
 }
 

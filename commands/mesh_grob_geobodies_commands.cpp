@@ -195,15 +195,4 @@ namespace OGF {
                                  << std::endl;
 #endif
     }
-
-    void MeshGrobGeobodiesCommands::normalize_contours() {
-#ifdef GEOGRAM_WITH_VORPALINE
-	GEO::normalize_contours(mesh_grob());
-	mesh_grob()->update();
-#else
-        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
-                                 << std::endl;
-#endif
-    }
-
 }
