@@ -54,10 +54,13 @@ namespace OGF {
     }
 
     void MeshGrobGeobodiesCommands::compute_contours_normals(
-        index_t Nsmooth_iter, bool show, double scale, bool use_DP
+	GraphiteGeobodyReconstructionStrategy strat,
+        index_t Nsmooth_iter, bool show, double scale
     ) {
 #ifdef GEOGRAM_WITH_VORPALINE
-        GEO::compute_contours_normals(mesh_grob(), Nsmooth_iter, use_DP);
+        GEO::compute_contours_normals(
+	    mesh_grob(), GeobodyReconstructionStrategy(strat), Nsmooth_iter
+	);
         Attribute<double> normal(
             mesh_grob()->vertices.attributes(), "normal"
         );
@@ -81,6 +84,7 @@ namespace OGF {
             normals->update();
         }
 #else
+	geo_argused(strat);
         geo_argused(Nsmooth_iter);
         geo_argused(show);
         geo_argused(scale);
@@ -116,38 +120,10 @@ namespace OGF {
 
     void MeshGrobGeobodiesCommands::reconstruct_from_contours(
         const NewMeshGrobName& recon_name,
-        double resample_l, bool relative_l,
-	index_t Nsmooth_iter, index_t Poisson_depth
-    ) {
-#ifdef GEOGRAM_WITH_VORPALINE
-        if(recon_name == mesh_grob()->name()) {
-            Logger::err("Recon") << "recon and input cannot be the same"
-                                    << std::endl;
-            return;
-        }
-        MeshGrob* recon = MeshGrob::find_or_create(scene_graph(),recon_name );
-        recon->clear();
-        GEO::reconstruct_from_contours(
-            mesh_grob(), recon, resample_l, relative_l,
-	    Nsmooth_iter, Poisson_depth
-        );
-        recon->update();
-#else
-        geo_argused(recon_name);
-        geo_argused(resample_l);
-	geo_argused(relative_l);
-        geo_argused(Nsmooth_iter);
-        geo_argused(Poisson_depth);
-        Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
-                                 << std::endl;
-#endif
-    }
-
-    void MeshGrobGeobodiesCommands::reconstruct_from_contours_points_and_lines(
-        const NewMeshGrobName& recon_name,
 	const NewMeshGrobName& points_name,
-	const NewMeshGrobName& lines_name,
 	double points_weight,
+	const NewMeshGrobName& lines_name,
+	GraphiteGeobodyReconstructionStrategy strat,
         double resample_l, bool relative_l,
 	index_t Nsmooth_iter, index_t Poisson_depth
     ) {
@@ -167,9 +143,13 @@ namespace OGF {
 	if(lines_name != "") {
 	    lines = MeshGrob::find(scene_graph(), lines_name);
 	}
-        GEO::reconstruct_from_contours_points_and_lines(
-            mesh_grob(), points, lines, recon,
-	    points_weight, resample_l, relative_l,
+        GEO::reconstruct_from_contours(
+	    recon,
+            mesh_grob(),
+	    points, points_weight,
+	    lines,
+	    GeobodyReconstructionStrategy(strat),
+	    resample_l, relative_l,
 	    Nsmooth_iter, Poisson_depth
         );
         recon->update();
@@ -177,6 +157,7 @@ namespace OGF {
         geo_argused(recon_name);
 	geo_argused(points_name);
 	geo_argused(points_weight);
+	geo_argused(lines_name);
         geo_argused(resample_l);
 	geo_argused(relative_l);
         geo_argused(Nsmooth_iter);
