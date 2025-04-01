@@ -167,11 +167,18 @@ namespace OGF {
 #endif
     }
 
-    void MeshGrobGeobodiesCommands::reconstruct_from_contours_DP() {
+    void MeshGrobGeobodiesCommands::reconstruct_from_contours_DP(
+	const NewMeshGrobName& lines_name
+    ) {
 #ifdef GEOGRAM_WITH_VORPALINE
-	GEO::reconstruct_from_contours_DP(mesh_grob());
+	MeshGrob* lines = nullptr;
+	if(lines_name != "") {
+	    lines = MeshGrob::find(scene_graph(), lines_name);
+	}
+	GEO::reconstruct_from_contours_DP(mesh_grob(),lines);
 	mesh_grob()->update();
 #else
+	geo_argused(lines_name);
         Logger::err("Geobodies") << "Needs Tessael's VORPALINE component"
                                  << std::endl;
 #endif

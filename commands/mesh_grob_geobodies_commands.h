@@ -61,18 +61,34 @@ namespace OGF {
 	    GEOBODY_RECON_OBG = 2
 	};
 
-
         /**
-         * \brief Computes the normals of a contour polyline
-	 * \param[in] strat strategy for normal estimation
-         * \param[in] show if set, creates a polyline with normals display
-         * \param[in] scale normals scale used if show is set
-         * \menu Geobodies
+         * \brief Reconstructs a surface from closed contours
+	 * \param[in] reconstruction the reconstructed mesh
+	 * \param[in] points an optional additional pointset
+	 * \param[in] points_weight importance of passing through the points
+	 * \param[in] lines an optional additional polygonal line (constraints)
+         * \advanced
+         * \param[in] resample_l edge length used internally for resampling
+	 * \param[in] relative_l if set then l is relative to average edge length
+         * \param[in] Poisson_depth Poisson octree depth
          */
-        void compute_contours_normals(
+        void reconstruct_from_contours(
+            const NewMeshGrobName& reconstruction="reconstruction",
+	    const NewMeshGrobName& points = "",
+	    double points_weight=30.0,
+	    const NewMeshGrobName& lines = "",
 	    GraphiteGeobodyReconstructionStrategy strat = GEOBODY_RECON_AUTO,
-            index_t Nsmooth_iter=1000, bool show = false, double scale = 30.0
+            double resample_l=0.05, bool relative_l = true,
+            index_t Nsmooth_iter=1000,
+            index_t Poisson_depth=12
         );
+
+
+	/**
+	 * \brief Reconstruct from contours using dynamic programming
+	 * \param[in] lines optional mesh with line constraints
+	 */
+	void reconstruct_from_contours_DP(const NewMeshGrobName& lines = "");
 
         /**
          * \brief Resamples a polyline made of several closed contours
@@ -86,33 +102,17 @@ namespace OGF {
         );
 
         /**
-         * \brief Reconstructs a surface from closed contours
-	 * \param[in] reconstruction the reconstructed mesh
-	 * \param[in] points an optional additional pointset
-	 * \param[in] points_weight importance of passing through the points
-	 * \param[in] lines an optional additional polygonal line (constraints)
-         * \advanced
-         * \param[in] resample_l edge length used internally for resampling
-	 * \param[in] relative_l if set then l is relative to average edge length
-         * \param[in] Poisson_depth Poisson octree depth
-         * \menu Geobodies
+         * \brief Computes the normals of a contour polyline
+	 * \param[in] strat strategy for normal estimation
+         * \param[in] show if set, creates a polyline with normals display
+         * \param[in] scale normals scale used if show is set
          */
-        void reconstruct_from_contours(
-            const NewMeshGrobName& reconstruction="reconstruction",
-	    const NewMeshGrobName& points = "",
-	    double points_weight=30.0,
-	    const NewMeshGrobName& lines = "",
+        void compute_contours_normals(
 	    GraphiteGeobodyReconstructionStrategy strat = GEOBODY_RECON_AUTO,
-            double resample_l=0.05, bool relative_l = true,
-            index_t Nsmooth_iter=1000,
-            index_t Poisson_depth=8
+            index_t Nsmooth_iter=1000, bool show = false, double scale = 30.0
         );
 
 
-	/**
-	 * \brief Reconstruct from contours using dynamic programming
-	 */
-	void reconstruct_from_contours_DP();
     } ;
 }
 
