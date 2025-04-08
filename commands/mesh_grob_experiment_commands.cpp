@@ -188,13 +188,13 @@ namespace {
             // traversing (lv+1)%3, we turn around vertex v.
             do {
                 index_t e = (lv+1)%3;
-                signed_index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
-                if(neigh_t == -1) {
+                index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
+                if(neigh_t == NO_INDEX) {
                     on_border = true;
                     break;
                 }
                 cell.push_back(circumcenter(t));
-                t = index_t(neigh_t);
+                t = neigh_t;
                 lv = find_vertex(t,v);
             } while(t != t0);
 
@@ -210,12 +210,12 @@ namespace {
                 for(;;) {
                     cell.push_back(circumcenter(t));
                     index_t e = (lv+2)%3;
-                    signed_index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
-                    if(neigh_t == -1) {
+                    index_t neigh_t = delaunay_->cell_to_cell()[3*t+e];
+                    if(neigh_t == NO_INDEX) {
                         cell.push_back(infinite_vertex(t, e));
                         break;
                     }
-                    t = index_t(neigh_t);
+                    t = neigh_t;
                     lv = find_vertex(t,v);
                 }
             }
@@ -231,12 +231,12 @@ namespace {
          * \return the circumcenter of triangle \p t
          */
         vec2 circumcenter(index_t t) {
-            signed_index_t v1 = delaunay_->cell_to_v()[3*t];
-            signed_index_t v2 = delaunay_->cell_to_v()[3*t+1];
-            signed_index_t v3 = delaunay_->cell_to_v()[3*t+2];
-            vec2 p1(delaunay_->vertex_ptr(index_t(v1)));
-            vec2 p2(delaunay_->vertex_ptr(index_t(v2)));
-            vec2 p3(delaunay_->vertex_ptr(index_t(v3)));
+            index_t v1 = delaunay_->cell_to_v()[3*t];
+            index_t v2 = delaunay_->cell_to_v()[3*t+1];
+            index_t v3 = delaunay_->cell_to_v()[3*t+2];
+            vec2 p1(delaunay_->vertex_ptr(v1));
+            vec2 p2(delaunay_->vertex_ptr(v2));
+            vec2 p3(delaunay_->vertex_ptr(v3));
             return GEO::Geom::triangle_circumcenter(p1,p2,p3);
         }
 
