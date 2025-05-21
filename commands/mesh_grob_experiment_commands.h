@@ -149,6 +149,22 @@ namespace OGF {
 	    const std::string& horizons = "-91.5861 72.4923"
 	);
 
+	/**
+	 * \menu Structural
+	 * \param[in] surface triangles near this surface will be deleted
+	 * \param[in] distance triangles nearer than distance are deleted
+	 * \param[in] relative_distance distance is relative to avg edge length
+	 * \param[in] min_comp_area minimum area for a connected component
+	 * \param[in] relative_min_comp_area if set, relative to surface area
+	 */
+	void delete_triangles_near_surface(
+	    const MeshGrobName& surface,
+	    double distance,
+	    bool relative_distance,
+	    double min_comp_area,
+	    bool relative_min_comp_area
+	);
+
     } ;
 }
 

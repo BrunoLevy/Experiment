@@ -39,6 +39,7 @@
 #include <geogram/numerics/exact_geometry.h>
 #include <geogram/basic/geometry.h>
 #include <geogram/basic/stopwatch.h>
+#include <geogram/mesh/mesh_AABB.h>
 
 #include <OGF/Experiment/algo/CDT_with_interval.h>
 
@@ -894,5 +895,35 @@ namespace OGF {
     }
 
 /*****************************************************************/
+
+    void MeshGrobExperimentCommands::delete_triangles_near_surface(
+	const MeshGrobName& surface_name,
+	double distance,
+	bool relative_distance,
+	double min_comp_area,
+	bool relative_min_comp_area
+    ) {
+#ifndef GEOGRAM_WITH_VORPALINE
+	geo_argused(surface_name);
+	geo_argused(distance);
+	geo_argused(relative_distance);
+	geo_argused(min_comp_area);
+	geo_argused(relative_min_comp_area);
+#else
+	MeshGrob* surface = MeshGrob::find(scene_graph(), surface_name);
+	if(surface == nullptr) {
+	    Logger::err("Structural") << surface_name << " : no such surface";
+	    return;
+	}
+	delete_facets_near_faults_and_box(
+	    *mesh_grob(), *surface, distance, relative_distance
+	);
+	delete_small_connected_components(
+	    *mesh_grob(), min_comp_area, relative_min_comp_area
+	);
+	mesh_grob()->update();
+#endif
+    }
+
 
 }
