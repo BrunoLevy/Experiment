@@ -126,6 +126,29 @@ namespace OGF {
 	 */
 	void geogram_issue_227();
 
+	/**
+	 * \menu Debug
+	 */
+	void test_syntaxic_sugar();
+
+	/**
+	 * \menu Debug
+	 */
+	void test_syntaxic_sugar_2();
+
+	/**
+	 * \menu Debug
+	 */
+	void test_PR_252();
+
+	/**
+	 * \menu Structural
+	 * \param[in] horizons a string with all the w values for horizons
+	 */
+	void build_structural_model(
+	    const std::string& horizons = "-91.5861 72.4923"
+	);
+
     } ;
 }
 

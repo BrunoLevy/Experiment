@@ -26,6 +26,7 @@
  */
 
 #include <OGF/Experiment/commands/mesh_grob_experiment_commands.h>
+#include <OGF/scene_graph/types/scene_graph.h>
 
 #include <geogram/mesh/mesh_surface_intersection.h>
 #include <geogram/mesh/mesh_reorder.h>
@@ -37,11 +38,13 @@
 #include <geogram/delaunay/delaunay_2d.h>
 #include <geogram/numerics/exact_geometry.h>
 #include <geogram/basic/geometry.h>
+#include <geogram/basic/stopwatch.h>
 
 #include <OGF/Experiment/algo/CDT_with_interval.h>
 
 #ifdef GEOGRAM_WITH_VORPALINE
 #include <vorpalib/mesh/mesh_weiler_model.h>
+#include <vorpalib/mesh/mesh_geomodel.h>
 #endif
 
 namespace {
@@ -761,6 +764,134 @@ namespace OGF {
 	B.copy_from(A);
     }
 
+    double mesh_area_with_syntaxic_sugar(const Mesh& M) {
+	double result = 0.0;
+	for(index_t f: M.facets) {
+	    for(auto [ p1, p2, p3]: M.facets.triangle_points(f)) {
+		result += Geom::triangle_area(p1,p2,p3);
+	    }
+	}
+	return result;
+    }
+
+    double mesh_area_plain(const Mesh& M) {
+	double result = 0.0;
+	for(index_t f: M.facets) {
+	    index_t v0 = M.facets.vertex(f,0);
+	    const vec3& p0 = M.vertices.point(v0);
+	    for(index_t le=0; le+1<M.facets.nb_vertices(f); ++le) {
+		index_t v1 = M.facets.vertex(f,le);
+		const vec3& p1 = M.vertices.point(v1);
+		index_t v2 = M.facets.vertex(f,le+1);
+		const vec3& p2 = M.vertices.point(v2);
+		result += Geom::triangle_area(p0,p1,p2);
+	    }
+	}
+	return result;
+    }
+
+    void MeshGrobExperimentCommands::test_syntaxic_sugar() {
+	double a1 = 0.0;
+	double a2 = 0.0;
+	{
+	    Stopwatch W1("plain");
+	    a1 = mesh_area_plain(*mesh_grob());
+	}
+	{
+	    Stopwatch W2("with sugar");
+	    a2 = mesh_area_plain(*mesh_grob());
+	}
+	Logger::out("Sugar") << a1 << " " << a2 << std::endl;
+    }
+
+    void MeshGrobExperimentCommands::test_syntaxic_sugar_2() {
+	for(vec3& p: mesh_grob()->vertices.points()) {
+	    p += {0.0, 0.0, 1.0};
+	}
+	mesh_grob()->update();
+    }
+
+    void MeshGrobExperimentCommands::test_PR_252() {
+	MeshGrob& m = *mesh_grob();
+	m.vertices.create_vertices(8);
+	m.vertices.point(0) = GEO::vec3{0.0, 0.0, 0.0};
+	m.vertices.point(1) = GEO::vec3{0.0, 0.0, 1.0};
+	m.vertices.point(2) = GEO::vec3{1.0, 0.0, 1.0};
+	m.vertices.point(3) = GEO::vec3{1.0, 0.0, 0.0};
+	m.vertices.point(4) = GEO::vec3{0.0, 1.0, 0.0};
+	m.vertices.point(5) = GEO::vec3{0.0, 1.0, 1.0};
+	m.vertices.point(6) = GEO::vec3{1.0, 1.0, 1.0};
+	m.vertices.point(7) = GEO::vec3{1.0, 1.0, 0.0};
+	m.facets.create_quad(0, 1, 2, 3); // facet 0 - (3, 2, 1, 0) if flipped
+	m.facets.create_quad(0, 4, 5, 1); // facet 1 - (1, 5, 3, 0) if flipped
+	m.facets.create_quad(0, 3, 7, 4); // facet 2 - (4, 7, 3, 0) if flipped
+	m.facets.create_quad(1, 2, 6, 5);
+	m.facets.create_quad(2, 3, 7, 6);
+	m.facets.create_quad(4, 5, 6, 7);
+	m.facets.connect();
+	//GEO::mesh_reorient(m);
+	GEO::mesh_repair(m,GEO::MeshRepairMode(0),0.0);
+	m.update();
+    }
+
+    /*************************************************************************/
+
+    void MeshGrobExperimentCommands::build_structural_model(
+	const std::string& horizons
+    ) {
+#ifndef GEOGRAM_WITH_VORPALINE
+	geo_argused(horizons);
+        Logger::err("ModelBuilder") << "Needs to be compiled with Vorpaline"
+				    << std::endl;
+#else
+	scene_graph()->disable_signals();
+	std::vector<std::string> words;
+	String::split_string(horizons, ' ', words);
+	vector<double> Ws;
+	for(const std::string& word: words) {
+	    double W;
+	    if(!String::from_string(word, W)) {
+		Logger::err("Structural") << "malformed horizons Ws list"
+					  << std::endl;
+	    }
+	    Ws.push_back(W);
+	}
+	for(double W: Ws) {
+	    Logger::out("Structural") << "Horizon at W=" << W << std::endl;
+	}
+        vector<index_t> feature_ids(Ws.size(), NO_INDEX);
+
+
+	Attribute<vec3> U;
+
+
+	// Glue vertices and connect cells
+	mesh_repair(*mesh_grob(),MESH_REPAIR_COLOCATE);
+	mesh_grob()->cells.connect();
+	MeshGrob* model = MeshGrob::find_or_create(
+	    scene_graph(), "model"
+	);
+	model->clear();
+	model->vertices.set_dimension(3);
+
+	// Build the IsectMap
+	StructuralModelBuilder builder(*mesh_grob(), *model);
+	if(builder.bind_attributes()) {
+	    builder.set_horizon_Ws(Ws);
+	    builder.set_horizon_feature_ids(feature_ids);
+	    builder.build();
+	} else {
+	    Logger::err("Structural") << "Missing attribute" << std::endl;
+	}
+
+
+	mesh_repair(*model, MESH_REPAIR_TOPOLOGY, 0.0);
+	model->update();
+	mesh_grob()->update();
+	scene_graph()->enable_signals();
+	scene_graph()->update();
+#endif
+    }
 
 /*****************************************************************/
 
