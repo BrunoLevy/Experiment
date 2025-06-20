@@ -165,6 +165,18 @@ namespace OGF {
 	    bool relative_min_comp_area
 	);
 
+	/**
+	 * \menu Structural
+	 * \param[in] max_distance for projecting border vertex onto fault
+	 * \param[in] relative_distance if set, max_distance and
+	 *  embedding_distance are relative to average edge length
+	 */
+	void fix_fault_network_contacts(
+	    double max_distance = 0.1,
+	    double embedding_distance = 0.005,
+	    bool relative_distance = true
+	);
+
     } ;
 }
 

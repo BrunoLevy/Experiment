@@ -925,5 +925,22 @@ namespace OGF {
 #endif
     }
 
+    void MeshGrobExperimentCommands::fix_fault_network_contacts(
+	double max_distance,
+	double embedding_distance,
+	bool relative_distance
+    ) {
+#ifndef GEOGRAM_WITH_VORPALINE
+	geo_argused(max_distance);
+	geo_argused(relative_max_distance);
+#else
+	mesh_grob()->edges.clear();
+	mesh_grob()->vertices.remove_isolated();
+	GEO::fix_fault_network_contacts(
+	    *mesh_grob(), max_distance, embedding_distance, relative_distance
+	);
+	mesh_grob()->update();
+#endif
+    }
 
 }
