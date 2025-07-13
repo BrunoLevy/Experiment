@@ -140,43 +140,6 @@ namespace OGF {
 	 * \menu Debug
 	 */
 	void test_PR_252();
-
-	/**
-	 * \menu Structural
-	 * \param[in] horizons a string with all the w values for horizons
-	 */
-	void build_structural_model(
-	    const std::string& horizons = "-91.5861 72.4923"
-	);
-
-	/**
-	 * \menu Structural
-	 * \param[in] surface triangles near this surface will be deleted
-	 * \param[in] distance triangles nearer than distance are deleted
-	 * \param[in] relative_distance distance is relative to avg edge length
-	 * \param[in] min_comp_area minimum area for a connected component
-	 * \param[in] relative_min_comp_area if set, relative to surface area
-	 */
-	void delete_triangles_near_surface(
-	    const MeshGrobName& surface,
-	    double distance,
-	    bool relative_distance,
-	    double min_comp_area,
-	    bool relative_min_comp_area
-	);
-
-	/**
-	 * \menu Structural
-	 * \param[in] max_distance for projecting border vertex onto fault
-	 * \param[in] relative_distance if set, max_distance and
-	 *  embedding_distance are relative to average edge length
-	 */
-	void fix_fault_network_contacts(
-	    double max_distance = 0.1,
-	    double embedding_distance = 0.005,
-	    bool relative_distance = true
-	);
-
     } ;
 }
 
