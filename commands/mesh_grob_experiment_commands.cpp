@@ -836,5 +836,253 @@ namespace OGF {
     }
 
 /*****************************************************************/
+}
+
+namespace {
+
+    /**
+     * \brief Quick and dirty CAS system for polynoms
+     */
+    class Polynom {
+    public:
+
+	struct Monom {
+
+	    Monom(index_t nb_var) : a(0.0), pow(nb_var, 0) {
+	    }
+
+	    Monom(index_t nb_var, index_t var) : a(1.0), pow(nb_var,0) {
+		pow[var] = 1;
+	    }
+
+	    index_t nb_var() const {
+		return pow.size();
+	    }
+
+	    Monom operator*(const Monom& rhs) const {
+		geo_assert(rhs.nb_var() == nb_var());
+		Monom result(nb_var());
+		result.a = a*rhs.a;
+		for(index_t i=0; i<nb_var(); ++i) {
+		    result.pow[i] = pow[i]+rhs.pow[i];
+		}
+		return result;
+	    }
+
+	    std::string to_string(
+		const std::vector<std::string>& var_names
+	    ) const {
+		geo_assert(index_t(var_names.size()) == nb_var());
+		std::string result;
+		if(a == 0.0) {
+		    return "0.0";
+		}
+		if(a == 1.0) {
+		    result += "+";
+		} else if(a == -1.0) {
+		    result += "-";
+		} else {
+		    result += String::to_string(a);
+		}
+		bool first = true;
+		for(index_t i=0; i<nb_var(); ++i) {
+		    if(pow[i] != 0) {
+			if(!first) {
+			    result += "*";
+			}
+			result += var_names[i];
+			if(pow[i] != 1) {
+			    result += "^";
+			    result += String::to_string(pow[i]);
+			}
+			first = false;
+		    }
+		}
+		if(first) {
+		    result += "1";
+		}
+		return result;
+	    }
+	    double a;
+	    vector<index_t> pow;
+	};
+
+	index_t nb_var() const {
+	    return monoms_[0].nb_var();
+	}
+
+	Polynom& operator+=(const Monom& M1) {
+	    geo_assert(M1.nb_var() == nb_var());
+	    if(M1.a == 0.0) {
+		return *this;
+	    }
+	    for(Monom& M2: monoms_) {
+		if(M2.pow == M1.pow) {
+		    M2.a += M1.a;
+		    return *this;
+		}
+	    }
+	    monoms_.push_back(M1);
+	    return *this;
+	}
+
+	Polynom& operator-=(const Monom& M1) {
+	    geo_assert(M1.nb_var() == nb_var());
+	    Monom mM1 = M1;
+	    mM1.a = -mM1.a;
+	    return this->operator+=(mM1);
+	}
+
+	Polynom operator+(const Polynom& rhs) const {
+	    geo_assert(rhs.nb_var() == nb_var());
+	    Polynom result = *this;
+	    for(const Monom& M2: rhs.monoms_) {
+		result += M2;
+	    }
+	    return result;
+	}
+
+	Polynom operator-(const Polynom& rhs) const {
+	    geo_assert(rhs.nb_var() == nb_var());
+	    Polynom result = *this;
+	    for(const Monom& M2: rhs.monoms_) {
+		result -= M2;
+	    }
+	    return result;
+	}
+
+	Polynom operator*(const Polynom& rhs) const {
+	    geo_assert(rhs.nb_var() == nb_var());
+	    Polynom result(monoms_[0].pow.size());
+	    for(const Monom& M1: monoms_) {
+		for(const Monom& M2: rhs.monoms_) {
+		    result += (M1*M2);
+		}
+	    }
+	    return result;
+	}
+
+	Polynom pow(index_t p) {
+	    // super not optimized !
+	    Polynom result(nb_var(),1.0);
+	    for(index_t n=0; n<p; ++n) {
+		result = result * (*this);
+	    }
+	    return result;
+	}
+
+	std::string to_string(const std::vector<std::string>& var_names) const {
+	    if(is_zero()) {
+		return "0";
+	    }
+	    std::string result;
+	    for(const Monom& M: monoms_) {
+		if(M.a == 0.0) {
+		    continue;
+		}
+		if(result.length() != 0) {
+		    result += " ";
+		}
+		result += M.to_string(var_names);
+	    }
+	    return result;
+	}
+
+	Polynom(index_t nb_var, double val=0.0) {
+	    monoms_.push_back(Monom(nb_var));
+	    monoms_[0].a = val;
+	}
+
+	Polynom(index_t nb_var, index_t var) {
+	    monoms_.push_back(Monom(nb_var, var));
+	}
+
+	bool is_zero() const {
+	    for(const Monom& M: monoms_) {
+		if(M.a != 0.0) {
+		    return false;
+		}
+	    }
+	    return true;
+	}
+
+    public:
+	vector<Monom> monoms_;
+    };
+
+}
+
+
+namespace OGF {
+
+    void MeshGrobExperimentCommands::test_orient3d_SOS() {
+
+	std::vector<std::string> var_names = {
+	    "x1","y1","z1",
+	    "x2","y2","z2",
+	    "x3","y3","z3",
+	    "x4","y4","z4",
+	    "eps"
+	};
+
+	index_t nb_var = index_t(var_names.size());
+
+	Polynom x1(nb_var,0u);
+	Polynom y1(nb_var,1u);
+	Polynom z1(nb_var,2u);
+	Polynom x2(nb_var,3u);
+	Polynom y2(nb_var,4u);
+	Polynom z2(nb_var,5u);
+	Polynom x3(nb_var,6u);
+	Polynom y3(nb_var,7u);
+	Polynom z3(nb_var,8u);
+	Polynom x4(nb_var,9u);
+	Polynom y4(nb_var,10u);
+	Polynom z4(nb_var,11u);
+
+	Polynom eps(nb_var,12u);
+	Polynom one(nb_var,1.0);
+
+	/*
+	Polynom D = det4x4(
+	    x1+eps.pow(1),  y1+eps.pow(2),  z1+eps.pow(3), one,
+	    x2+eps.pow(4),  y2+eps.pow(5),  z2+eps.pow(6), one,
+	    x3+eps.pow(7),  y3+eps.pow(8),  z3+eps.pow(9), one,
+	    x4+eps.pow(10), y4+eps.pow(11), z4+eps.pow(12), one
+	);
+	*/
+
+
+	Polynom D = det4x4(
+	    x1+eps.pow(1),   y1+eps.pow(2),    z1+eps.pow(4),    one,
+	    x2+eps.pow(8),   y2+eps.pow(16),   z2+eps.pow(32),   one,
+	    x3+eps.pow(64),  y3+eps.pow(128),  z3+eps.pow(256),  one,
+	    x4+eps.pow(512), y4+eps.pow(1024), z4+eps.pow(2048), one
+	);
+
+	Logger::out("o3dSOS") << "D= " << D.to_string(var_names) << std::endl;
+
+	index_t max_eps_pow = 0;
+	for(const Polynom::Monom& M: D.monoms_)	{
+	    max_eps_pow = std::max(max_eps_pow, M.pow[12u]);
+	}
+
+	vector<Polynom> perturbation(max_eps_pow+1, Polynom(nb_var));
+	for(Polynom::Monom M: D.monoms_) {
+	    index_t eps_pow = M.pow[12u];
+	    M.pow[12u] = 0;
+	    perturbation[eps_pow] += M;
+	}
+
+	for(index_t p=0; p<=max_eps_pow; p++) {
+	    if(perturbation[p].is_zero()) {
+		continue;
+	    }
+	    Logger::out("o3dSOS") << "eps^" << p << " : "
+				  << perturbation[p].to_string(var_names)
+				  << std::endl;
+	}
+
+    }
 
 }

@@ -140,6 +140,12 @@ namespace OGF {
 	 * \menu Debug
 	 */
 	void test_PR_252();
+
+	/**
+	 * \menu Debug
+	 */
+	void test_orient3d_SOS();
+
     } ;
 }
 
