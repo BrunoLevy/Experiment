@@ -855,6 +855,9 @@ namespace {
 		pow[var] = 1;
 	    }
 
+	    Monom(index_t nb_var, double a_in) : a(a_in), pow(nb_var,0) {
+	    }
+
 	    index_t nb_var() const {
 		return pow.size();
 	    }
@@ -963,10 +966,18 @@ namespace {
 	}
 
 	Polynom pow(index_t p) {
-	    // super not optimized !
-	    Polynom result(nb_var(),1.0);
-	    for(index_t n=0; n<p; ++n) {
-		result = result * (*this);
+	    if(p == 0) {
+		return Polynom(nb_var(),1.0);
+	    }
+	    Polynom result = *this;
+	    while(p > 1) {
+		if((p & 1) == 0) {
+		    result = result * result;
+		    p /= 2;
+		} else {
+		    result = result * (*this);
+		    --p;
+		}
 	    }
 	    return result;
 	}
@@ -989,8 +1000,7 @@ namespace {
 	}
 
 	Polynom(index_t nb_var, double val=0.0) {
-	    monoms_.push_back(Monom(nb_var));
-	    monoms_[0].a = val;
+	    monoms_.push_back(Monom(nb_var, val));
 	}
 
 	Polynom(index_t nb_var, index_t var) {
@@ -1042,16 +1052,6 @@ namespace OGF {
 
 	Polynom eps(nb_var,12u);
 	Polynom one(nb_var,1.0);
-
-	/*
-	Polynom D = det4x4(
-	    x1+eps.pow(1),  y1+eps.pow(2),  z1+eps.pow(3), one,
-	    x2+eps.pow(4),  y2+eps.pow(5),  z2+eps.pow(6), one,
-	    x3+eps.pow(7),  y3+eps.pow(8),  z3+eps.pow(9), one,
-	    x4+eps.pow(10), y4+eps.pow(11), z4+eps.pow(12), one
-	);
-	*/
-
 
 	Polynom D = det4x4(
 	    x1+eps.pow(1),   y1+eps.pow(2),    z1+eps.pow(4),    one,
