@@ -146,6 +146,38 @@ namespace OGF {
 	 */
 	void test_orient3d_SOS();
 
+
+	/**
+	 * \menu GPT
+	 */
+	void seven_pointed_star();
+
+	/**
+	 * \menu GPT
+	 */
+	void egg();
+
+	/**
+	 * \menu GPT
+	 */
+	void egg_crack();
+
+	/**
+	 * \menu GPT
+         * \brief Creates a triangulated torus mesh.
+         * \param[in] R     major radius  (default 1.0)
+         * \param[in] r     minor radius  (default 0.3)
+         * \param[in] Nu    segments around the tube   (default 32)
+         * \param[in] Nv    segments around the torus  (default 64)
+         */
+        void create_torus(
+            double R  = 1.0,
+            double r  = 0.3,
+            index_t Nu = 32,
+            index_t Nv = 64
+        );
+
+
     } ;
 }
 

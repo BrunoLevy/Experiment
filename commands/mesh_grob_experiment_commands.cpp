@@ -636,7 +636,7 @@ namespace OGF {
                 vec3 q3(mesh_grob()->vertices.point_ptr(w3));
 
 
-                vector<TriangleIsect> II;
+                TriangleIsects II;
 
                 triangles_intersections(
                     p1, p2, p3,
@@ -1085,4 +1085,468 @@ namespace OGF {
 
     }
 
+    // Generated using ChatGPT:
+    // Prompt: "Hello, can you please generate for me a C++ program that
+    // creates a seven-pointed star using geogram ?" 04/13/2026
+    // Fixes: had to refine, "Mesh facets set_nb_vertices() does not exist,
+    // use create_polygon() instead".
+    // Replaced ints with index_t (note: Claude directly uses intex_t it seems)
+    // Created vec3's directly instead of setting x,y,z
+
+    void MeshGrobExperimentCommands::seven_pointed_star() {
+	Mesh& M = *mesh_grob();
+
+	const int N = 7;
+	const int V2D = 2 * N;          // 14 vertices in the star outline
+	const double R_outer = 1.0;
+	const double R_inner = 0.45;
+	const double height   = 0.3;
+	const double PI = 3.141592653589793;
+
+	// Create vertices: bottom layer + top layer
+	M.vertices.create_vertices(2 * V2D);
+
+	for(index_t i = 0; i < N; ++i) {
+	    double angle_outer = 2.0 * PI * double(i) / double(N);
+	    double angle_inner = angle_outer + PI / double(N);
+
+	    double ox = R_outer * std::cos(angle_outer);
+	    double oy = R_outer * std::sin(angle_outer);
+
+	    double ix = R_inner * std::cos(angle_inner);
+	    double iy = R_inner * std::sin(angle_inner);
+
+	    // Bottom layer (z = 0)
+	    M.vertices.point(2*i) = vec3(ox,oy,0.0);
+	    M.vertices.point(2*i+1) = vec3(ix,iy,0.0);
+
+	    // Top layer (z = height)
+	    M.vertices.point(V2D + 2*i) = vec3(ox,oy,height);
+	    M.vertices.point(V2D + 2*i+1) = vec3(ix,iy,height);
+	}
+
+	// -------------------------------
+	// Bottom face (reverse orientation)
+	// -------------------------------
+	{
+	    index_t f = M.facets.create_polygon(V2D);
+	    for(index_t k = 0; k < V2D; ++k) {
+		M.facets.set_vertex(f, k, V2D - 1 - k);
+	    }
+	}
+
+	// -------------------------------
+	// Top face
+	// -------------------------------
+	{
+	    index_t f = M.facets.create_polygon(V2D);
+	    for(index_t k = 0; k < V2D; ++k) {
+		M.facets.set_vertex(f, k, V2D + k);
+	    }
+	}
+
+	// -------------------------------
+	// Side faces (quads)
+	// -------------------------------
+	for(index_t i = 0; i < V2D; ++i) {
+	    index_t next = (i + 1) % V2D;
+
+	    index_t f = M.facets.create_polygon(4);
+	    M.facets.set_vertex(f, 0, i);
+	    M.facets.set_vertex(f, 1, next);
+	    M.facets.set_vertex(f, 2, V2D + next);
+	    M.facets.set_vertex(f, 3, V2D + i);
+	}
+
+	mesh_grob()->update();
+    }
+
+/* ==================================================================
+   EGG SURFACE
+   ================================================================== */
+
+/**
+ * @brief Evaluate the egg parametric surface at (u, v).
+ *
+ * The egg shape is obtained by deforming a sphere:
+ *   - a, b  : radii in X and Y (typically equal -> round cross-section)
+ *   - c     : half-height along Z
+ *   - taper : asymmetry factor that makes one pole narrower (the "pointed" end)
+ *
+ * @param u      Polar angle in [0, PI]
+ * @param v      Azimuth angle in [0, 2*PI)
+ * @param a      Radius in X
+ * @param b      Radius in Y
+ * @param c      Radius in Z (base height half-extent)
+ * @param taper  Taper strength (0 = sphere, 0.3 = typical egg)
+ * @return vec3  3D point on the surface
+ */
+    vec3 egg_point(double u, double v,
+		   double a = 1.0, double b = 1.0,
+		   double c = 1.3, double taper = 0.35)
+    {
+	/* r(u) modulates radius along the Z axis to create the egg asymmetry.
+	   r > 1 near the top (u near 0), r < 1 near the bottom (u near PI). */
+	double r = 1.0 + taper * std::cos(u);
+	return vec3(
+	    a * r * std::sin(u) * std::cos(v),
+	    b * r * std::sin(u) * std::sin(v),
+	    c * std::cos(u)
+	);
+    }
+
+/**
+ * @brief Build a triangulated surface mesh of an egg shape.
+ *
+ * Topology: a UV sphere mesh with nu latitude bands and nv longitude slices.
+ * The two pole vertices are shared, and each quad band is split into 2 triangles.
+ *
+ * @param[out] mesh   Output Geogram mesh (cleared on entry).
+ * @param nu          Number of latitude subdivisions (>= 2, recommended >= 32)
+ * @param nv          Number of longitude subdivisions (>= 3, recommended >= 48)
+ * @param a           X radius
+ * @param b           Y radius
+ * @param c           Z half-height
+ * @param taper       Asymmetry factor (0 = no taper / sphere, 0.35 = egg)
+ */
+    void create_egg_mesh(Mesh& mesh,
+			 index_t nu    = 48,
+			 index_t nv    = 64,
+			 double  a     = 1.0,
+			 double  b     = 1.0,
+			 double  c     = 1.3,
+			 double  taper = 0.35)
+    {
+	mesh.clear();
+	mesh.vertices.set_dimension(3);
+
+	/* ------------------------------------------------------------------
+	   1. Generate vertices
+	   Layout: 1 north pole + (nu-1) rings of nv vertices + 1 south pole
+	   Total : 1 + (nu-1)*nv + 1 = (nu-1)*nv + 2
+	   ------------------------------------------------------------------ */
+	const double pi     = M_PI;
+	const double two_pi = 2.0 * M_PI;
+
+	/* North pole (u = 0) */
+	{
+	    vec3 p = egg_point(0.0, 0.0, a, b, c, taper);
+	    index_t vid = mesh.vertices.create_vertex();
+	    mesh.vertices.point(vid) = p;
+	}
+
+	/* Interior rings (u = i * PI / nu,  i = 1 ... nu-1) */
+	for (index_t i = 1; i < nu; ++i) {
+	    double u = static_cast<double>(i) * pi / static_cast<double>(nu);
+	    for (index_t j = 0; j < nv; ++j) {
+		double v_angle = static_cast<double>(j) * two_pi / static_cast<double>(nv);
+		vec3 p = egg_point(u, v_angle, a, b, c, taper);
+		index_t vid = mesh.vertices.create_vertex();
+		mesh.vertices.point(vid) = p;
+	    }
+	}
+
+	/* South pole (u = PI) */
+	{
+	    vec3 p = egg_point(pi, 0.0, a, b, c, taper);
+	    index_t vid = mesh.vertices.create_vertex();
+	    mesh.vertices.point(vid) = p;
+	}
+
+	/* ------------------------------------------------------------------
+	   Helper lambda: vertex index in ring i (1-based), longitude slot j.
+	   ------------------------------------------------------------------ */
+	const index_t north_idx = 0;
+	const index_t south_idx = 1 + (nu - 1) * nv;
+
+	auto ring_vertex = [&](index_t i, index_t j) -> index_t {
+	    /* i in [1, nu-1], j wrapped in [0, nv) */
+	    return 1 + (i - 1) * nv + (j % nv);
+	};
+
+	/* ------------------------------------------------------------------
+	   2. Generate triangles
+	   ------------------------------------------------------------------ */
+
+	/* North cap: triangles from north pole to first ring */
+	for (index_t j = 0; j < nv; ++j) {
+	    index_t v0 = north_idx;
+	    index_t v1 = ring_vertex(1, j);
+	    index_t v2 = ring_vertex(1, j + 1);
+	    index_t f  = mesh.facets.create_triangle(v0, v1, v2);
+	    (void)f;
+	}
+
+	/* Middle bands: each pair of adjacent rings forms quads split into 2 triangles */
+	for (index_t i = 1; i + 1 < nu; ++i) {
+	    for (index_t j = 0; j < nv; ++j) {
+		index_t a0 = ring_vertex(i,     j);
+		index_t a1 = ring_vertex(i,     j + 1);
+		index_t b0 = ring_vertex(i + 1, j);
+		index_t b1 = ring_vertex(i + 1, j + 1);
+
+		mesh.facets.create_triangle(a0, b0, a1);  /* triangle 1 */
+		mesh.facets.create_triangle(a1, b0, b1);  /* triangle 2 */
+	    }
+	}
+
+	/* South cap: triangles from last ring to south pole */
+	for (index_t j = 0; j < nv; ++j) {
+	    index_t v0 = ring_vertex(nu - 1, j);
+	    index_t v1 = south_idx;
+	    index_t v2 = ring_vertex(nu - 1, j + 1);
+	    mesh.facets.create_triangle(v0, v1, v2);
+	}
+
+	/* ------------------------------------------------------------------
+	   3. Connect adjacency (needed by many Geogram algorithms)
+	   ------------------------------------------------------------------ */
+	mesh.facets.connect();
+    }
+
+    void MeshGrobExperimentCommands::egg() {
+	mesh_grob()->clear();
+	create_egg_mesh(*mesh_grob());
+	mesh_grob()->update();
+    }
+
+
+/* ==================================================================
+   CRACK SURFACE
+   ================================================================== */
+
+/**
+ * @brief Build an independent crack surface mesh along the upper hemisphere
+ *        of an egg.
+ *
+ * Design intent
+ * -------------
+ * The crack represents the fracture line along the egg equator.
+ * It is intentionally NOT conforming to the egg surface:
+ *
+ *   - The outer boundary follows the egg surface at u = PI/2 (the equator),
+ *     with a deterministic zigzag in the polar direction produced by a
+ *     cosine wave.  This gives the characteristic jagged broken-edge look
+ *     without any random numbers.
+ *   - The inner boundary is a flat ellipse at z = crack_z (inside the egg).
+ *     The crack surface therefore dips into the egg interior, which is
+ *     intentional -- the interior does not need to match the egg geometry.
+ *
+ * Vertex layout
+ * -------------
+ *   outer ring  [0 .. nv-1]   -- on the egg surface at the perturbed equator
+ *   inner ring  [nv .. 2nv-1] -- flat ellipse at z = crack_z
+ *   center      [2*nv]        -- single point at (0, 0, crack_z)
+ *
+ * The crack has nv_teeth full zigzag teeth around the circumference.
+ * Each tooth is a cosine bump in the polar angle u: at tooth peaks the
+ * crack rises toward the top cap; at valleys it dips toward the bottom.
+ *
+ * @param[out] crack     Output Geogram mesh (cleared on entry).
+ * @param nv             Azimuthal vertex count (>= 2 * nv_teeth).
+ * @param a              Egg X radius (must match egg mesh params).
+ * @param b              Egg Y radius.
+ * @param c              Egg Z half-height.
+ * @param taper          Egg taper (must match egg mesh params).
+ * @param crack_z        Z height of the flat inner disk (0 = egg center).
+ * @param tooth_amp      Amplitude of each zigzag tooth in polar-angle units
+ *                       (radians).  0.3 gives a clearly visible crack.
+ * @param nv_teeth       Number of crack teeth around the full circumference.
+ */
+    void create_egg_crack_mesh(Mesh& crack,
+			       index_t nv         = 128,
+			       double  a          = 1.0,
+			       double  b          = 1.0,
+			       double  c          = 1.3,
+			       double  taper      = 0.35,
+			       double  crack_z    = 0.0,
+			       double  tooth_amp  = 0.25,
+			       index_t nv_teeth   = 8)
+    {
+	crack.clear();
+	crack.vertices.set_dimension(3);
+
+	const double pi     = M_PI;
+	const double two_pi = 2.0 * M_PI;
+
+	/* ------------------------------------------------------------------
+	   Tooth profile: deterministic zigzag in the polar angle u.
+
+	   u_crack(v) = PI/2 + tooth_amp * cos(nv_teeth * v)
+
+	   At cosine peaks  (cos = +1): u < PI/2  -> vertex is above the equator.
+	   At cosine valleys(cos = -1): u > PI/2  -> vertex is below the equator.
+	   This produces a clean, repeating sawtooth crack with nv_teeth bumps.
+	   ------------------------------------------------------------------ */
+	auto u_crack = [&](double v_angle) -> double {
+	    return pi * 0.5 + tooth_amp * std::cos(static_cast<double>(nv_teeth) * v_angle);
+	};
+
+	/* ------------------------------------------------------------------
+	   1. Outer ring vertices -- on the egg surface along the crack profile.
+	   ------------------------------------------------------------------ */
+	for (index_t j = 0; j < nv; ++j) {
+	    double v_angle = static_cast<double>(j) * two_pi / static_cast<double>(nv);
+	    double u       = u_crack(v_angle);
+	    vec3   p       = egg_point(u, v_angle, a, b, c, taper);
+
+	    index_t vid = crack.vertices.create_vertex();
+	    crack.vertices.point(vid) = p;
+	}
+
+	/* ------------------------------------------------------------------
+	   2. Inner ring vertices -- flat ellipse at z = crack_z.
+
+	   The radius is 80% of the egg equatorial radius so the ribbon has
+	   visible width everywhere.
+	   ------------------------------------------------------------------ */
+	const double inner_scale = 0.80;
+
+	for (index_t j = 0; j < nv; ++j) {
+	    double v_angle = static_cast<double>(j) * two_pi / static_cast<double>(nv);
+	    vec3   p(a * inner_scale * std::cos(v_angle),
+		     b * inner_scale * std::sin(v_angle),
+		     crack_z);
+
+	    index_t vid = crack.vertices.create_vertex();
+	    crack.vertices.point(vid) = p;
+	}
+
+	/* ------------------------------------------------------------------
+	   3. Center vertex -- closes the inner disk fan.
+	   ------------------------------------------------------------------ */
+	const index_t center_idx = 2 * nv;
+	{
+	    index_t vid = crack.vertices.create_vertex();
+	    crack.vertices.point(vid) = vec3(0.0, 0.0, crack_z);
+	}
+
+	/* ------------------------------------------------------------------
+	   Index helpers (wrap in [0, nv))
+	   ------------------------------------------------------------------ */
+	auto outer = [&](index_t j) -> index_t { return          j % nv; };
+	auto inner = [&](index_t j) -> index_t { return nv + (j % nv); };
+
+	/* ------------------------------------------------------------------
+	   4. Ribbon triangles: outer ring -> inner ring.
+	   Each quad is split into 2 triangles with consistent winding.
+	   ------------------------------------------------------------------ */
+	for (index_t j = 0; j < nv; ++j) {
+	    index_t o0 = outer(j);
+	    index_t o1 = outer(j + 1);
+	    index_t i0 = inner(j);
+	    index_t i1 = inner(j + 1);
+
+	    crack.facets.create_triangle(o0, i0, o1);
+	    crack.facets.create_triangle(o1, i0, i1);
+	}
+
+	/* ------------------------------------------------------------------
+	   5. Inner disk fan: center -> inner ring.
+	   ------------------------------------------------------------------ */
+	for (index_t j = 0; j < nv; ++j) {
+	    crack.facets.create_triangle(center_idx, inner(j + 1), inner(j));
+	}
+
+	/* ------------------------------------------------------------------
+	   6. Connect adjacency.
+	   ------------------------------------------------------------------ */
+	crack.facets.connect();
+    }
+
+
+    void MeshGrobExperimentCommands::egg_crack() {
+	mesh_grob()->clear();
+	create_egg_crack_mesh(*mesh_grob());
+	mesh_grob()->update();
+    }
+
+
+    void MeshGrobExperimentCommands::create_torus(
+	double R,
+	double r,
+	index_t Nu,
+	index_t Nv
+    ) {
+	// ------------------------------------------------------------------
+	// Retrieve (or create) the target MeshGrob
+	// ------------------------------------------------------------------
+	MeshGrob& M = *mesh_grob();
+	M.clear();
+
+	// ------------------------------------------------------------------
+	// Vertices
+	// ------------------------------------------------------------------
+	// We generate exactly Nu x Nv vertices (no duplicated seam).
+	// Seam closure is handled by modular indexing in the face loop.
+	// Parametric equations:
+	//   x(u,v) = (R + r*cos(v)) * cos(u)
+	//   y(u,v) = (R + r*cos(v)) * sin(u)
+	//   z(u,v) =        r*sin(v)
+	// with u in [0, 2pi) (around torus) and v in [0, 2pi) (around tube).
+
+	M.vertices.set_dimension(3);
+
+	for (index_t j = 0; j < Nv; ++j) {
+	    double v  = 2.0 * M_PI * double(j) / double(Nv);
+	    double cv = std::cos(v);
+	    double sv = std::sin(v);
+
+	    for (index_t i = 0; i < Nu; ++i) {
+		double u  = 2.0 * M_PI * double(i) / double(Nu);
+		double cu = std::cos(u);
+		double su = std::sin(u);
+
+		double x = (R + r * cv) * cu;
+		double y = (R + r * cv) * su;
+		double z =       r * sv;
+
+		M.vertices.create_vertex(GEO::vec3(x, y, z).data());
+	    }
+	}
+
+	// ------------------------------------------------------------------
+	// Faces  (two triangles per quad, counter-clockwise winding)
+	// ------------------------------------------------------------------
+	// Vertex index helper: row j, column i  =>  j*Nu + i
+	// Modular wrap: (i+1)%Nu and (j+1)%Nv close the seam exactly,
+	// so the last ring of quads shares the very first row/column of
+	// vertices — no gap, no duplicate geometry.
+	auto vid = [&](index_t i, index_t j) -> index_t {
+	    return (j % Nv) * Nu + (i % Nu);
+	};
+
+	for (index_t j = 0; j < Nv; ++j) {
+	    for (index_t i = 0; i < Nu; ++i) {
+		index_t v00 = vid(i,     j    );
+		index_t v10 = vid(i + 1, j    );
+		index_t v01 = vid(i,     j + 1);
+		index_t v11 = vid(i + 1, j + 1);
+
+		// Triangle 1: lower-left, lower-right, upper-right
+		{
+		    index_t f = M.facets.create_triangle(v00, v10, v11);
+		    (void)f;
+		}
+		// Triangle 2: lower-left, upper-right, upper-left
+		{
+		    index_t f = M.facets.create_triangle(v00, v11, v01);
+		    (void)f;
+		}
+	    }
+	}
+
+	// ------------------------------------------------------------------
+	// Finalise
+	// ------------------------------------------------------------------
+	M.facets.connect();
+	M.update();
+
+	Logger::out("CreateTorus")
+	    << "Torus created: "
+	    << M.vertices.nb() << " vertices, "
+	    << M.facets.nb()   << " triangles."
+	    << std::endl;
+
+    }
 }
