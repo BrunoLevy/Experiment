@@ -43,10 +43,17 @@
 
 #include <OGF/Experiment/algo/CDT_with_interval.h>
 
+#ifdef EXPERIMENT_WITH_CGAL
+#include <OGF/Experiment/CGAL/delaunay_nd_cgal.h>
+#endif
+
 #ifdef GEOGRAM_WITH_VORPALINE
 #include <vorpalib/mesh/mesh_weiler_model.h>
 #include <vorpalib/mesh/mesh_geomodel.h>
 #endif
+
+#include <array>
+#include <complex>
 
 namespace {
     using namespace OGF;
@@ -835,6 +842,45 @@ namespace OGF {
 	m.update();
     }
 
+    void MeshGrobExperimentCommands::test_discussion_364() {
+        // Defines points
+	std::vector<double> points_coordinates = {
+	    0, 0,
+	    1, 2,
+	    3, 2,
+	    2, 0,
+	    2, 2,
+	    1, 1,
+	    2, 1
+	};
+	index_t n = static_cast<index_t>(points_coordinates.size() / 2);
+
+	double eps = 0.1;
+	double xmin = 0 - eps, ymin = 0 - eps, xmax = 3 + eps, ymax = 2 + eps;
+
+	// Defines constraints
+	std::vector<std::array<GEO::index_t, 2> > segments = {
+	    {0, 1},
+	    {1, 4},
+	    {4, 2},
+	    {2, 3},
+	    {3, 0},
+	    {4, 5},
+	    {5, 6},
+	    {6, 4}
+	};
+
+	// Computes triangulation
+	GEO::CDT2d cdt;
+	cdt.create_enclosing_rectangle(xmin, ymin, xmax, ymax);
+	cdt.set_delaunay(true);
+	cdt.insert(n, points_coordinates.data());
+	for (const std::array<GEO::index_t, 2> & segment : segments) {
+	    cdt.insert_constraint(segment.at(0)+4, segment.at(1)+4);
+	}
+	cdt.save("CDT.geogram");
+    }
+
 /*****************************************************************/
 }
 
@@ -1019,6 +1065,23 @@ namespace {
     public:
 	vector<Monom> monoms_;
     };
+
+}
+
+
+namespace OGF {
+
+    void MeshGrobExperimentCommands::copy_edges() {
+       for(index_t f: mesh_grob()->facets) {
+	   index_t N = mesh_grob()->facets.nb_vertices(f);
+	   for(index_t lv=0; lv<N; ++lv) {
+	       index_t v1 = mesh_grob()->facets.vertex(f,lv);
+	       index_t v2 = mesh_grob()->facets.vertex(f,(lv+1)%N);
+	       mesh_grob()->edges.create_edge(v1,v2);
+	   }
+       }
+       mesh_grob()->update();
+    }
 
 }
 
@@ -1549,4 +1612,42 @@ namespace OGF {
 	    << std::endl;
 
     }
+
+    void MeshGrobExperimentCommands::compute_Delaunay_highdim(index_t nb_pts) {
+#ifdef EXPERIMENT_WITH_CGAL
+	index_t dim = mesh_grob()->vertices.dimension();
+	Delaunay_var del = new DelaunayNd_CGAL(coord_index_t(dim));
+	if(nb_pts == 0) {
+	    nb_pts = mesh_grob()->vertices.nb();
+	}
+	Logger::out("CGAL") << "Computing Delaunay" << std::endl;
+	del->set_vertices(
+	    nb_pts, mesh_grob()->vertices.point_ptr(0)
+	);
+	Logger::out("CGAL") << "Delaunay done" << std::endl;
+#else
+	geo_argused(nb_pts);
+	Logger::err("CGAL") << "Not compiled with CGAL support" << std::endl;
+#endif
+    }
+
+    void MeshGrobExperimentCommands::check_equation() {
+	for(index_t v: mesh_grob()->vertices) {
+	    const double* p =  mesh_grob()->vertices.point_ptr(v);
+	    double x1 = p[0];
+	    double y1 = p[1];
+	    double z1 = p[2];
+	    double x2 = p[3];
+	    double y2 = p[4];
+	    double z2 = p[5];
+
+            //<- /!\ it is (1+z) and not (1-z) in the denominator
+	    std::complex Z1 = std::complex(x1,y1) / (1.0-z1);
+	    std::complex Z2 = std::complex(x2,y2) / (1.0-z2);
+	    std::complex P = 1.0 + Z2*Z2 + Z1*Z1*Z2;
+	    std::cerr << P << std::endl;
+
+	}
+    }
+
 }

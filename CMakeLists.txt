@@ -6,6 +6,15 @@ cmake_minimum_required(VERSION 3.5)
 
 project(Experiment)
 
+set(EXPERIMENT_WITH_CGAL TRUE)
+
+if(EXPERIMENT_WITH_CGAL)
+   find_package(CGAL REQUIRED)
+   find_package(Eigen3 REQUIRED)
+   include_directories("/usr/include/eigen3")
+   add_definitions(-DEXPERIMENT_WITH_CGAL)
+endif()
+
 if(EXISTS ${CMAKE_SOURCE_DIR}/../../../../Vorpaline/trunk/)
    set(
       GEOGRAM_SOURCE_DIR "${CMAKE_SOURCE_DIR}/../../../../Vorpaline/trunk"
@@ -49,13 +58,23 @@ set(
 
 ##############################################################################
 
+
 aux_source_directories(SOURCES "Source Files\\common" common)
 aux_source_directories(SOURCES "Source Files\\algo" algo)
 aux_source_directories(SOURCES "Source Files\\tools" tools)
 aux_source_directories(SOURCES "Source Files\\commands" commands)
-aux_source_directories(SOURCES "Source Files\\third_party\\BasicInterval" third_party/BasicInterval)
+
+if(EXPERIMENT_WITH_CGAL)
+   aux_source_directories(SOURCES "Source Files\\CGAL" CGAL)
+endif()
+
 gomgen(Experiment)
+
 
 add_library(Experiment ${SOURCES})
 
-target_link_libraries(Experiment mesh_gfx)
+target_link_libraries(Experiment mesh_gfx CGAL)
+
+if(EXPERIMENT_WITH_CGAL)
+   target_link_libraries(Experiment CGAL)
+endif()

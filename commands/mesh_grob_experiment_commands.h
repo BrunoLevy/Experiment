@@ -146,6 +146,15 @@ namespace OGF {
 	 */
 	void test_orient3d_SOS();
 
+	/**
+	 * \menu Debug
+	 */
+	void test_discussion_364();
+
+	/**
+	 * \menu Edges
+	 */
+	void copy_edges();
 
 	/**
 	 * \menu GPT
@@ -176,6 +185,16 @@ namespace OGF {
             index_t Nu = 32,
             index_t Nv = 64
         );
+
+	/**
+	 * \menu CY
+	 */
+	void compute_Delaunay_highdim(index_t nb_pts=0);
+
+	/**
+	 * \menu CY
+	 */
+	void check_equation();
 
 
     } ;
