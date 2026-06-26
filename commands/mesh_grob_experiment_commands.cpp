@@ -1612,42 +1612,4 @@ namespace OGF {
 	    << std::endl;
 
     }
-
-    void MeshGrobExperimentCommands::compute_Delaunay_highdim(index_t nb_pts) {
-#ifdef EXPERIMENT_WITH_CGAL
-	index_t dim = mesh_grob()->vertices.dimension();
-	Delaunay_var del = new DelaunayNd_CGAL(coord_index_t(dim));
-	if(nb_pts == 0) {
-	    nb_pts = mesh_grob()->vertices.nb();
-	}
-	Logger::out("CGAL") << "Computing Delaunay" << std::endl;
-	del->set_vertices(
-	    nb_pts, mesh_grob()->vertices.point_ptr(0)
-	);
-	Logger::out("CGAL") << "Delaunay done" << std::endl;
-#else
-	geo_argused(nb_pts);
-	Logger::err("CGAL") << "Not compiled with CGAL support" << std::endl;
-#endif
-    }
-
-    void MeshGrobExperimentCommands::check_equation() {
-	for(index_t v: mesh_grob()->vertices) {
-	    const double* p =  mesh_grob()->vertices.point_ptr(v);
-	    double x1 = p[0];
-	    double y1 = p[1];
-	    double z1 = p[2];
-	    double x2 = p[3];
-	    double y2 = p[4];
-	    double z2 = p[5];
-
-            //<- /!\ it is (1+z) and not (1-z) in the denominator
-	    std::complex Z1 = std::complex(x1,y1) / (1.0-z1);
-	    std::complex Z2 = std::complex(x2,y2) / (1.0-z2);
-	    std::complex P = 1.0 + Z2*Z2 + Z1*Z1*Z2;
-	    std::cerr << P << std::endl;
-
-	}
-    }
-
 }

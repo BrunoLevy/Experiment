@@ -185,18 +185,6 @@ namespace OGF {
             index_t Nu = 32,
             index_t Nv = 64
         );
-
-	/**
-	 * \menu CY
-	 */
-	void compute_Delaunay_highdim(index_t nb_pts=0);
-
-	/**
-	 * \menu CY
-	 */
-	void check_equation();
-
-
     } ;
 }
 
