@@ -52,8 +52,9 @@ namespace OGF {
         ~MeshGrobCalabiYauCommands() override;
 
     gom_slots:
-	void compute_Delaunay_highdim(index_t nb_pts=0);
-	void check_equation();
+	void compute_Delaunay_highdim(index_t nb_pts=0, bool build_graph=false);
+	void equation_check();
+	void equation_gradients();
     };
 }
 
