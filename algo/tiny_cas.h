@@ -71,41 +71,8 @@ namespace OGF {
 
 		std::string to_string(
 		    const std::vector<std::string>& var_names
-		) const {
-		    geo_assert(index_t(var_names.size()) == nb_var());
-		    std::string result;
-		    if(a == 0.0) {
-			return "0.0";
-		    }
-		    if(a == 1.0) {
-			result += "+";
-		    } else if(a == -1.0) {
-			result += "-";
-		    } else {
-			if(a > 0.0) {
-			    result += "+";
-			}
-			result += String::to_string(a);
-		    }
-		    bool first = true;
-		    for(index_t i=0; i<nb_var(); ++i) {
-			if(pow[i] != 0) {
-			    if(!first) {
-				result += "*";
-			    }
-			    result += var_names[i];
-			    if(pow[i] != 1) {
-				result += "^";
-				result += String::to_string(pow[i]);
-			    }
-			    first = false;
-			}
-		    }
-		    if(first) {
-			result += "1";
-		    }
-		    return result;
-		}
+		) const;
+
 		double a;
 		vector<index_t> pow;
 	    };
@@ -194,22 +161,7 @@ namespace OGF {
 
 	    std::string to_string(
 		const std::vector<std::string>& var_names
-	    ) const {
-		if(is_zero()) {
-		    return "0";
-		}
-		std::string result;
-		for(const Monom& M: monoms_) {
-		    if(M.a == 0.0) {
-			continue;
-		    }
-		    if(result.length() != 0) {
-			result += " ";
-		    }
-		    result += M.to_string(var_names);
-		}
-		return result;
-	    }
+	    ) const;
 
 	    Polynom(index_t nb_var, double val=0.0) {
 		monoms_.push_back(Monom(nb_var, val));
