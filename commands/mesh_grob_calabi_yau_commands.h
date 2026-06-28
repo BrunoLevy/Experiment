@@ -52,6 +52,8 @@ namespace OGF {
         ~MeshGrobCalabiYauCommands() override;
 
     gom_slots:
+	void remove_points(index_t nb_points_to_keep);
+	void show_tangent_basis(double size = 1e-3);
 	void compute_Delaunay_highdim(index_t nb_pts=0, bool build_graph=false);
 	void equation_check();
 	void equation_gradients();

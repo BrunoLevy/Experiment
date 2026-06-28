@@ -37,19 +37,37 @@ namespace OGF {
 	) const {
 	    geo_assert(index_t(var_names.size()) == nb_var());
 	    std::string result;
+
+	    static constexpr bool C_style = true;
+
 	    if(a == 0.0) {
 		return "0.0";
 	    }
+
+	    bool is_constant = true;
+
+	    for(index_t i=0; i<nb_var(); ++i) {
+		is_constant = is_constant && (pow[i] == 0);
+	    }
+
+	    if(is_constant) {
+		return (a>0.0) ? ("+" + String::to_string(a))
+		               : String::to_string(a);
+	    }
+
+
 	    if(a == 1.0) {
 		result += "+";
 	    } else if(a == -1.0) {
 		result += "-";
 	    } else {
-		if(a > 0.0) {
-		    result += "+";
+		result += ((a>0.0) ? ("+" + String::to_string(a))
+			           : String::to_string(a));
+		if(C_style) {
+		    result += "*";
 		}
-		result += String::to_string(a);
 	    }
+
 	    bool first = true;
 	    for(index_t i=0; i<nb_var(); ++i) {
 		if(pow[i] != 0) {
@@ -58,15 +76,20 @@ namespace OGF {
 		    }
 		    result += var_names[i];
 		    if(pow[i] != 1) {
-			result += "^";
-			result += String::to_string(pow[i]);
+			if(C_style) {
+			    for(index_t j=0; j<pow[i]-1; ++j) {
+				result += "*";
+				result += var_names[i];
+			    }
+			} else {
+			    result += "^";
+			    result += String::to_string(pow[i]);
+			}
 		    }
 		    first = false;
 		}
 	    }
-	    if(first) {
-		result += "1";
-	    }
+
 	    return result;
 	}
 

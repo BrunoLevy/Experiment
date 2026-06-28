@@ -69,6 +69,16 @@ namespace OGF {
 		    return result;
 		}
 
+		Monom derivative(index_t var) const {
+		    if(a == 0.0 || pow[var] == 0) {
+			return Monom(nb_var());
+		    }
+		    Monom result = *this;
+		    result.a *= double(pow[var]);
+		    result.pow[var]--;
+		    return result;
+		}
+
 		std::string to_string(
 		    const std::vector<std::string>& var_names
 		) const;
@@ -178,6 +188,14 @@ namespace OGF {
 		    }
 		}
 		return true;
+	    }
+
+	    Polynom derivative(index_t var) const {
+		Polynom result(nb_var());
+		for(const Monom& M: monoms_) {
+		    result += M.derivative(var);
+		}
+		return result;
 	    }
 
 	public:
