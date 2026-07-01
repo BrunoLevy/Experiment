@@ -54,9 +54,14 @@ namespace OGF {
     gom_slots:
 	void remove_points(index_t nb_points_to_keep);
 	void show_tangent_basis(double size = 1e-3);
+	void tangent_RVD(
+	    double r=1.0, bool three_only = false, index_t nb_CVT=0
+	);
 	void compute_Delaunay_highdim(index_t nb_pts=0, bool build_graph=false);
 	void equation_check();
 	void equation_gradients();
+	void export_tet6(const std::string& filename);
+	void project_onto_manifold();
     };
 }
 
