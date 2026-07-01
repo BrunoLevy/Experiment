@@ -51,12 +51,11 @@
 namespace {
     using namespace OGF;
 
-    typedef std::complex<double> Z;
     typedef vecng<6,double> vec6;
     typedef Matrix<6,double> mat6;
     typedef vecng<7,double> vec7;
     typedef std::complex<double> C;
-    typedef vecng<2,Z> vec2C;
+    typedef vecng<2,C> vec2C;
 
     class BiQuadric {
     public:
@@ -81,7 +80,7 @@ namespace {
 	}
 
 	// The complex equation, polynomial version
-	Z eval(const vec6& p) const {
+	C eval(const vec6& p) const {
 	    double x1 = p[0]; double y1 = p[1]; double z1 = p[2];
 	    double x2 = p[3]; double y2 = p[4]; double z2 = p[5];
 	    return
@@ -579,8 +578,8 @@ namespace OGF {
 
 	for(index_t v: mesh_grob()->vertices) {
 	    const vec6& p = mesh_grob()->vertices.point<6>(v);
-	    Z f1 = Q.eval0(p);
-	    Z f2 = Q.eval(p);
+	    C f1 = Q.eval0(p);
+	    C f2 = Q.eval(p);
 	    std::cerr << "f1=" << f1 << " |f1|=" << std::abs(f1)
 		      << " f2=" << f2 << std::endl;
 	}
